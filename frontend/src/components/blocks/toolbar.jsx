@@ -7,6 +7,7 @@ import {
 import { COLORS } from './palette'
 import { TURN_INTO } from './commands'
 import { safeHref } from './embeds'
+import CommentAnchorButton from '../comments/CommentAnchorButton'
 
 const stop = (e) => e.preventDefault()
 
@@ -128,7 +129,7 @@ function ColorMenu({ editor }) {
 }
 
 /** Floating toolbar over a text selection. */
-export function BubbleToolbar({ editor, linkOpen, setLinkOpen }) {
+export function BubbleToolbar({ editor, linkOpen, setLinkOpen, commentPageId }) {
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -150,6 +151,16 @@ export function BubbleToolbar({ editor, linkOpen, setLinkOpen }) {
       <Btn label="Link (Ctrl+K)" active={s.link} onClick={() => setLinkOpen(true)}><Link2 size={15} /></Btn>
       <span className="ft-tb-sep" />
       <ColorMenu editor={editor} />
+      {commentPageId && (
+        <>
+          <span className="ft-tb-sep" />
+          <CommentAnchorButton pageId={commentPageId} className="ft-tb-btn ft-tb-text ft-tb-comment" label="Comment" align="right"
+            anchor={() => {
+              const { from, to } = editor.state.selection
+              return { from, to, quote: editor.state.doc.textBetween(from, to, ' ').slice(0, 280) }
+            }} />
+        </>
+      )}
     </div>
   )
 }

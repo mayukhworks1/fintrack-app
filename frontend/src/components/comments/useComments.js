@@ -51,9 +51,16 @@ function upsertThread(pageId, thread) {
   })
 }
 
-export async function loadComments(pageId) {
+const again = new Set()        // pageIds to load once more after the one in flight
+const refreshTimers = new Map()
+
+export async function loadComments(pageId, { force = false } = {}) {
   if (!pageId) return
-  if (inflight.has(pageId)) return inflight.get(pageId)
+  if (inflight.has(pageId)) {
+    // A load that started before a change cannot include it: run once more.
+    if (force) again.add(pageId)
+    return inflight.get(pageId)
+  }
   set(pageId, { loading: true, error: '' })
   // Through a promise so a missing or throwing client lands in .catch.
   const p = Promise.resolve().then(() => api.comments.list(pageId))
@@ -64,14 +71,30 @@ export async function loadComments(pageId) {
         ready: res?.ready !== false, loading: false, loaded: true, error: '',
       })
     })
-    .catch(e => set(pageId, { loading: false, loaded: true, error: e?.message || 'Could not load comments' }))
-    .finally(() => inflight.delete(pageId))
+    // A background refresh that fails keeps what is on screen.
+    .catch(e => set(pageId, s => ({ loading: false, loaded: true, error: s.loaded && s.threads.length ? '' : (e?.message || 'Could not load comments') })))
+    .finally(() => {
+      inflight.delete(pageId)
+      if (again.delete(pageId)) loadComments(pageId)
+    })
   inflight.set(pageId, p)
   return p
 }
 
+/** Settle the local copy with the server's shortly after a change (other
+ *  people's replies, server-side counts), without waiting for a poll. */
+export function refreshCommentsSoon(pageId, ms = 400) {
+  if (!pageId) return
+  clearTimeout(refreshTimers.get(pageId))
+  refreshTimers.set(pageId, setTimeout(() => { refreshTimers.delete(pageId); loadComments(pageId, { force: true }) }, ms))
+}
+
 /** For tests. */
-export function _resetCommentsStore() { entries.clear(); listeners.clear(); inflight.clear() }
+export function _resetCommentsStore() {
+  entries.clear(); listeners.clear(); inflight.clear(); again.clear()
+  for (const t of refreshTimers.values()) clearTimeout(t)
+  refreshTimers.clear()
+}
 
 export function useComments(pageId) {
   const state = useSyncExternalStore(
@@ -85,21 +108,24 @@ export function useComments(pageId) {
   }, [pageId])
 
   const actions = useMemo(() => ({
-    reload: () => loadComments(pageId),
+    reload: () => loadComments(pageId, { force: true }),
     /** Start a thread. anchor: { block_id, from, to, quote } or null for page level. */
     create: async (body, anchor = null) => {
       const thread = await api.comments.create(pageId, { body, ...(anchor ? { anchor } : {}) })
       upsertThread(pageId, thread)
+      refreshCommentsSoon(pageId)
       return thread
     },
     reply: async (threadId, body) => {
       const res = await api.comments.reply(pageId, threadId, { body })
       upsertThread(pageId, res?.thread)
+      refreshCommentsSoon(pageId)
       return res?.comment
     },
     edit: async (commentId, body) => {
       const thread = await api.comments.edit(pageId, commentId, body)
       upsertThread(pageId, thread)
+      refreshCommentsSoon(pageId)
       return thread
     },
     remove: async (commentId) => {
@@ -112,14 +138,22 @@ export function useComments(pageId) {
           .filter(t => t.comments.some(c => !c.deleted))
         return { threads, counts: countsOf(threads) }
       })
+      refreshCommentsSoon(pageId)
       return res
     },
-    resolve: async (threadId) => upsertThread(pageId, await api.comments.resolve(pageId, threadId)),
-    reopen: async (threadId) => upsertThread(pageId, await api.comments.reopen(pageId, threadId)),
+    resolve: async (threadId) => {
+      upsertThread(pageId, await api.comments.resolve(pageId, threadId))
+      refreshCommentsSoon(pageId)
+    },
+    reopen: async (threadId) => {
+      upsertThread(pageId, await api.comments.reopen(pageId, threadId))
+      refreshCommentsSoon(pageId)
+    },
     searchMentions: (q) => api.comments.mentions(pageId, q),
   }), [pageId])
 
-  return { ...state, ...actions }
+  // `actions` keeps one identity per page, for memoised children.
+  return { ...state, ...actions, actions }
 }
 
 export default useComments

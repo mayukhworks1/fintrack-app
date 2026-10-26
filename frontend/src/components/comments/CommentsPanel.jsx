@@ -2,22 +2,27 @@
 // for page-level discussion, replies, edit/delete of one's own comments and
 // resolve/reopen. Anchored threads (from the block editor) show the text they
 // were left on and a "Go to" action that the editor handles.
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { X, MessageSquare, CornerDownRight, Check, RotateCcw, LocateFixed } from 'lucide-react'
 import { useComments } from './useComments'
 import MentionComposer from './MentionComposer'
 import { Avatar, CommentBody, CommentStyles } from './CommentBits'
 import { emitCommentGoTo, fullIst, relativeIst } from './commentsModel'
 
-function useMinuteTick() {
-  const [, setT] = useState(0)
+// One clock for the whole panel: relative times move on once a minute.
+function useMinute() {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const iv = setInterval(() => setT(t => t + 1), 60_000)
+    const iv = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(iv)
   }, [])
+  return now
 }
 
-function CommentItem({ comment, onEdit, onDelete, searchMentions }) {
+// Threads drawn at a time; a page with hundreds of threads shows the newest.
+const PAGE_SIZE = 30
+
+function CommentItem({ comment, onEdit, onDelete, searchMentions, now }) {
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const name = comment.author?.name || 'Someone'
@@ -28,7 +33,7 @@ function CommentItem({ comment, onEdit, onDelete, searchMentions }) {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>{name}</span>
           <time dateTime={comment.created_at} title={fullIst(comment.created_at)}
-            style={{ fontSize: 11, color: 'var(--text-3)' }}>{relativeIst(comment.created_at)}</time>
+            style={{ fontSize: 11, color: 'var(--text-3)' }}>{relativeIst(comment.created_at, now)}</time>
           {comment.edited_at && !comment.deleted && (
             <span title={`Edited ${fullIst(comment.edited_at)}`} style={{ fontSize: 11, color: 'var(--text-3)' }}>(edited)</span>
           )}
@@ -67,7 +72,7 @@ function CommentItem({ comment, onEdit, onDelete, searchMentions }) {
   )
 }
 
-function ThreadCard({ thread, pageId, focused, c }) {
+const ThreadCard = memo(function ThreadCard({ thread, pageId, focused, c, now }) {
   const [replying, setReplying] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -101,13 +106,13 @@ function ThreadCard({ thread, pageId, focused, c }) {
       )}
       {thread.comments.map(cm => (
         <div key={cm.id} style={cm.id !== thread.id ? { paddingLeft: 14, borderLeft: '2px solid var(--border)', marginLeft: 10 } : undefined}>
-          <CommentItem comment={cm} searchMentions={c.searchMentions}
+          <CommentItem comment={cm} searchMentions={c.searchMentions} now={now}
             onEdit={c.edit} onDelete={(id) => run(() => c.remove(id))} />
         </div>
       ))}
       {resolved && (
         <div style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '2px 0 4px' }}>
-          Resolved{thread.resolved_by?.name ? ` by ${thread.resolved_by.name}` : ''} · <span title={fullIst(thread.resolved_at)}>{relativeIst(thread.resolved_at)}</span>
+          Resolved{thread.resolved_by?.name ? ` by ${thread.resolved_by.name}` : ''} · <span title={fullIst(thread.resolved_at)}>{relativeIst(thread.resolved_at, now)}</span>
         </div>
       )}
       {replying && (
@@ -140,7 +145,9 @@ function ThreadCard({ thread, pageId, focused, c }) {
       )}
     </article>
   )
-}
+})
+
+const REFRESH_MS = 45_000
 
 const FILTERS = [
   { key: 'open', label: 'Open' },
@@ -151,7 +158,8 @@ const FILTERS = [
 export default function CommentsPanel({ pageId, onClose, focusThreadId = null, style }) {
   const c = useComments(pageId)
   const [filter, setFilter] = useState('open')
-  useMinuteTick()
+  const [limit, setLimit] = useState(PAGE_SIZE)
+  const now = useMinute()
 
   // A thread asked for by a notification may be resolved: show it anyway.
   useEffect(() => {
@@ -160,7 +168,26 @@ export default function CommentsPanel({ pageId, onClose, focusThreadId = null, s
     if (t?.resolved_at && filter === 'open') setFilter('all')
   }, [focusThreadId, c.threads]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = c.threads.filter(t => filter === 'all' ? true : filter === 'open' ? !t.resolved_at : !!t.resolved_at)
+  // While the panel is open, other people's comments arrive without a reload:
+  // on returning to the tab, and every so often while it is visible.
+  useEffect(() => {
+    if (!pageId) return undefined
+    const reload = c.reload
+    const onVisible = () => { if (document.visibilityState === 'visible') reload() }
+    const iv = setInterval(() => { if (document.visibilityState !== 'hidden') reload() }, REFRESH_MS)
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(iv)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [pageId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const matching = c.threads.filter(t => filter === 'all' ? true : filter === 'open' ? !t.resolved_at : !!t.resolved_at)
+  // A thread asked for by a notification is drawn even when further down.
+  const focusAt = focusThreadId ? matching.findIndex(t => t.id === focusThreadId) : -1
+  const shown = matching.slice(0, Math.max(limit, focusAt + 1))
 
   return (
     <aside aria-label="Comments" className="cmt-panel"
@@ -182,7 +209,7 @@ export default function CommentsPanel({ pageId, onClose, focusThreadId = null, s
       <div role="tablist" aria-label="Show threads" style={{ display: 'flex', gap: 2, padding: '0 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         {FILTERS.map(f => (
           <button key={f.key} type="button" role="tab" aria-selected={filter === f.key} className="cmt-tab"
-            onClick={() => setFilter(f.key)}>
+            onClick={() => { setFilter(f.key); setLimit(PAGE_SIZE) }}>
             {f.label}{f.key !== 'all' ? ` (${c.counts?.[f.key] ?? 0})` : ''}
           </button>
         ))}
@@ -204,8 +231,14 @@ export default function CommentsPanel({ pageId, onClose, focusThreadId = null, s
           </p>
         )}
         {shown.map(t => (
-          <ThreadCard key={t.id} thread={t} pageId={pageId} c={c} focused={t.id === focusThreadId} />
+          <ThreadCard key={t.id} thread={t} pageId={pageId} c={c.actions} now={now} focused={t.id === focusThreadId} />
         ))}
+        {matching.length > shown.length && (
+          <button type="button" className="cmt-link" style={{ alignSelf: 'center', padding: 6 }}
+            onClick={() => setLimit(l => l + PAGE_SIZE)}>
+            Show more ({matching.length - shown.length} more)
+          </button>
+        )}
       </div>
     </aside>
   )

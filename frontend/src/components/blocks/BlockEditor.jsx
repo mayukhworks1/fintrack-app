@@ -6,9 +6,13 @@ import { CellSelection } from '@tiptap/pm/tables'
 import DragHandle from '@tiptap/extension-drag-handle-react'
 import { GripVertical, Plus, Image as ImageIcon, Undo2, Redo2 } from 'lucide-react'
 import { createExtensions, insertUploadedImage, IMAGE_TYPES } from './extensions'
+import { editorExtensions } from './editorExtensions'
 import { toDocJSON } from './schema'
 import { sameDoc } from './collab/presence'
 import { BubbleToolbar, TableToolbar, BlockMenu } from './toolbar'
+import PagePicker, { pageHref } from './PagePicker'
+import { onCommentGoTo } from '../comments/commentsModel'
+import { api } from '../../services/api'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import './blocks.css'
 
@@ -20,6 +24,42 @@ const BUBBLE_TOUCH = { placement: 'bottom', offset: 8, flip: true, shift: { padd
 const TABLE_MENU = { placement: 'top-start', offset: 6, flip: false, shift: { padding: 8 } }
 const BUBBLE_STYLE = { zIndex: 2500 }
 const TABLE_STYLE = { zIndex: 2400 }
+// Typing does not serialise the whole document per keystroke: onChange runs
+// once the author pauses (and at once on blur or unmount).
+const CHANGE_DELAY_MS = 250
+
+/** Where a comment's anchor is now: its recorded range when the text there
+ *  still matches, else the first place the quoted text appears. */
+export function findAnchor(doc, anchor) {
+  if (!anchor) return null
+  const size = doc.content.size
+  const quote = String(anchor.quote || '').trim()
+  const { from, to } = anchor
+  if (Number.isInteger(from) && Number.isInteger(to) && from >= 0 && to <= size && from < to) {
+    if (!quote || doc.textBetween(from, to, ' ').trim() === quote) return { from, to }
+  }
+  if (!quote) return null
+  let hit = null
+  doc.descendants((node, pos) => {
+    if (hit) return false
+    if (!node.isTextblock) return true
+    const i = node.textContent.indexOf(quote)
+    if (i >= 0) {
+      // Map the text offset to a position, walking the block's inline nodes.
+      let offset = 0
+      let start = null
+      node.forEach((child, childPos) => {
+        if (start != null) return
+        const len = child.isText ? child.text.length : 1
+        if (i < offset + len) start = pos + 1 + childPos + (i - offset)
+        offset += len
+      })
+      if (start != null) hit = { from: start, to: Math.min(start + quote.length, size) }
+    }
+    return false
+  })
+  return hit
+}
 
 /**
  * Notion-style block editor over TipTap. `value` and `onChange` carry the
@@ -33,8 +73,16 @@ const TABLE_STYLE = { zIndex: 2400 }
  *   commands / extensions       extra "/" entries and extensions (later phases)
  *   collaborative               the document comes from a Collaboration
  *                               extension in `extensions`, not from `value`
+ *   pageId                      the saved page being edited: enables the
+ *                               "Sub-page" / "Link to page" entries and
+ *                               "Comment" on a selection
+ *   readOnly                    shown but not editable (a page in the trash)
+ *
+ * onChange is called after a short pause in typing (CHANGE_DELAY_MS), and at
+ * once when the editor loses focus or unmounts, so the last edit always
+ * reaches it.
  */
-export default function BlockEditor({ value, onChange, uploadImage, onReady, commands, extensions: extra, collaborative = false, className = '', ariaLabel = 'Document' }) {
+export default function BlockEditor({ value, onChange, uploadImage, onReady, commands, extensions: extra, collaborative = false, className = '', ariaLabel = 'Document', pageId = null, readOnly = false }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const lastRef = useRef(value)
@@ -48,26 +96,55 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
   const hoverRef = useRef(null)
   const [blockMenu, setBlockMenu] = useState(null)
   const touch = useMediaQuery('(hover: none), (pointer: coarse), (max-width: 767px)')
+  const [picker, setPicker] = useState(false)
+  const pageIdRef = useRef(pageId)
+  pageIdRef.current = pageId
+  const changeTimer = useRef(null)
+  const dirtyRef = useRef(null)     // the editor with an edit not yet reported
+  const flushChange = useCallback(() => {
+    clearTimeout(changeTimer.current)
+    changeTimer.current = null
+    const e = dirtyRef.current
+    dirtyRef.current = null
+    if (!e || e.isDestroyed) return
+    const json = JSON.stringify(e.getJSON())
+    lastRef.current = json
+    onChangeRef.current?.(json)
+  }, [])
+  // The document is read from `value` once, when the editor is made.
+  const [initialDoc] = useState(() => (collaborative ? undefined : toDocJSON(value)))
 
   const extensions = useMemo(
-    () => createExtensions({ editable: true, uploadImage, commands, extra: extra || [], history: !collaborative }),
+    () => createExtensions({ editable: true, extra: [...editorExtensions({ uploadImage, commands }), ...(extra || [])], history: !collaborative }),
     [] // eslint-disable-line react-hooks/exhaustive-deps -- the schema is fixed for the editor's life
   )
 
   const editor = useEditor({
     extensions,
-    content: collaborative ? undefined : toDocJSON(value),
+    content: initialDoc,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: { class: 'ft-prose', 'aria-label': ariaLabel, spellcheck: 'true' },
     },
     onUpdate: ({ editor: e }) => {
-      const json = JSON.stringify(e.getJSON())
-      lastRef.current = json
-      onChangeRef.current?.(json)
+      dirtyRef.current = e
+      clearTimeout(changeTimer.current)
+      changeTimer.current = setTimeout(flushChange, CHANGE_DELAY_MS)
     },
+    onBlur: () => { if (dirtyRef.current) flushChange() },
   })
+
+  // Unmounting (closing the page, a live session taking over) reports the
+  // last edit rather than dropping it.
+  useEffect(() => () => {
+    const e = dirtyRef.current
+    dirtyRef.current = null
+    clearTimeout(changeTimer.current)
+    if (e && !e.isDestroyed) {
+      try { const json = JSON.stringify(e.getJSON()); lastRef.current = json; onChangeRef.current?.(json) } catch { /* destroyed meanwhile */ }
+    }
+  }, [])
 
   // A new value from outside (a template, a restored version, a conversion)
   // replaces the document; our own echoes are ignored.
@@ -76,6 +153,8 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
     const newProp = value !== propRef.current
     propRef.current = value
     if (!editor || editor.isDestroyed || value === lastRef.current) return
+    // A replacement wins over an edit still waiting to be reported.
+    if (newProp) { clearTimeout(changeTimer.current); dirtyRef.current = null }
     // Live, the document is the shared one and a replacement is an edit that
     // everyone receives. Only a value the parent actually changed counts —
     // never the one the editor mounted with, which the shared copy has
@@ -102,6 +181,48 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
     onReady?.(editor)
     return () => { editor.off('blocks:upload', onUp); editor.off('blocks:error', onErr) }
   }, [editor]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && editor.isEditable === !!readOnly) editor.setEditable(!readOnly, false)
+  }, [editor, readOnly])
+
+  // Page commands ("/" Sub-page and Link to page) for a saved page.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !editor.storage.blocks) return undefined
+    const store = editor.storage.blocks
+    if (!pageId) { store.pages = null; return undefined }
+    const insertLink = (p) => {
+      const href = pageHref(p)
+      const text = p.title || 'Untitled'
+      const content = href ? { type: 'text', text, marks: [{ type: 'link', attrs: { href } }] } : { type: 'text', text }
+      editor.chain().focus().insertContent([content, { type: 'text', text: ' ' }]).run()
+    }
+    store.pages = {
+      pickPage: () => setPicker(true),
+      createSubPage: async () => {
+        try {
+          const id = `sub-${pageId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          const p = await api.pageLinks.createChild(pageId, { title: 'Untitled', content_type: 'doc', content: '', client_request_id: id })
+          if (p?.id && !editor.isDestroyed) insertLink(p)
+        } catch (err) {
+          editor.emit('blocks:error', err?.message || 'Could not create the sub-page')
+        }
+      },
+      insertLink,
+    }
+    return () => { if (store.pages) store.pages = null }
+  }, [editor, pageId])
+
+  // "Go to" on an anchored comment: select the text it was left on.
+  useEffect(() => {
+    if (!editor || !pageId) return undefined
+    return onCommentGoTo((d) => {
+      if (editor.isDestroyed || (d?.pageId && d.pageId !== pageIdRef.current)) return
+      const hit = findAnchor(editor.state.doc, d?.anchor)
+      if (!hit) return
+      editor.chain().focus().setTextSelection(hit).scrollIntoView().run()
+    })
+  }, [editor, pageId])
 
   useEffect(() => {
     if (!linkOpen && editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('ft-link', false))
@@ -200,7 +321,7 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
       <BubbleMenu editor={editor} pluginKey="ftBubble" shouldShow={showBubble} updateDelay={80}
         options={touch ? BUBBLE_TOUCH : BUBBLE_DESKTOP}
         className="ft-pop ft-bubble" style={BUBBLE_STYLE}>
-        <BubbleToolbar editor={editor} linkOpen={linkOpen} setLinkOpen={setLinkOpen} />
+        <BubbleToolbar editor={editor} linkOpen={linkOpen} setLinkOpen={setLinkOpen} commentPageId={pageId} />
       </BubbleMenu>
 
       <BubbleMenu editor={editor} pluginKey="ftTable" shouldShow={showTable} getReferencedVirtualElement={tableAnchor}
@@ -210,6 +331,11 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
       </BubbleMenu>
 
       <EditorContent editor={editor} />
+
+      {picker && (
+        <PagePicker editor={editor} excludeId={pageId} onClose={() => setPicker(false)}
+          onPick={(p) => { setPicker(false); editor.storage.blocks?.pages?.insertLink(p) }} />
+      )}
 
       {blockMenu && <BlockMenu editor={editor} target={blockMenu} style={blockMenu.style} onClose={closeBlockMenu} />}
 

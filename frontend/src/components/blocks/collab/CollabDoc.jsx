@@ -5,7 +5,7 @@ import { Collaboration } from '@tiptap/extension-collaboration'
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret'
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap'
 import BlockEditor from '../BlockEditor'
-import { CollabProvider, collabUrl } from './provider'
+import { CLOSE, CollabProvider, collabUrl } from './provider'
 import { PresenceBar } from './PresenceBar'
 import { peersOf, sameDoc } from './presence'
 import * as apiModule from '../../../services/api'
@@ -19,6 +19,22 @@ const getToken = () => { const f = apiValue('getAuthToken', null); return f ? f(
 // A dropped connection reads as "Reconnecting" for this long before the page
 // falls back to ordinary saving.
 const OFFLINE_AFTER_MS = 8000
+
+export const NOTES = {
+  tooLargeLive: { tone: 'info', text: 'This page is too large to edit live. Your changes save the usual way.' },
+  trashed: { tone: 'warn', lock: true, text: 'This page was moved to the trash, so it can no longer be edited. Restore it from the trash to keep working.' },
+  reloaded: { tone: 'info', text: 'This page was changed elsewhere (a restored version or another save). The latest copy is loaded.' },
+  denied: { tone: 'warn', text: 'Live editing is not available for this page. Your changes save the usual way.' },
+}
+
+/** What a closed session means for the page: next mode, whether the content
+ *  on screen is already on the server, an optional note, and read-only. */
+export function fatalOutcome(code) {
+  if (code === CLOSE.TRASHED) return { mode: 'offline', contentSynced: true, note: NOTES.trashed, readOnly: true }
+  if (code === CLOSE.TOO_LARGE || code === CLOSE.MESSAGE_TOO_BIG) return { mode: 'offline', contentSynced: false, note: NOTES.tooLargeLive }
+  if (code === CLOSE.FORBIDDEN || code === CLOSE.NOT_FOUND) return { mode: 'offline', contentSynced: false, note: NOTES.denied }
+  return { mode: 'offline', contentSynced: false, note: null }
+}
 
 /**
  * A block document that edits live when it can.
@@ -36,6 +52,9 @@ const OFFLINE_AFTER_MS = 8000
  *
  * onModeChange(mode, { contentSynced }) — contentSynced says the current
  * content is already on the server (a clean hand-back from a live session).
+ * Leaving a session with edits the server has not taken reports
+ * contentSynced: false, so the page saves them; if this editor is going away
+ * at that moment it saves them itself (and warns before the tab closes).
  * isContentSaved() — whether `value` matches what the page last saved.
  */
 export default function CollabDoc({
@@ -47,6 +66,8 @@ export default function CollabDoc({
   const [peers, setPeers] = useState([])
   const [savedAt, setSavedAt] = useState(null)
   const [fatal, setFatal] = useState(null)
+  const [note, setNote] = useState(null)            // { tone, text }
+  const [readOnly, setReadOnly] = useState(false)
   const valueRef = useRef(value)
   valueRef.current = value
   const savedRef = useRef(isContentSaved)
@@ -59,6 +80,8 @@ export default function CollabDoc({
   const attemptRef = useRef(null)
   const failuresRef = useRef(0)
   const keyRef = useRef(0)
+  const pageIdRef = useRef(pageId)
+  pageIdRef.current = pageId
 
   const go = useCallback((next, info = {}) => {
     if (modeRef.current === next) return
@@ -67,17 +90,24 @@ export default function CollabDoc({
     modeChangeRef.current?.(next, info)
   }, [])
 
+  const latestContent = useCallback(() => {
+    const ed = editorRef.current
+    if (ed && !ed.isDestroyed) { try { return JSON.stringify(ed.getJSON()) } catch { /* fall through */ } }
+    return valueRef.current
+  }, [])
+
+  const endFatal = useCallback((code, end) => {
+    const out = fatalOutcome(code)
+    setFatal(code)
+    setNote(out.note)
+    if (out.readOnly) setReadOnly(true)
+    end(out.mode, { contentSynced: out.contentSynced })
+  }, [])
+
   useEffect(() => {
     if (!pageId) go('off')
     else if (modeRef.current === 'off') go('connecting')
   }, [pageId, go])
-
-  // Report "no live session" when this editor goes away (and the mode again
-  // if it comes back, as React's development double-mount does).
-  useEffect(() => {
-    if (modeRef.current !== 'off') modeChangeRef.current?.(modeRef.current, {})
-    return () => { modeChangeRef.current?.('off', { contentSynced: modeRef.current === 'live' }) }
-  }, [])
 
   // ── Upgrade: ordinary editor -> live session ──────────────────────────────
   useEffect(() => {
@@ -117,14 +147,23 @@ export default function CollabDoc({
           pendingSelRef.current = { from, to, focused: ed.isFocused }
         }
         keyRef.current += 1
+        setNote(n => (n === NOTES.reloaded ? n : null))
         setSession({ doc, provider, key: `live-${keyRef.current}` })
       })
+      // These listeners stay on the provider once it becomes the session's;
+      // from then on the session's own listeners answer for it.
+      const mine = () => !cancelled && attemptRef.current?.provider === provider
+      provider.on('error', (msg) => {
+        if (!mine() || msg?.code !== 'too_large') return
+        setNote(msg.mode === 'rest' ? NOTES.tooLargeLive : { tone: 'warn', text: msg.message || 'This document is too large to save.' })
+      })
       provider.on('fatal', (code) => {
+        if (!mine()) return
         abort(null)
-        if (!cancelled) { setFatal(code); go('offline') }
+        endFatal(code, go)
       })
       provider.on('status', ({ status }) => {
-        if (status !== 'disconnected' || provider.synced || provider.fatal) return
+        if (!mine() || status !== 'disconnected' || provider.synced || provider.fatal) return
         failuresRef.current += 1
         go('offline')
         abort(Math.min(30000, 1000 * 2 ** Math.min(failuresRef.current, 5)))
@@ -163,7 +202,11 @@ export default function CollabDoc({
     const onStatus = ({ status }) => {
       if (status === 'connected') return            // live once synced
       if (modeRef.current === 'live') go('reconnecting')
-      if (!offlineTimer) offlineTimer = setTimeout(() => go('offline'), OFFLINE_AFTER_MS)
+      if (!offlineTimer) {
+        // Still no connection: hand the content back to ordinary saving.
+        // What the server has not acknowledged is not synced.
+        offlineTimer = setTimeout(() => go('offline', { contentSynced: false }), OFFLINE_AFTER_MS)
+      }
     }
     const onSynced = (ok) => {
       if (!ok) return
@@ -172,22 +215,29 @@ export default function CollabDoc({
       go('live')
     }
     // The server rebuilt its copy from the page (restart, version restore, a
-    // save while we were away). Edits it has seen are on the page already;
-    // edits it has not go out through ordinary saving before re-syncing.
+    // save elsewhere). Edits it never received go out through ordinary saving;
+    // otherwise the page reloads the server's copy by re-syncing.
     const onStale = () => {
       const unsynced = provider.unsynced
+      if (!unsynced) setNote(NOTES.reloaded)
       endSession(unsynced ? 'offline' : 'connecting', { contentSynced: !unsynced })
     }
-    const onFatal = (code) => {
-      setFatal(code)
-      endSession('offline', { contentSynced: false })
+    const onFatal = (code) => endFatal(code, endSession)
+    const onSaved = (at) => {
+      setSavedAt(at)
+      setNote(n => (n && n.tone === 'warn' && n !== NOTES.trashed && n !== NOTES.denied ? null : n))
     }
-    const onSaved = (at) => setSavedAt(at)
+    const onError = (msg) => {
+      if (msg?.code !== 'too_large') return
+      if (msg.mode === 'rest') { setNote(NOTES.tooLargeLive); return }
+      setNote({ tone: 'warn', text: msg.message || 'This document is too large to save. Remove some content to keep your changes.' })
+    }
     provider.on('status', onStatus)
     provider.on('synced', onSynced)
     provider.on('stale', onStale)
     provider.on('fatal', onFatal)
     provider.on('saved', onSaved)
+    provider.on('error', onError)
     provider.awareness.on('change', refreshPeers)
     refreshPeers()
     go('live')
@@ -198,17 +248,52 @@ export default function CollabDoc({
       provider.off('stale', onStale)
       provider.off('fatal', onFatal)
       provider.off('saved', onSaved)
+      provider.off('error', onError)
       provider.awareness.off('change', refreshPeers)
     }
-  }, [session, endSession, go])
+  }, [session, endSession, go, endFatal])
 
   const sessionRef = useRef(null)
   sessionRef.current = session
-  useEffect(() => () => {
-    // Unmount: close whatever is open, after the editor bound to it is gone.
+
+  // Edits the server has not taken: queued while reconnecting, or never sent.
+  const unsyncedNow = useCallback(() => {
     const s = sessionRef.current
-    if (s) setTimeout(() => { s.provider.destroy(); s.doc.destroy() }, 0)
+    if (!s) return false
+    return s.provider.unsynced || modeRef.current === 'reconnecting'
   }, [])
+
+  // Closing the tab with such edits asks first.
+  useEffect(() => {
+    if (!session) return undefined
+    const onUnload = (e) => {
+      if (!unsyncedNow()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [session, unsyncedNow])
+
+  // Report "no live session" when this editor goes away (and the mode again
+  // if it comes back, as React's development double-mount does). Content the
+  // live session never delivered is saved here, since no editor remains to
+  // hand it to.
+  useEffect(() => {
+    if (modeRef.current !== 'off') modeChangeRef.current?.(modeRef.current, {})
+    return () => {
+      const s = sessionRef.current
+      const unsynced = !!s && unsyncedNow()
+      const content = unsynced ? latestContent() : null
+      modeChangeRef.current?.('off', { contentSynced: modeRef.current === 'live' && !unsynced, content })
+      if (unsynced && pageIdRef.current && content) {
+        const update = apiValue('api', null)?.pages?.update
+        if (typeof update === 'function') Promise.resolve().then(() => update(pageIdRef.current, { content })).catch(() => {})
+      }
+      // Close whatever is open, after the editor bound to it is gone.
+      if (s) setTimeout(() => { s.provider.destroy(); s.doc.destroy() }, 0)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const restoreSelection = useCallback(() => {
     const sel = pendingSelRef.current
@@ -236,17 +321,17 @@ export default function CollabDoc({
     onReady?.(ed)
   }, [onReady])
 
-  const bar = pageId ? <PresenceBar mode={mode} peers={peers} savedAt={savedAt} /> : null
+  const bar = pageId ? <PresenceBar mode={mode} peers={peers} savedAt={savedAt} note={note} /> : null
 
   return (
     <>
       {bar && (presenceSlot ? createPortal(bar, presenceSlot) : <div className="ft-presence-row">{bar}</div>)}
       {session ? (
-        <BlockEditor key={session.key} collaborative value={value} onChange={onChange} uploadImage={uploadImage}
-          onReady={handleReady} commands={commands} extensions={liveExtensions} ariaLabel={ariaLabel} />
+        <BlockEditor key={session.key} collaborative value={value} onChange={onChange} uploadImage={uploadImage} pageId={pageId}
+          onReady={handleReady} commands={commands} extensions={liveExtensions} ariaLabel={ariaLabel} readOnly={readOnly} />
       ) : (
-        <BlockEditor key={`plain-${keyRef.current}`} value={value} onChange={onChange} uploadImage={uploadImage}
-          onReady={handleReady} commands={commands} extensions={extensions} ariaLabel={ariaLabel} />
+        <BlockEditor key={`plain-${keyRef.current}`} value={value} onChange={onChange} uploadImage={uploadImage} pageId={pageId}
+          onReady={handleReady} commands={commands} extensions={extensions} ariaLabel={ariaLabel} readOnly={readOnly} />
       )}
     </>
   )

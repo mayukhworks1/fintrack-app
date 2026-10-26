@@ -133,6 +133,10 @@ describe('Artifact editor', () => {
   it('previews through the sandboxed render frame, beside the code', async () => {
     await openNewArtifact()
     fireEvent.click(await screen.findByRole('button', { name: 'Use template: EMI / loan calculator' }))
+    // The result opens on its preview; Split puts the code beside it.
+    await waitFor(() => expect(document.querySelector('iframe[data-artifact-frame]')).not.toBeNull(), { timeout: 3000 })
+    expect(screen.queryByLabelText('Artifact code')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'split' }))
     expect(await screen.findByLabelText('Artifact code')).toBeTruthy()
 
     await waitFor(() => expect(document.querySelector('iframe[data-artifact-frame]')).not.toBeNull(), { timeout: 3000 })
@@ -160,6 +164,7 @@ describe('Artifact editor', () => {
     await waitFor(() => expect(api.pages.aiStream).toHaveBeenCalled())
     const [body] = api.pages.aiStream.mock.calls[0]
     expect(body).toMatchObject({ prompt: 'add a reset button', content_type: 'artifact', existing: GST.html })
+    fireEvent.click(screen.getByRole('button', { name: 'code' }))
     await waitFor(() => expect(screen.getByLabelText('Artifact code').value).toBe(revised))
   })
 
@@ -170,6 +175,7 @@ describe('Artifact editor', () => {
     await openNewArtifact()
     fireEvent.change(await screen.findByLabelText('Describe the artifact'), { target: { value: 'a SIP planner' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Build artifact/ })) })
+    fireEvent.click(await screen.findByRole('button', { name: 'code' }))
     await waitFor(() => expect(screen.getByLabelText('Artifact code').value).toBe(built))
     expect(api.pages.aiStream.mock.calls[0][0]).toMatchObject({ prompt: 'a SIP planner', content_type: 'artifact' })
     expect(api.pages.aiStream.mock.calls[0][0].existing).toBeUndefined()
@@ -182,6 +188,7 @@ describe('Artifact editor', () => {
     expect(screen.getByLabelText('Paste HTML')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Paste HTML'), { target: { value: '<h1>Mine</h1>' } })
     fireEvent.click(screen.getByRole('button', { name: 'Use this HTML' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'code' }))
     expect((await screen.findByLabelText('Artifact code')).value).toBe('<h1>Mine</h1>')
     expect(screen.queryByLabelText('Refine the artifact')).toBeNull()
   })
@@ -222,5 +229,16 @@ describe('ArtifactFrame', () => {
       window.dispatchEvent(new MessageEvent('message', { data: { type: '__ft_artifact_store', data: { a: '2', b: '3' } }, source: f.contentWindow }))
       expect(readArtifactStore('slug:gst')).toEqual({ a: '2', b: '3' })
     }
+  })
+})
+
+describe('AI errors', () => {
+  it('turn setup messages meant for administrators into "ask an admin"', async () => {
+    const { friendlyAiError } = await import('../components/artifacts/artifactAi')
+    const msg = friendlyAiError('No AI provider is available for Pages. An administrator can check Admin → AI gateway.')
+    expect(msg).toMatch(/Ask an admin/)
+    expect(msg).not.toMatch(/gateway|Admin →/)
+    expect(friendlyAiError('Rate limited, try in a minute')).toBe('Rate limited, try in a minute')
+    expect(friendlyAiError('', 'fallback')).toBe('fallback')
   })
 })

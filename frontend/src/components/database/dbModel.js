@@ -416,7 +416,8 @@ function ruleIsComplete(rule, props) {
     case 'date': return /^\d{4}-\d{2}-\d{2}/.test(String(v || ''))
     case 'select': case 'multi_select': return (prop.options || []).some(o => o.id === v)
     case 'checkbox': return typeof v === 'boolean'
-    default: return v != null && String(v).length <= 500
+    // An empty text rule is still being typed: it filters nothing yet.
+    default: return v != null && String(v).trim() !== '' && String(v).length <= 500
   }
 }
 

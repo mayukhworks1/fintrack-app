@@ -33,6 +33,11 @@ export class FakeServer {
     if (typeof data === 'string') {
       const msg = JSON.parse(data)
       if (msg.type === 'auth') {
+        if (this.tooLarge) {
+          sock._deliver(JSON.stringify({ type: 'error', code: 'too_large', mode: 'rest', limit: 1500000, message: 'too large' }))
+          setTimeout(() => sock._serverClose(4413), 5)
+          return
+        }
         if (this.refuse) { sock._serverClose(this.refuse); return }
         sock.authed = true
         sock.token = msg.token

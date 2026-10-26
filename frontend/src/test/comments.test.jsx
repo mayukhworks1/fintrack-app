@@ -140,6 +140,36 @@ describe('CommentsPanel', () => {
     expect(screen.getByRole('tab', { name: 'Resolved (1)' })).toBeInTheDocument()
   })
 
+  it('reloads from the server after posting and resolving, picking up others\' replies', async () => {
+    db.threads = [thread('t1')]
+    await mount()
+    await screen.findAllByRole('article')
+    const lists = () => calls.filter(c => c[0] === 'list').length
+    const before = lists()
+    // Meanwhile someone else replied on the server.
+    db.threads = [{ ...thread('t1'), comments: [...thread('t1').comments, { id: 't1-x', thread_id: 't1', parent_id: 't1', author: { id: ROOT_ID, name: 'Root Admin' }, body: 'Also this', created_at: ago(1), mine: false }] }]
+    fireEvent.change(screen.getByRole('textbox', { name: 'New comment' }), { target: { value: 'Page note' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    await waitFor(() => expect(lists()).toBeGreaterThan(before), { timeout: 2000 })
+    expect(await screen.findByText('Also this')).toBeInTheDocument()
+    const afterPost = lists()
+    fireEvent.click(within(screen.getAllByRole('article')[0]).getByRole('button', { name: /Resolve/ }))
+    await waitFor(() => expect(lists()).toBeGreaterThan(afterPost), { timeout: 2000 })
+  })
+
+  it('tells people who can be mentioned', async () => {
+    await mount()
+    expect(await screen.findByText(/mention the page owner and workspace admins/)).toBeInTheDocument()
+  })
+
+  it('shows 30 threads at a time', async () => {
+    db.threads = Array.from({ length: 45 }, (_, i) => thread(`t${i}`))
+    await mount()
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(30))
+    fireEvent.click(screen.getByRole('button', { name: /Show more \(15 more\)/ }))
+    expect(screen.getAllByRole('article')).toHaveLength(45)
+  })
+
   it('mention autocomplete inserts a token that is sent on submit', async () => {
     await mount()
     await waitFor(() => expect(calls.some(c => c[0] === 'list')).toBe(true))

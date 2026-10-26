@@ -3,7 +3,7 @@
 // appending to the list passed to the editor; each entry is self-contained.
 import {
   Pilcrow, Heading1, Heading2, Heading3, List, ListOrdered, ListTodo, ChevronRight,
-  Quote, Lightbulb, Minus, SquareCode, Image as ImageIcon, Youtube, Table,
+  Quote, Lightbulb, Minus, SquareCode, Image as ImageIcon, Youtube, Table, FilePlus2, Link2,
 } from 'lucide-react'
 
 const clear = (editor, range) => editor.chain().focus().deleteRange(range)
@@ -46,11 +46,20 @@ export const BLOCK_COMMANDS = [
   { id: 'embed', group: 'Media', title: 'Embed', description: 'YouTube, Loom, Figma, Google Docs or Sheets', icon: Youtube, keywords: ['video', 'youtube', 'loom', 'figma', 'google', 'docs', 'sheets', 'slides', 'iframe'],
     run: (e, r) => clear(e, r).insertEmbed('').run() },
 
+  // Page entries work through editor.storage.blocks.pages, which the editor
+  // sets up only for a saved page (see BlockEditor's pageId).
+  { id: 'subpage', group: 'Pages', title: 'Sub-page', description: 'A new page inside this one, linked here', icon: FilePlus2, keywords: ['page', 'child', 'subpage', 'new page'],
+    available: e => !!e.storage.blocks?.pages,
+    run: (e, r) => { clear(e, r).run(); e.storage.blocks.pages.createSubPage() } },
+  { id: 'linkpage', group: 'Pages', title: 'Link to page', description: 'Link to another page', icon: Link2, keywords: ['page', 'mention', 'link', 'reference'],
+    available: e => !!e.storage.blocks?.pages,
+    run: (e, r) => { clear(e, r).run(); e.storage.blocks.pages.pickPage() } },
+
   { id: 'table', group: 'Advanced', title: 'Table', description: 'Rows and columns', icon: Table, keywords: ['grid', 'cells', 'spreadsheet'],
     run: (e, r) => clear(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
 ]
 
-export const GROUP_ORDER = ['Basic blocks', 'Media', 'Advanced']
+export const GROUP_ORDER = ['Basic blocks', 'Pages', 'Media', 'Advanced']
 
 /** Commands whose title or keywords match the query, best matches first. */
 export function filterCommands(commands, query) {

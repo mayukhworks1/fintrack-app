@@ -116,6 +116,22 @@ tr:hover .fdb-open,.fdb-open:focus-visible{opacity:1}
 .fdb-day:hover .add,.fdb-day .add:focus-visible{opacity:1}
 .fdb-ev{font-size:12px;border:1px solid var(--db-line);background:var(--db-bg);border-radius:5px;padding:2px 6px;cursor:grab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;width:100%;color:var(--db-ink);box-shadow:0 1px 1px rgba(15,23,42,.05)}
 .fdb-ev:hover{border-color:var(--db-mute)}
+.fdb-peek-backdrop{position:fixed;inset:0;z-index:2050;background:rgba(15,23,42,.18);display:flex;justify-content:flex-end}
+.fdb-peek{width:min(640px,100vw);height:100%;background:var(--db-bg);color:var(--db-ink);box-shadow:-8px 0 32px rgba(15,23,42,.2);display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
+.fdb-peek-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--db-line);flex-shrink:0}
+.fdb-peek-body{flex:1;overflow-y:auto;padding:18px 28px 48px;-webkit-overflow-scrolling:touch}
+.fdb-peek-title{width:100%;border:none;background:none;font:inherit;font-size:26px;font-weight:700;color:var(--db-ink);padding:4px 0 10px;outline:none}
+.fdb-peek-title::placeholder{color:var(--db-mute)}
+.fdb-peek-doc{margin-top:4px;min-height:200px}
+.fdb-peek-doc .ProseMirror{outline:none;min-height:180px}
+.fdb-more-rows{display:flex;gap:8px;align-items:center}
+.fdb-day-pick{position:absolute;inset:0;border:none;background:none;cursor:pointer;min-height:0;padding:0;z-index:1}
+.fdb-day-pick[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--db-accent)}
+.fdb-day-count{align-self:center;margin-top:auto;min-width:20px;height:20px;border-radius:999px;background:var(--db-accent-soft);color:var(--db-accent);font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.fdb-agenda{margin-top:10px;border:1px solid var(--db-line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.fdb-agenda-h{display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:13.5px;padding:2px 4px}
+.fdb-agenda-item{display:block;width:100%;text-align:left;border:1px solid var(--db-line);background:var(--db-bg);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--db-ink);text-decoration:none;cursor:pointer;overflow-wrap:anywhere}
+.fdb .fdb-open{min-height:0;line-height:1.4}
 .fdb-empty{padding:28px 12px;text-align:center;color:var(--db-mute);font-size:13px}
 .fdb-count{font-size:12px;color:var(--db-mute);padding:6px 8px}
 .fdb-props{display:grid;grid-template-columns:minmax(110px,180px) minmax(0,1fr);gap:2px 8px;align-items:start;padding:6px 0 10px;border-bottom:1px solid var(--db-line);margin-bottom:8px}
@@ -126,7 +142,10 @@ tr:hover .fdb-open,.fdb-open:focus-visible{opacity:1}
 @media (max-width:640px){
   .fdb-props{grid-template-columns:minmax(90px,38%) minmax(0,1fr)}
   .fdb-day{min-height:64px;padding:2px}
-  .fdb-ev{font-size:10.5px;padding:1px 3px}
+  .fdb-ev{font-size:11px;padding:1px 3px;line-height:1.25;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .fdb-day .d{font-size:11px;line-height:16px}
+  .fdb-peek-body{padding:12px 16px 32px}
+  .fdb-peek-title{font-size:22px}
   .fdb-cal-h{padding:4px 3px;text-align:center}
   .fdb-tab{padding:6px 8px}
 }

@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Modal from '../Modal'
 import { parseCSV } from '../../utils/sheet'
 import { api } from '../../services/api'
 import { COMPUTED, PROP_TYPES } from './dbModel'
+import { newImportId, retryableImportError } from './dbSync'
 
 const NEW_TYPES = PROP_TYPES.filter(t => !COMPUTED.has(t.type))
 const MAX_BYTES = 2_000_000
@@ -30,6 +31,9 @@ export default function CsvImportDialog({ open, onClose, dbId, schema, onImporte
   const [mapping, setMapping] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // One id per import: kept while the same CSV and mapping are retried (a
+  // timeout, a dropped connection), so the server never adds the rows twice.
+  const importRef = useRef(null)   // { id, key }
 
   const grid = useMemo(() => (text ? parseCSV(text).filter(r => r.some(c => String(c).trim())) : []), [text])
   const width = grid.reduce((m, r) => Math.max(m, r.length), 0)
@@ -58,13 +62,26 @@ export default function CsvImportDialog({ open, onClose, dbId, schema, onImporte
       if (m.startsWith('new:')) return { column, new_type: m.slice(4), name: header[column] || `Column ${column + 1}` }
       return { column, prop: m }
     }).filter(Boolean)
+    const key = JSON.stringify([text, map, hasHeader])
+    if (!importRef.current || importRef.current.key !== key) importRef.current = { id: newImportId(), key }
+    const body = { csv: text, mapping: map, has_header: hasHeader, import_id: importRef.current.id }
     try {
-      const res = await api.databases.importCsv(dbId, { csv: text, mapping: map, has_header: hasHeader })
+      let res
+      try {
+        res = await api.databases.importCsv(dbId, body)
+      } catch (e) {
+        // No answer is not a "no": ask again with the same id once.
+        if (!retryableImportError(e)) throw e
+        res = await api.databases.importCsv(dbId, body)
+      }
+      importRef.current = null
       onImported?.(res)
       setText(''); setMapping([])
       onClose()
     } catch (e) {
-      setError(e?.message || 'Import failed')
+      setError(retryableImportError(e)
+        ? `${e?.message || 'Import failed'}. Press Import again: rows already added will not be added twice.`
+        : (e?.message || 'Import failed'))
     } finally { setBusy(false) }
   }
 

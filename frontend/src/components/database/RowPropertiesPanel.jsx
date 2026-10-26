@@ -3,6 +3,7 @@ import { api } from '../../services/api'
 import { DB_CSS } from './dbStyles'
 import { PropCell } from './PropertyValue'
 import { COLORS, applyUpdates, newId, typeMeta } from './dbModel'
+import { saveSchemaChange } from './dbSync'
 
 /**
  * Above a row page's content in the page editor: the row's property values,
@@ -30,19 +31,28 @@ export default function RowPropertiesPanel({ pageId, onOpenDatabase }) {
   const schema = db.database
 
   const change = async (propId, value) => {
+    const before = row.props?.[propId] ?? null
     setCtx(c => ({ ...c, row: applyUpdates([c.row], [{ id: row.id, props: { [propId]: value } }])[0] }))
     try {
       const saved = await api.databases.updateRow(db.id, row.id, { props: { [propId]: value } })
       setCtx(c => ({ ...c, row: saved }))
       setError('')
-    } catch (e) { setError(e?.message || 'Could not save') }
+    } catch (e) {
+      // Back to what the server has, and say why.
+      setCtx(c => ({ ...c, row: applyUpdates([c.row], [{ id: row.id, props: { [propId]: before } }])[0] }))
+      setError(e?.message ? `Not saved: ${e.message}` : 'Not saved')
+    }
   }
   const createOption = async (prop, name) => {
     const opt = { id: newId('o'), name, color: COLORS[(prop.options || []).length % COLORS.length] }
-    const next = { ...schema, properties: schema.properties.map(p => (p.id === prop.id ? { ...p, options: [...(p.options || []), opt] } : p)) }
     try {
-      const res = await api.databases.saveSchema(db.id, next)
-      setCtx(c => ({ ...c, database: { ...c.database, database: res.database } }))
+      const { saved } = await saveSchemaChange({
+        databases: api.databases, dbId: db.id,
+        getBase: () => schema,
+        change: (base) => ({ ...base, properties: base.properties.map(p => (p.id === prop.id ? { ...p, options: [...(p.options || []), opt] } : p)) }),
+        onFresh: (fresh) => setCtx(c => ({ ...c, database: { ...c.database, database: fresh } })),
+      })
+      if (saved) setCtx(c => ({ ...c, database: { ...c.database, database: saved } }))
       return opt.id
     } catch (e) { setError(e?.message || 'Could not add the option'); return null }
   }

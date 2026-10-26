@@ -53,7 +53,9 @@ export const SlashCommand = Extension.create({
           const before = $from.parent.textBetween(0, $from.parentOffset, '\0', '\0')
           return before === '' || /\s$/.test(before)
         },
-        items: ({ query }) => filterCommands(getCommands(), query),
+        // An entry may need something the editor was not given (a page to
+        // link from): `available(editor)` leaves it out then.
+        items: ({ query, editor }) => filterCommands(getCommands().filter(c => !c.available || c.available(editor)), query),
         command: ({ editor, range, props }) => props.run(editor, range),
         render: () => {
           let component = null

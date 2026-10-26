@@ -30,6 +30,11 @@
 }
 :root[data-theme="dark"] .ft-presence-chip.is-live { color: #4dd4b5; }
 :root[data-theme="dark"] .ft-presence-chip.is-wait { color: #f0b04a; }
+.ft-presence { flex-wrap: wrap; }
+.ft-presence-note { font-size: 12px; line-height: 1.4; color: var(--text-2, #555); max-width: 52ch; }
+.ft-presence-note.is-warn { color: #b26b00; }
+:root[data-theme="dark"] .ft-presence-note.is-warn { color: #f0b04a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ft-presence-note.is-warn { color: #f0b04a; } }
 @keyframes ft-presence-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .ft-presence-chip.is-wait .ft-presence-dot { animation: none; } }
 

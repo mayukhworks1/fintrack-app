@@ -871,8 +871,15 @@ export const api = {
     people:        ()          => request('/api/databases/people'),
     create:        (data)      => request('/api/databases', { method: 'POST', body: JSON.stringify(data) }),
     get:           (id)        => request(`/api/databases/${id}`, { fresh: true }),
+    // The database and the first rows of a view in one request.
+    open:          (id, { viewId, limit = 100 } = {}) => request(`/api/databases/${id}?rows=1&limit=${limit}${viewId ? `&view_id=${encodeURIComponent(viewId)}` : ''}`, { fresh: true }),
     rowContext:    (pageId)    => request(`/api/databases/row-context/${pageId}`, { fresh: true }),
+    // data.revision: the revision the change was made against (409 when stale);
+    // data.deleted: property ids to remove (others missing from data are kept).
     saveSchema:    (id, data)  => request(`/api/databases/${id}/schema`, { method: 'PUT', body: JSON.stringify(data) }),
+    // One view (filter, sort, columns, name…) without touching the rest of the schema.
+    saveView:      (id, viewId, data) => request(`/api/databases/${id}/views/${encodeURIComponent(viewId)}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteView:    (id, viewId) => request(`/api/databases/${id}/views/${encodeURIComponent(viewId)}`, { method: 'DELETE' }),
     query:         (id, data)  => request(`/api/databases/${id}/query`, { method: 'POST', body: JSON.stringify(data || {}) }),
     createRow:     (id, data)  => request(`/api/databases/${id}/rows`, { method: 'POST', body: JSON.stringify(data || {}) }),
     updateRow:     (id, rowId, data) => request(`/api/databases/${id}/rows/${rowId}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -880,6 +887,8 @@ export const api = {
     deleteRows:    (id, ids)   => request(`/api/databases/${id}/rows/delete`, { method: 'POST', body: JSON.stringify({ ids }) }),
     publishRows:   (id, published) => request(`/api/databases/${id}/rows/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
     exportCsv:     (id)        => requestBlob(`/api/databases/${id}/export.csv`),
+    // data.import_id: one id per import, reused on retry (the server answers
+    // a repeat with duplicate: true instead of adding the rows again).
     importCsv:     (id, data)  => request(`/api/databases/${id}/import`, { method: 'POST', body: JSON.stringify(data), timeout: 60000 }, 0),
   },
 
@@ -981,6 +990,13 @@ export const api = {
     aiFixError:    (data)          => request('/api/pages/ai/fix-error', {
       method: 'POST', body: JSON.stringify(data), timeout: 120000,
     }, 0),
+  },
+
+  // What the block editor needs to link pages: the outline to pick from, and
+  // a new sub-page (client_request_id makes a retried create return the same page).
+  pageLinks: {
+    tree:        ()             => request('/api/pages/tree', { cacheTtl: 30_000 }),
+    createChild: (parentId, data) => request(`/api/pages/${parentId}/children`, { method: 'POST', body: JSON.stringify(data) }),
   },
 
   // Page comments, @mentions and notifications (routers/comments.py).

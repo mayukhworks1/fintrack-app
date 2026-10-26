@@ -2,6 +2,20 @@ import { api } from '../../services/api'
 
 export const ARTIFACT_TYPE = 'artifact'
 
+const NOT_SET_UP = /no ai provider|admin\s*(→|->|>)\s*ai gateway|ai gateway|api key|openrouter_api_key|groq_api_key/i
+
+/**
+ * An error from the AI endpoints as something the person can act on. Messages
+ * written for administrators (settings screens, provider keys) become a plain
+ * "ask an admin"; anything else is shown as it came.
+ */
+export function friendlyAiError(message, fallback = 'Generation failed. Try again, or rephrase the request.') {
+  const m = String(message || '').trim()
+  if (!m) return fallback
+  if (NOT_SET_UP.test(m)) return 'AI building isn\'t available right now. Ask an admin to turn it on for this workspace.'
+  return m
+}
+
 /**
  * Build or refine an artifact through the page builder's streaming endpoint.
  *

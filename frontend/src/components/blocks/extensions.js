@@ -5,27 +5,48 @@
 // phases plug in by passing `extra` (more nodes / marks / plugins, e.g. page
 // links, inline databases, collaboration) and `commands` (more "/" entries).
 import { Extension, Mark, mergeAttributes } from '@tiptap/core'
-import { ReactNodeViewRenderer } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
-import { Placeholder } from '@tiptap/extensions'
 import { TableKit } from '@tiptap/extension-table'
 import { Details, DetailsSummary, DetailsContent } from '@tiptap/extension-details'
 import { Highlight } from '@tiptap/extension-highlight'
 import { Image } from '@tiptap/extension-image'
-import { FileHandler } from '@tiptap/extension-file-handler'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
-import { createLowlight, common } from 'lowlight'
+import { createLowlight } from 'lowlight'
+import bash from 'highlight.js/lib/languages/bash'
+import c from 'highlight.js/lib/languages/c'
+import cpp from 'highlight.js/lib/languages/cpp'
+import csharp from 'highlight.js/lib/languages/csharp'
+import css from 'highlight.js/lib/languages/css'
+import diff from 'highlight.js/lib/languages/diff'
+import go from 'highlight.js/lib/languages/go'
+import xml from 'highlight.js/lib/languages/xml'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import kotlin from 'highlight.js/lib/languages/kotlin'
+import markdown from 'highlight.js/lib/languages/markdown'
+import php from 'highlight.js/lib/languages/php'
+import python from 'highlight.js/lib/languages/python'
+import ruby from 'highlight.js/lib/languages/ruby'
+import rust from 'highlight.js/lib/languages/rust'
+import sql from 'highlight.js/lib/languages/sql'
+import swift from 'highlight.js/lib/languages/swift'
+import typescript from 'highlight.js/lib/languages/typescript'
+import yaml from 'highlight.js/lib/languages/yaml'
 import { API_BASE_URL } from '../../services/api'
 import { Callout } from './nodes/Callout'
 import { Embed } from './nodes/Embed'
-import CodeBlockView from './nodes/CodeBlockView'
-import { SlashCommand } from './SlashCommand'
-import { BLOCK_COMMANDS } from './commands'
+import { codeBlockNodeView } from './nodes/CodeBlockView'
 import { colorKey } from './palette'
 import { safeHref, safeImageSrc } from './embeds'
 
-const lowlight = createLowlight(common)
+// Only the languages the code block offers (nodes/CodeBlockView), not the
+// whole "common" bundle.
+const lowlight = createLowlight({
+  bash, c, cpp, csharp, css, diff, go, xml, java, javascript, json, kotlin,
+  markdown, php, python, ruby, rust, sql, swift, typescript, yaml,
+})
 
 export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
@@ -108,7 +129,7 @@ const CodeBlock = CodeBlockLowlight.extend({
     }
   },
   addNodeView() {
-    return ReactNodeViewRenderer(CodeBlockView)
+    return codeBlockNodeView
   },
 })
 
@@ -119,7 +140,7 @@ const BlocksKit = Extension.create({
     return { protect: false }
   },
   addStorage() {
-    return { pickImage: null, openLink: null, uploading: 0, protect: this.options.protect }
+    return { pickImage: null, openLink: null, pages: null, uploading: 0, protect: this.options.protect }
   },
   addKeyboardShortcuts() {
     return {
@@ -153,16 +174,18 @@ function linkAllowed(url, ctx) {
 }
 
 /**
+ * The document's schema and how it renders. The editing aids (placeholder,
+ * the "/" menu, image drop and paste) are in ./editorExtensions, so the
+ * read-only viewer does not load them; the editor passes them in `extra`.
+ *
  * @param {object} o
  * @param {boolean} [o.editable=true]
- * @param {(file: File) => Promise<string>} [o.uploadImage]  returns the stored image URL
- * @param {Array} [o.commands]  "/" menu entries (defaults to BLOCK_COMMANDS)
- * @param {Array} [o.extra]     further extensions from later features
+ * @param {Array} [o.extra]     further extensions (editing aids, later features)
  * @param {boolean} [o.protect] viewer: hide copy affordances
  * @param {boolean} [o.history=true] ProseMirror undo; off when live editing
  *                                   brings Yjs' own undo (only your edits)
  */
-export function createExtensions({ editable = true, uploadImage, commands = BLOCK_COMMANDS, extra = [], protect = false, history = true } = {}) {
+export function createExtensions({ editable = true, extra = [], protect = false, history = true } = {}) {
   const list = [
     StarterKit.configure({
       codeBlock: false,
@@ -193,27 +216,5 @@ export function createExtensions({ editable = true, uploadImage, commands = BLOC
     SafeHighlight.configure({ multicolor: false }),
     BlocksKit.configure({ protect }),
   ]
-  if (editable) {
-    list.push(
-      Placeholder.configure({
-        includeChildren: true,
-        showOnlyCurrent: true,
-        placeholder: ({ node }) => {
-          if (node.type.name === 'heading') return `Heading ${node.attrs.level}`
-          if (node.type.name === 'detailsSummary') return 'Toggle'
-          if (node.type.name === 'codeBlock') return ''
-          return "Type '/' for commands"
-        },
-      }),
-      SlashCommand.configure({ commands }),
-    )
-    if (uploadImage) {
-      list.push(FileHandler.configure({
-        allowedMimeTypes: IMAGE_TYPES,
-        onDrop: (editor, files, pos) => { files.forEach(f => insertUploadedImage(editor, f, uploadImage, pos)) },
-        onPaste: (editor, files, html) => { if (html) return; files.forEach(f => insertUploadedImage(editor, f, uploadImage)) },
-      }))
-    }
-  }
   return [...list, ...extra]
 }

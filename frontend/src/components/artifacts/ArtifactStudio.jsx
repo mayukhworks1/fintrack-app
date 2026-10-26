@@ -13,7 +13,7 @@ import StreamingDraft from '../StreamingDraft'
 import ArtifactFrame, { readArtifactStore, writeArtifactStore } from './ArtifactFrame'
 import ArtifactTemplates from './ArtifactTemplates'
 import { templateTitle } from './templates'
-import { streamArtifact } from './artifactAi'
+import { friendlyAiError, streamArtifact } from './artifactAi'
 
 const EXAMPLES = [
   'A GST invoice line-item calculator with HSN codes and a printable summary',
@@ -69,7 +69,8 @@ function HtmlFileButton({ onLoad, label = 'Upload .html' }) {
 
 export default function ArtifactStudio({ content, onChange, onTitle, pageId, canUseAi = false, isMobile = false }) {
   const confirm = useConfirm()
-  const [view, setView] = useState(isMobile ? 'preview' : 'split')
+  // Opens on the result; the code is one click away.
+  const [view, setView] = useState('preview')
   const [prompt, setPrompt] = useState('')
   const [refine, setRefine] = useState('')
   const [paste, setPaste] = useState('')
@@ -154,7 +155,7 @@ export default function ArtifactStudio({ content, onChange, onTitle, pageId, can
       setNote({ model: res.model, warnings: res.warnings })
       if (existing) setRefine(''); else setPrompt('')
     } catch (e) {
-      if (e?.name !== 'AbortError') setErr(e?.message || 'Generation failed. Try again, or rephrase the request.')
+      if (e?.name !== 'AbortError') setErr(friendlyAiError(e?.message, 'Generation failed. Try again, or rephrase the request.'))
     } finally {
       setBusy(false)
       abortRef.current = null
@@ -169,7 +170,7 @@ export default function ArtifactStudio({ content, onChange, onTitle, pageId, can
       if (res?.content) apply(res.content)
       setPageError(null)
     } catch (e) {
-      setErr(e?.message || 'The fix did not work. Try describing the problem in Refine.')
+      setErr(friendlyAiError(e?.message, 'The fix did not work. Try describing the problem in Refine.'))
     } finally { setBusy(false) }
   }
 
@@ -262,9 +263,11 @@ export default function ArtifactStudio({ content, onChange, onTitle, pageId, can
   }
 
   // ── Workspace: code beside a live preview ───────────────────────────────
-  const showCode = view !== 'preview'
-  const showPreview = view !== 'code'
   const streamingCreate = busy && mode === 'create'
+  // While a new artifact is being written there is nothing to preview yet,
+  // so the draft shows whatever the layout.
+  const showCode = view !== 'preview' || streamingCreate
+  const showPreview = view !== 'code' && !(streamingCreate && view === 'preview')
 
   const codePane = (
     <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: showPreview && !isMobile ? '1px solid var(--border)' : 'none' }}>

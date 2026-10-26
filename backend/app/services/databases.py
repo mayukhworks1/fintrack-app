@@ -1139,7 +1139,6 @@ def _templates() -> dict[str, dict]:
                     {"id": "due", "name": "Due", "type": "date"},
                     {"id": "tags", "name": "Tags", "type": "multi_select", "options": _opts(
                         ("Finance", "green"), ("Ops", "blue"), ("Urgent", "red"))},
-                    {"id": "done", "name": "Done", "type": "checkbox"},
                     {"id": "created", "name": "Created", "type": "created_time"},
                 ],
                 "views": [
@@ -1152,7 +1151,7 @@ def _templates() -> dict[str, dict]:
             "rows": [
                 ("Reconcile October bank statement", {"status": "o2", "due": 1, "tags": ["o1"]}),
                 ("File GSTR-1", {"status": "o1", "due": 4, "tags": ["o1", "o3"]}),
-                ("Renew office lease", {"status": "o3", "due": -2, "tags": ["o2"], "done": True}),
+                ("Renew office lease", {"status": "o3", "due": -2, "tags": ["o2"]}),
             ],
         },
     }

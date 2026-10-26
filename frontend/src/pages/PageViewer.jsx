@@ -4,15 +4,39 @@ import { api, API_BASE_URL } from '../services/api'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
-import SheetView from '../components/sheet/SheetView'
-import { docHeadings, docWordCount, docExcerpt } from '../components/blocks'
+import { docHeadings, docWordCount, docExcerpt } from '../components/blocks/docText'
 import ArtifactFrame from '../components/artifacts/ArtifactFrame'
-import PublicDatabase from '../components/database/PublicDatabase'
 import { PublicBreadcrumbs, PublicSubPages } from '../components/pagetree/PublicPageFamily'
 
 // Block documents render through the editor's own schema in read-only mode,
 // loaded only when a page of that type is opened.
 const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
+// Sheets and databases likewise: a visitor downloads only the viewer for the
+// page in front of them.
+const SheetView = lazy(() => import('../components/sheet/SheetView'))
+const PublicDatabase = lazy(() => import('../components/database/PublicDatabase'))
+const Waiting = () => <div aria-busy="true" style={{ minHeight: 200 }} />
+
+// The page request starts as soon as this module loads (before React has
+// rendered anything), and a request that hangs gives up so the visitor gets
+// a Retry rather than an endless skeleton.
+const LOAD_TIMEOUT_MS = 15000
+let early = null   // { slug, promise }
+function fetchPublic(slug) {
+  if (early && early.slug === slug) { const p = early.promise; early = null; return p }
+  return Promise.race([
+    Promise.resolve().then(() => api.pages.publicGet(slug)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), LOAD_TIMEOUT_MS)),
+  ])
+}
+try {
+  const m = typeof window !== 'undefined' && window.location.pathname.match(/^\/p\/([^/?#]+)/)
+  if (m) {
+    const slug = decodeURIComponent(m[1])
+    early = { slug, promise: fetchPublic(slug) }
+    early.promise.catch(() => {})
+  }
+} catch { /* no window or an odd path: fetch on mount instead */ }
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -328,10 +352,10 @@ function PageContent({ page, slug }) {
   // An artifact is a Web Page that keeps its state on the visitor's device.
   if (content_type === 'artifact') return <ArtifactFrame slug={slug} token={page.render_token} title={page.title} fullBleed />
   // A database's rows arrive with it; its content field is empty.
-  if (content_type === 'database') return <PublicDatabase page={page} />
+  if (content_type === 'database') return <Suspense fallback={<Waiting />}><PublicDatabase page={page} /></Suspense>
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
   if (content_type === 'csv') {
-    return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
+    return <Suspense fallback={<Waiting />}><SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" /></Suspense>
   }
   if (content_type === 'doc') {
     return (
@@ -468,6 +492,19 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+const AUTO_RETRIES = 3
+
+/** 'page' | 'notfound' | 'unavailable' for what the public page request answered. */
+export function loadOutcome(data) {
+  if (!data || typeof data !== 'object') return 'unavailable'
+  const code = Number(data.error?.code ?? data.status_code ?? 0)
+  if (code === 429 || code >= 500) return 'unavailable'
+  if (data.detail || data.error) return 'notfound'
+  if (data.id || data.requires_password) return 'page'
+  // An empty or foreign body (a proxy's error page) is not an answer.
+  return 'unavailable'
+}
+
 export default function PageViewer() {
   const { slug } = useParams()
   const [state, setState] = useState('loading')
@@ -479,34 +516,55 @@ export default function PageViewer() {
   const pwKey = `fp_pw_${slug}`
   const getSavedPw = () => { try { return sessionStorage.getItem(pwKey) } catch { return null } }
 
+  // A failed load is "not found" only when the server says so. No answer, a
+  // 5xx (a cold start, a deploy) or a body that is not ours is "unavailable":
+  // retried a few times on its own, then offered as a Retry.
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!slug) { setState('notfound'); return }
+    let cancelled = false
+    let timer = null
+    let tries = 0
     setState('loading'); setPage(null)
     viewLogged.current = false  // a sub-page link reuses this component
-    api.pages.publicGet(slug)
-      .then(data => {
-        if (data?.expired) { setState('expired'); return }
-        if (!data || data.detail || data.error) { setState('notfound'); return }
-        if (data.requires_password) {
-          // If this tab already unlocked the page this session, re-verify
-          // silently so the visitor isn't asked again on every refresh.
-          const saved = getSavedPw()
-          if (saved) {
-            api.pages.publicVerify(slug, saved)
-              .then(v => {
-                if (v?.expired) { setState('expired'); return }
-                if (v && v.id && !v.error && !v.detail) { setPage(v); setState('loaded') }
-                else { try { sessionStorage.removeItem(pwKey) } catch {} ; setPage(data); setState('requires_password') }
-              })
-              .catch(() => { setPage(data); setState('requires_password') })
-            return
+    const unavailable = () => {
+      if (cancelled) return
+      if (tries < AUTO_RETRIES) { timer = setTimeout(load, 1500 * 2 ** tries); tries += 1; return }
+      setState('unavailable')
+    }
+    function load() {
+      if (cancelled) return
+      fetchPublic(slug)
+        .then(data => {
+          if (cancelled) return
+          if (data?.expired) { setState('expired'); return }
+          const outcome = loadOutcome(data)
+          if (outcome === 'unavailable') { unavailable(); return }
+          if (outcome === 'notfound') { setState('notfound'); return }
+          if (data.requires_password) {
+            // If this tab already unlocked the page this session, re-verify
+            // silently so the visitor isn't asked again on every refresh.
+            const saved = getSavedPw()
+            if (saved) {
+              api.pages.publicVerify(slug, saved)
+                .then(v => {
+                  if (cancelled) return
+                  if (v?.expired) { setState('expired'); return }
+                  if (v && v.id && !v.error && !v.detail) { setPage(v); setState('loaded') }
+                  else { try { sessionStorage.removeItem(pwKey) } catch {} ; setPage(data); setState('requires_password') }
+                })
+                .catch(() => { if (!cancelled) { setPage(data); setState('requires_password') } })
+              return
+            }
+            setPage(data); setState('requires_password'); return
           }
-          setPage(data); setState('requires_password'); return
-        }
-        setPage(data); setState('loaded')
-      })
-      .catch(() => setState('notfound'))
-  }, [slug])
+          setPage(data); setState('loaded')
+        })
+        .catch(unavailable)
+    }
+    load()
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [slug, attempt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // A page open on someone's screen closes at its expiry time too, not only
   // on the next load.
@@ -626,6 +684,17 @@ export default function PageViewer() {
   if (state === 'notfound') return (
     <><style>{PV_THEME}</style>
       <BrandScreen icon={<SearchIcon />} title="Page not found" message="This page doesn't exist, or it has been unpublished. Check the link, or ask the person who shared it." />
+    </>
+  )
+
+  if (state === 'unavailable') return (
+    <><style>{PV_THEME}</style>
+      <BrandScreen icon={<ClockIcon />} title="This page couldn't load" message="The connection dropped or the service is busy. Your link is fine — try again in a moment.">
+        <button type="button" onClick={() => setAttempt(n => n + 1)}
+          style={{ marginTop: 18, padding: '10px 22px', background: 'linear-gradient(90deg,#2563eb,#4f46e5)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+          Try again
+        </button>
+      </BrandScreen>
     </>
   )
 

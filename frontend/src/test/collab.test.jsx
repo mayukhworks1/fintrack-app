@@ -14,7 +14,8 @@ import CollabDoc from '../components/blocks/collab/CollabDoc'
 import { FakeServer, DeadSocket } from './collabfakes'
 import fixture from './collab-fixture.json'
 
-vi.mock('../services/api', () => ({ api: { pages: {} }, API_BASE_URL: 'https://api.example', getAuthToken: () => 'tok-123' }))
+const { restUpdate } = vi.hoisted(() => ({ restUpdate: vi.fn(async () => ({})) }))
+vi.mock('../services/api', () => ({ api: { pages: { update: restUpdate } }, API_BASE_URL: 'https://api.example', getAuthToken: () => 'tok-123' }))
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -163,7 +164,7 @@ describe('presence UI', () => {
     const { rerender } = render(<PresenceBar mode="reconnecting" />)
     expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…')
     rerender(<PresenceBar mode="offline" />)
-    expect(screen.getByRole('status')).toHaveTextContent('Offline — saving normally')
+    expect(screen.getByRole('status')).toHaveTextContent('Saving normally')
     rerender(<PresenceBar mode="off" />)
     expect(screen.queryByRole('status')).toBeNull()
   })
@@ -185,13 +186,13 @@ describe('CollabDoc', () => {
     render(<CollabDoc pageId="p1" value={VALUE} onChange={onChange} isContentSaved={() => true}
       onModeChange={(m) => modes.push(m)} onReady={e => { editor = e }}
       providerOptions={{ WebSocketImpl: DeadSocket }} />)
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Offline — saving normally'))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saving normally'))
     expect(modes).toContain('offline')
     expect(modes).not.toContain('live')
     // The editor still edits and reports changes: autosave carries on.
     await waitFor(() => expect(editor).not.toBeNull())
     act(() => { editor.commands.insertContentAt(1, 'typed ') })
-    expect(onChange).toHaveBeenCalled()
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
     expect(onChange.mock.calls.at(-1)[0]).toContain('typed Q4 plan')
   })
 
@@ -238,5 +239,95 @@ describe('CollabDoc', () => {
   it('without a saved page id there is no live session', () => {
     render(<CollabDoc pageId={null} value={VALUE} onChange={() => {}} />)
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('CollabDoc: the server ending a session', () => {
+  const VALUE = JSON.stringify(fixture.doc)
+  beforeEach(() => restUpdate.mockClear())
+
+  async function goLive(server, extra = {}) {
+    const modes = []
+    let editor = null
+    const utils = render(<CollabDoc pageId="p1" value={VALUE} onChange={vi.fn()} isContentSaved={() => true}
+      onModeChange={(m, info) => modes.push([m, info])} onReady={e => { editor = e }}
+      providerOptions={{ WebSocketImpl: server.WebSocket, maxBackoffMs: 20, ...extra }} />)
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Live'))
+    return { modes, editor: () => editor, ...utils }
+  }
+
+  it('a page moved to the trash (4410) turns read-only with a notice, and nothing is re-saved', async () => {
+    const server = seededServer()
+    const { modes, editor } = await goLive(server)
+    server.dropAll(CLOSE.TRASHED)
+    expect(await screen.findByText(/moved to the trash/)).toBeInTheDocument()
+    await waitFor(() => expect(editor().isEditable).toBe(false))
+    const last = modes.at(-1)
+    expect(last[0]).toBe('offline')
+    expect(last[1].contentSynced).toBe(true)
+    expect(screen.getByRole('status')).toHaveTextContent('Read only')
+  })
+
+  it('a page too large to edit live (error too_large, 4413) falls back to ordinary saving and says so', async () => {
+    const server = seededServer()
+    server.tooLarge = true
+    const modes = []
+    render(<CollabDoc pageId="p1" value={VALUE} onChange={vi.fn()} isContentSaved={() => true}
+      onModeChange={(m, info) => modes.push([m, info])} providerOptions={{ WebSocketImpl: server.WebSocket }} />)
+    expect(await screen.findByText(/too large to edit live/)).toBeInTheDocument()
+    await waitFor(() => expect(modes.some(([m]) => m === 'offline')).toBe(true))
+    expect(modes.find(([m]) => m === 'offline')[1].contentSynced).toBe(false)
+    expect(modes.some(([m]) => m === 'live')).toBe(false)
+    // And no retry loop: the socket is not opened again.
+    const opened = server.received.filter(f => typeof f === 'string' && f.includes('"auth"')).length
+    await new Promise(r => setTimeout(r, 80))
+    expect(server.received.filter(f => typeof f === 'string' && f.includes('"auth"')).length).toBe(opened)
+  })
+
+  it('a rebuilt server copy (4409, new epoch) reloads the document instead of merging into it', async () => {
+    const server = seededServer()
+    const { editor } = await goLive(server)
+    // Elsewhere the page was restored to another version.
+    server.epoch = 'epoch-2'
+    const fresh = new Y.Doc()
+    server.doc.getXmlFragment('default').get(0).get(0).insert(0, 'Restored ')
+    fresh.destroy()
+    server.dropAll(CLOSE.RESET)
+    expect(await screen.findByText(/latest copy is loaded/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Live'))
+    await waitFor(() => expect(editor().getText()).toContain('Restored Q4 plan'))
+    expect(restUpdate).not.toHaveBeenCalled()
+  })
+
+  it('closing while reconnecting hands the unsent edits to an ordinary save', async () => {
+    const server = seededServer()
+    const { modes, editor, unmount } = await goLive(server)
+    server.refuse = 1006
+    server.dropAll()
+    // A dropped socket reads as "Reconnecting", not as the end of the session.
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Reconnecting'))
+    expect(modes.map(([m]) => m)).not.toContain('offline')
+    act(() => { editor().commands.insertContentAt(1, 'Unsent ') })
+    // The tab asks before closing meanwhile.
+    const ev = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    unmount()
+    const off = modes.at(-1)
+    expect(off[0]).toBe('off')
+    expect(off[1].contentSynced).toBe(false)
+    expect(off[1].content).toContain('Unsent Q4 plan')
+    await waitFor(() => expect(restUpdate).toHaveBeenCalledTimes(1))
+    expect(restUpdate.mock.calls[0][0]).toBe('p1')
+    expect(restUpdate.mock.calls[0][1].content).toContain('Unsent Q4 plan')
+  })
+
+  it('closing while live and in sync saves nothing more', async () => {
+    const server = seededServer()
+    const { modes, unmount } = await goLive(server)
+    await new Promise(r => setTimeout(r, 30))
+    unmount()
+    expect(modes.at(-1)).toEqual(['off', { contentSynced: true, content: null }])
+    expect(restUpdate).not.toHaveBeenCalled()
   })
 })

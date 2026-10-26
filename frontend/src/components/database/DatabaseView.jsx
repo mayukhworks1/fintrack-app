@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../services/api'
 import { downloadBlob } from '../../utils/download'
 import { useConfirm } from '../../context/ConfirmContext'
+import { useToast } from '../../context/ToastContext'
 import { DB_CSS } from './dbStyles'
 import { Popover } from './ui'
 import TableView from './TableView'
@@ -9,27 +10,51 @@ import BoardView from './BoardView'
 import GalleryView from './GalleryView'
 import CalendarView from './CalendarView'
 import CsvImportDialog from './CsvImportDialog'
+import RowPeek, { rowIsBlank } from './RowPeek'
 import { FilterMenu, PropertiesMenu, SortMenu, newRule } from './ViewMenus'
 import {
   COLORS, VIEW_TYPES, applyUpdates, cleanFilter, groupRows, makeView, moveCard, newId,
   presetFromFilter, propsById, rescheduled, rawValue, sortRows, uniqueName,
 } from './dbModel'
+import { createCellQueue, removedProps, saveSchemaChange } from './dbSync'
 
 const PAGE = { table: 100, board: 500, gallery: 200, calendar: 500 }
+const VIEW_SAVE_MS = 600
 
 const viewKey = (id) => `fdb_view_${id}`
 const remembered = (id) => { try { return localStorage.getItem(viewKey(id)) } catch { return null } }
 const remember = (id, v) => { try { localStorage.setItem(viewKey(id), v) } catch {} }
 
-/** The schema as the server takes it: filters without half-typed rules. */
-function forServer(schema) {
-  return {
-    properties: schema.properties,
-    views: schema.views.map(v => ({ ...v, filter: cleanFilter(v.filter, schema) })),
-    default_view: schema.default_view,
-    row_type: schema.row_type,
-  }
+// Toasts when the app provides them (tests and embeds may not).
+function useSafeToast() {
+  try { return useToast() } catch { return null }
 }
+
+/** A view as the server takes it: without half-typed filter rules. */
+function viewForServer(view, schema) {
+  return { ...view, filter: cleanFilter(view.filter, schema) }
+}
+
+/** The server's schema, keeping local views that have edits not yet saved
+ *  and half-typed filter rules the server never saw. */
+function mergeServer(server, local, pendingViews) {
+  if (!local) return server
+  const localById = new Map((local.views || []).map(v => [v.id, v]))
+  const views = server.views.map(v => {
+    const mine = localById.get(v.id)
+    if (!mine) return v
+    if (pendingViews.has(v.id)) return mine
+    const same = JSON.stringify(cleanFilter(mine.filter, server) ?? null) === JSON.stringify(v.filter ?? null)
+    return same ? { ...v, filter: mine.filter } : v
+  })
+  // A view added here whose save is still on its way.
+  for (const v of local.views || []) if (pendingViews.has(v.id) && !views.some(x => x.id === v.id)) views.push(v)
+  return { ...server, views }
+}
+
+const queryKeyOf = (view, schema, search) => (view && schema
+  ? JSON.stringify({ id: view.id, t: view.type, f: cleanFilter(view.filter, schema), s: view.sort || [], q: search.trim() })
+  : null)
 
 function ViewTab({ view, active, isDefault, onSelect, onRename, onDuplicate, onDelete, onDefault, canDelete, readOnly }) {
   const [menu, setMenu] = useState(false)
@@ -59,11 +84,18 @@ function ViewTab({ view, active, isDefault, onSelect, onRename, onDuplicate, onD
 }
 
 /**
- * The database editor: view tabs, toolbar and the active view. Rows are
- * pages; opening one hands it to onOpenRow so it opens in the page editor.
+ * The database editor: view tabs, toolbar and the active view. Opening a row
+ * shows it in a side panel over the database; "Open as page" there hands it
+ * to onOpenRow for the full page editor.
+ *
+ * Saving: property changes go through PUT /schema with the revision they were
+ * made against (a conflict re-applies the change to the fresh schema once);
+ * view tweaks go through PUT /views/{id}, so they never rewrite properties;
+ * cell edits are optimistic, debounced and sent one at a time per cell.
  */
 export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
   const confirm = useConfirm()
+  const toast = useSafeToast()
   const [schema, setSchema] = useState(null)
   const [rows, setRows] = useState([])
   const [total, setTotal] = useState(0)
@@ -76,34 +108,75 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [isPublished, setIsPublished] = useState(false)
+  const [peek, setPeek] = useState(null) // { id, created }
   const schemaRef = useRef(null)
-  const saveTimer = useRef(null)
+  const rowsRef = useRef([])
+  rowsRef.current = rows
   const chain = useRef(Promise.resolve())
+  const viewTimers = useRef(new Map())     // viewId -> timer of a view save waiting
+  const pendingViews = useRef(new Set())   // views with local edits not yet saved
   const queryId = useRef(0)
+  const loadedKey = useRef(null)
 
   const say = useCallback((msg) => { setNotice(msg); setTimeout(() => setNotice(n => (n === msg ? '' : n)), 3500) }, [])
+  const fail = useCallback((msg) => {
+    if (toast) toast(msg, 'error')
+    else say(msg)
+  }, [toast, say])
 
-  // ── Load ────────────────────────────────────────────────────────────────
+  const adopt = useCallback((server) => {
+    if (!server) return
+    const next = mergeServer(server, schemaRef.current, pendingViews.current)
+    schemaRef.current = next
+    setSchema(next)
+  }, [])
+
+  /** Every schema or view write, one after another, so each carries the
+   *  revision the previous one produced. */
+  const enqueue = useCallback((task) => {
+    const p = chain.current.then(task)
+    chain.current = p.catch(() => {})
+    return p
+  }, [])
+
+  // ── Load: the database and the first rows in one request ────────────────
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    api.databases.get(pageId).then(db => {
-      if (!alive) return
+    setLoading(true); setError('')
+    loadedKey.current = null
+    const pick = remembered(pageId)
+    const show = (db, query) => {
       const s = db.database
       schemaRef.current = s
       setSchema(s)
       setIsPublished(!!db.is_published)
-      const pick = remembered(pageId)
-      setViewId(s.views.some(v => v.id === pick) ? pick : s.default_view)
-    }).catch(e => { if (alive) { setError(e?.message || 'Could not open this database'); setLoading(false) } })
+      const vid = s.views.some(v => v.id === pick) ? pick : s.default_view
+      setViewId(vid)
+      if (query) {
+        const v = s.views.find(x => x.id === vid) || s.views[0]
+        setRows(query.rows || [])
+        setTotal(query.total ?? (query.rows || []).length)
+        setLoading(false)
+        // Views that show more rows at once (a board) fetch the rest.
+        const got = (query.rows || []).length
+        const needsMore = (PAGE[v.type] || 100) > got && (query.total || 0) > got
+        if (!needsMore) loadedKey.current = queryKeyOf(v, s, '')
+      }
+    }
+    const opening = typeof api.databases.open === 'function'
+      ? api.databases.open(pageId, { viewId: pick || undefined })
+          .catch(e => (pick && e?.status && e.status < 500 ? api.databases.open(pageId) : Promise.reject(e)))
+          .then(db => ({ db, query: db.query || null }))
+      : api.databases.get(pageId).then(db => ({ db, query: null }))
+    opening.then(({ db, query }) => { if (alive) show(db, query) })
+      .catch(e => { if (alive) { setError(e?.message || 'Could not open this database'); setLoading(false) } })
     api.databases.people().then(p => { if (alive && Array.isArray(p)) setPeople(p) }).catch(() => {})
-    return () => { alive = false; clearTimeout(saveTimer.current) }
+    const timers = viewTimers.current
+    return () => { alive = false; for (const t of timers.values()) clearTimeout(t); timers.clear() }
   }, [pageId])
 
   const view = useMemo(() => schema?.views.find(v => v.id === viewId) || schema?.views[0] || null, [schema, viewId])
-  const queryKey = useMemo(() => (view && schema
-    ? JSON.stringify({ id: view.id, t: view.type, f: cleanFilter(view.filter, schema), s: view.sort || [], q: search.trim() })
-    : null), [view, schema, search])
+  const queryKey = useMemo(() => queryKeyOf(view, schema, search), [view, schema, search])
 
   const runQuery = useCallback(async (offset = 0) => {
     const s = schemaRef.current
@@ -127,75 +200,127 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
   }, [pageId, viewId, search])
 
   useEffect(() => {
-    if (!queryKey) return
+    if (!queryKey) return undefined
+    if (loadedKey.current === queryKey) return undefined   // the opening request brought these
+    loadedKey.current = null
     const t = setTimeout(() => runQuery(0), 200)
     return () => clearTimeout(t)
   }, [queryKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Schema ──────────────────────────────────────────────────────────────
-  const persist = useCallback(() => {
-    clearTimeout(saveTimer.current)
-    const snapshot = schemaRef.current
-    const p = chain.current.then(() => api.databases.saveSchema(pageId, forServer(snapshot)))
-    chain.current = p.catch(() => {})
-    return p
-  }, [pageId])
-
-  /** View-only changes: saved after a pause, the local copy stays as typed. */
-  const commitLater = useCallback((next) => {
-    schemaRef.current = next
-    setSchema(next)
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { persist().catch(e => say(e?.message || 'Could not save the view')) }, 600)
-  }, [persist, say])
-
-  /** Property changes: saved now; the server's copy (converted values,
-   *  options made for retyped columns) comes back. */
-  const commitNow = useCallback(async (next, { requery = false } = {}) => {
-    schemaRef.current = next
-    setSchema(next)
+  // ── Schema: properties ──────────────────────────────────────────────────
+  /** A property change, `change(schema) -> schema`, saved now against the
+   *  schema's revision; the server's copy (converted values, options made
+   *  for retyped columns) comes back. Resolves to the saved schema or null. */
+  const commitSchema = useCallback(async (change, { requery = false } = {}) => {
+    const local = change(schemaRef.current)
+    schemaRef.current = local
+    setSchema(local)
     try {
-      const res = await persist()
-      if (res?.database && schemaRef.current === next) {
-        // Keep half-typed filters the server dropped.
-        const merged = { ...res.database, views: res.database.views.map(v => ({ ...v, filter: next.views.find(x => x.id === v.id)?.filter ?? v.filter })) }
-        schemaRef.current = merged
-        setSchema(merged)
-      }
+      const { saved } = await enqueue(() => saveSchemaChange({
+        databases: api.databases, dbId: pageId,
+        getBase: () => schemaRef.current,
+        change: (base) => (base === local ? local : change(base)),
+        deleted: (base, next) => removedProps(base, next),
+        onFresh: (fresh) => { pendingViews.current.clear(); schemaRef.current = fresh; setSchema(fresh) },
+      }))
+      if (saved) adopt(saved)
       if (requery) runQuery(0)
-      return res?.database
+      return saved
     } catch (e) {
-      say(e?.message || 'Could not save the change')
-      api.databases.get(pageId).then(db => { schemaRef.current = db.database; setSchema(db.database) }).catch(() => {})
+      fail(e?.message || 'Could not save the change')
+      if (!e?.conflict) api.databases.get(pageId).then(db => { schemaRef.current = db.database; setSchema(db.database) }).catch(() => {})
       return null
     }
-  }, [persist, runQuery, say, pageId])
+  }, [enqueue, pageId, adopt, runQuery, fail])
 
-  const updateView = (patch) => {
+  // ── Schema: views (one view per request) ────────────────────────────────
+  const saveViewNow = useCallback((id, { makeDefault = false } = {}) => {
+    clearTimeout(viewTimers.current.get(id))
+    viewTimers.current.delete(id)
+    return enqueue(async () => {
+      const s = schemaRef.current
+      const v = s?.views.find(x => x.id === id)
+      if (!v) { pendingViews.current.delete(id); return null }
+      const sent = JSON.stringify(v)
+      try {
+        const res = await api.databases.saveView(pageId, id, { view: viewForServer(v, s), ...(makeDefault ? { make_default: true } : {}) })
+        // Still pending only if it changed again while this was on its way.
+        const now = schemaRef.current?.views.find(x => x.id === id)
+        if (!now || JSON.stringify(now) === sent) pendingViews.current.delete(id)
+        adopt(res?.database)
+        return res
+      } catch (e) {
+        pendingViews.current.delete(id)
+        fail(e?.message || 'Could not save the view')
+        return null
+      }
+    })
+  }, [enqueue, pageId, adopt, fail])
+
+  const editView = useCallback((id, patch, { makeDefault = false } = {}) => {
     const s = schemaRef.current
-    commitLater({ ...s, views: s.views.map(v => (v.id === view.id ? { ...v, ...patch } : v)) })
+    const next = {
+      ...s,
+      views: s.views.map(v => (v.id === id ? { ...v, ...patch } : v)),
+      ...(makeDefault ? { default_view: id } : {}),
+    }
+    schemaRef.current = next
+    setSchema(next)
+    pendingViews.current.add(id)
+    clearTimeout(viewTimers.current.get(id))
+    if (makeDefault) return saveViewNow(id, { makeDefault })
+    viewTimers.current.set(id, setTimeout(() => saveViewNow(id), VIEW_SAVE_MS))
+    return null
+  }, [saveViewNow])
+
+  const updateView = (patch) => editView(view.id, patch)
+
+  function selectView(id) { setViewId(id); remember(pageId, id); setMenu(null); setLoading(true) }
+
+  const addViewOf = async (v) => {
+    const s = schemaRef.current
+    schemaRef.current = { ...s, views: [...s.views, v] }
+    setSchema(schemaRef.current)
+    pendingViews.current.add(v.id)
+    selectView(v.id)
+    await saveViewNow(v.id)
   }
-  const updateProp = (prop) => {
+  const addView = (type) => addViewOf(makeView(type, schemaRef.current))
+  const removeView = async (id) => {
     const s = schemaRef.current
-    const old = s.properties.find(p => p.id === prop.id)
+    const views = s.views.filter(x => x.id !== id)
+    if (!views.length) return
+    clearTimeout(viewTimers.current.get(id))
+    pendingViews.current.delete(id)
+    schemaRef.current = { ...s, views, default_view: s.default_view === id ? views[0].id : s.default_view }
+    setSchema(schemaRef.current)
+    if (view?.id === id) selectView(views[0].id)
+    try {
+      const res = await enqueue(() => api.databases.deleteView(pageId, id))
+      adopt(res?.database)
+    } catch (e) {
+      fail(e?.message || 'Could not delete the view')
+      api.databases.get(pageId).then(db => adopt(db.database)).catch(() => {})
+    }
+  }
+
+  const updateProp = (prop) => {
+    const old = schemaRef.current.properties.find(p => p.id === prop.id)
     const retyped = old && old.type !== prop.type
     const lostOptions = old?.options && (old.options || []).some(o => !(prop.options || []).some(x => x.id === o.id))
-    commitNow({ ...s, properties: s.properties.map(p => (p.id === prop.id ? prop : p)) }, { requery: retyped || lostOptions })
+    commitSchema(base => ({ ...base, properties: base.properties.map(p => (p.id === prop.id ? prop : p)) }), { requery: retyped || lostOptions })
   }
   const addProp = (prop) => {
-    const s = schemaRef.current
-    const p = { ...prop, name: uniqueName(s, prop.name) }
-    commitNow({ ...s, properties: [...s.properties, p] })
+    commitSchema(base => ({ ...base, properties: [...base.properties, { ...prop, name: uniqueName(base, prop.name) }] }))
   }
   const deleteProp = async (id) => {
-    const s = schemaRef.current
-    const prop = s.properties.find(p => p.id === id)
+    const prop = schemaRef.current.properties.find(p => p.id === id)
     const ok = await confirm({ title: 'Delete property', message: `Delete "${prop?.name}" and its values in every row?`, confirmLabel: 'Delete', tone: 'danger' })
     if (!ok) return
-    commitNow({
-      ...s,
-      properties: s.properties.filter(p => p.id !== id),
-      views: s.views.map(v => ({
+    commitSchema(base => ({
+      ...base,
+      properties: base.properties.filter(p => p.id !== id),
+      views: base.views.map(v => ({
         ...v,
         hidden: (v.hidden || []).filter(x => x !== id), order: (v.order || []).filter(x => x !== id),
         sort: (v.sort || []).filter(x => x.prop !== id),
@@ -203,45 +328,54 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
         group_by: v.group_by === id ? null : v.group_by, date_prop: v.date_prop === id ? null : v.date_prop,
         filter: v.filter ? { ...v.filter, rules: v.filter.rules.filter(r => r.prop !== id) } : v.filter,
       })),
-    }, { requery: true })
+    }), { requery: true })
   }
   const createOption = async (prop, name) => {
-    const s = schemaRef.current
-    const cur = s.properties.find(p => p.id === prop.id)
-    const opt = { id: newId('o'), name, color: COLORS[(cur.options || []).length % COLORS.length] }
-    const saved = await commitNow({ ...s, properties: s.properties.map(p => (p.id === prop.id ? { ...p, options: [...(p.options || []), opt] } : p)) })
+    const count = (schemaRef.current.properties.find(p => p.id === prop.id)?.options || []).length
+    const opt = { id: newId('o'), name, color: COLORS[count % COLORS.length] }
+    const saved = await commitSchema(base => ({
+      ...base,
+      properties: base.properties.map(p => (p.id === prop.id && !(p.options || []).some(o => o.id === opt.id)
+        ? { ...p, options: [...(p.options || []), opt] } : p)),
+    }))
     return saved ? opt.id : null
   }
   const addGroupProp = () => {
-    const s = schemaRef.current
     const id = newId('p')
-    const prop = { id, name: uniqueName(s, 'Status'), type: 'select', options: [
-      { id: newId('o'), name: 'To do', color: 'gray' }, { id: newId('o'), name: 'Doing', color: 'blue' }, { id: newId('o'), name: 'Done', color: 'green' },
-    ] }
-    commitNow({ ...s, properties: [...s.properties, prop], views: s.views.map(v => (v.id === view.id ? { ...v, group_by: id } : v)) })
-  }
-
-  // ── Views ───────────────────────────────────────────────────────────────
-  const selectView = (id) => { setViewId(id); remember(pageId, id); setMenu(null); setLoading(true) }
-  const addView = (type) => {
-    const s = schemaRef.current
-    const v = makeView(type, s)
-    commitNow({ ...s, views: [...s.views, v] }).then(() => selectView(v.id))
+    const vid = view.id
+    commitSchema(base => ({
+      ...base,
+      properties: [...base.properties, { id, name: uniqueName(base, 'Status'), type: 'select', options: [
+        { id: `${id}a`, name: 'To do', color: 'gray' }, { id: `${id}b`, name: 'Doing', color: 'blue' }, { id: `${id}c`, name: 'Done', color: 'green' },
+      ] }],
+      views: base.views.map(v => (v.id === vid ? { ...v, group_by: id } : v)),
+    }))
   }
 
   // ── Rows ────────────────────────────────────────────────────────────────
-  const replaceRow = (row) => setRows(rs => rs.map(r => (r.id === row.id ? row : r)))
+  const cells = useMemo(() => createCellQueue({
+    save: (rowId, propId, value) => api.databases.updateRow(pageId, rowId, propId === 'title' ? { title: value ?? '' } : { props: { [propId]: value } }),
+    apply: (rowId, propId, value) => setRows(rs => applyUpdates(rs, [propId === 'title' ? { id: rowId, title: value ?? '' } : { id: rowId, props: { [propId]: value } }])),
+    onSaved: (row, pending) => {
+      if (!row?.id) return
+      // The server's row, with this tab's edits to other cells still on top.
+      const keep = Object.entries(pending)
+      setRows(rs => rs.map(r => {
+        if (r.id !== row.id) return r
+        let next = row
+        for (const [k, v] of keep) next = applyUpdates([next], [k === 'title' ? { id: row.id, title: v ?? '' } : { id: row.id, props: { [k]: v } }])[0]
+        return next
+      }))
+    },
+    onError: (e) => fail(e?.message ? `Not saved: ${e.message}` : 'That change was not saved'),
+  }), [pageId, fail])
+  useEffect(() => () => { cells.flushAll() }, [cells])
 
-  const changeCell = async (rowId, propId, value) => {
-    const patch = propId === 'title' ? { title: value ?? '' } : { props: { [propId]: value } }
-    setRows(rs => applyUpdates(rs, [{ id: rowId, ...patch }]))
-    try {
-      replaceRow(await api.databases.updateRow(pageId, rowId, patch))
-    } catch (e) {
-      say(e?.message || 'Could not save that value')
-      runQuery(0)
-    }
-  }
+  const changeCell = useCallback((rowId, propId, value) => {
+    const row = rowsRef.current.find(r => r.id === rowId)
+    const current = row ? (propId === 'title' ? row.title || '' : (row.props?.[propId] ?? null)) : null
+    cells.change(rowId, propId, value, current)
+  }, [cells])
 
   const addRow = async (preset = {}) => {
     const s = schemaRef.current
@@ -251,21 +385,38 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
       const row = await api.databases.createRow(pageId, { title: '', props })
       setRows(rs => [...rs, row])
       setTotal(t => t + 1)
-      if (view.type !== 'table') onOpenRow?.(row)
+      // Board, gallery and calendar open the new row beside the database.
+      if (view.type !== 'table') setPeek({ id: row.id, created: true, start: row.props || {} })
       return row
-    } catch (e) { say(e?.message || 'Could not add a row'); return null }
+    } catch (e) { fail(e?.message || 'Could not add a row'); return null }
   }
 
-  const deleteRows = async (ids) => {
-    const ok = await confirm({ title: 'Delete rows', message: `Move ${ids.length} ${ids.length === 1 ? 'row' : 'rows'} to the trash? They can be restored from there.`, confirmLabel: 'Move to trash', tone: 'danger' })
-    if (!ok) return
+  const removeRows = useCallback(async (ids, { quiet = false } = {}) => {
     try {
       await api.databases.deleteRows(pageId, ids)
       setRows(rs => rs.filter(r => !ids.includes(r.id)))
       setTotal(t => Math.max(0, t - ids.length))
-      say(`${ids.length} ${ids.length === 1 ? 'row' : 'rows'} moved to the trash`)
-    } catch (e) { say(e?.message || 'Could not delete') }
+      if (!quiet) say(`${ids.length} ${ids.length === 1 ? 'row' : 'rows'} moved to the trash`)
+      return true
+    } catch (e) { if (!quiet) fail(e?.message || 'Could not delete'); return false }
+  }, [pageId, say, fail])
+
+  const deleteRows = async (ids) => {
+    const ok = await confirm({ title: 'Delete rows', message: `Move ${ids.length} ${ids.length === 1 ? 'row' : 'rows'} to the trash? They can be restored from there.`, confirmLabel: 'Move to trash', tone: 'danger' })
+    if (!ok) return
+    removeRows(ids)
   }
+
+  const openRow = useCallback((row) => { if (row?.id) setPeek({ id: row.id, created: false }) }, [])
+  const closePeek = useCallback(({ bodyEmpty } = {}) => {
+    const p = peek
+    setPeek(null)
+    if (!p?.created || !bodyEmpty) return
+    // A new row closed untitled and empty is not kept.
+    const row = rowsRef.current.find(r => r.id === p.id)
+    const pending = cells.pendingFor(p.id)
+    if (row && rowIsBlank(row, schemaRef.current, p.start) && !Object.keys(pending).length) removeRows([p.id], { quiet: true })
+  }, [peek, removeRows, cells])
 
   const props = useMemo(() => propsById(schema), [schema])
   const shownRows = useMemo(() => (view ? sortRows(rows, view.sort, props) : rows), [rows, view, props])
@@ -275,12 +426,16 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
     const columns = groupRows(shownRows, groupProp)
     const updates = moveCard(columns, cardId, key, index, groupProp.id)
     if (!updates.length) return
+    const before = rows
     setRows(rs => applyUpdates(rs, updates))
     try {
       const res = await api.databases.bulkUpdate(pageId, updates)
       const byId = new Map((res.rows || []).map(r => [r.id, r]))
       setRows(rs => rs.map(r => byId.get(r.id) || r))
-    } catch (e) { say(e?.message || 'Could not move the card'); runQuery(0) }
+    } catch (e) {
+      setRows(before)
+      fail(e?.message || 'Could not move the card')
+    }
   }
 
   const reschedule = (rowId, day) => {
@@ -296,7 +451,7 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
     try {
       const { blob, filename } = await api.databases.exportCsv(pageId)
       downloadBlob(blob, filename || 'database.csv')
-    } catch (e) { say(e?.message || 'Export failed') }
+    } catch (e) { fail(e?.message || 'Export failed') }
   }
   const publishRows = async (published) => {
     setMenu(null)
@@ -304,7 +459,7 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
       const res = await api.databases.publishRows(pageId, published)
       setRows(rs => rs.map(r => ({ ...r, is_published: published })))
       say(`${res.updated} ${res.updated === 1 ? 'row' : 'rows'} ${published ? 'published' : 'unpublished'}`)
-    } catch (e) { say(e?.message || 'Could not change the rows') }
+    } catch (e) { fail(e?.message || 'Could not change the rows') }
   }
 
   if (error && !schema) return <div className="fdb"><style>{DB_CSS}</style><div className="fdb-empty" role="alert">{error}</div></div>
@@ -319,8 +474,9 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
   const filterCount = cleanFilter(view.filter, schema)?.rules.length || 0
   const common = {
     schema, view, rows: shownRows, total, people,
-    onUpdateView: updateView, onOpenRow, onAddRow: addRow,
+    onUpdateView: updateView, onOpenRow: openRow, onAddRow: addRow,
   }
+  const peekRow = peek ? rows.find(r => r.id === peek.id) : null
 
   return (
     <div className="fdb" data-testid="database-view">
@@ -331,19 +487,10 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
             <ViewTab key={v.id} view={v} active={v.id === view.id} isDefault={v.id === schema.default_view}
               canDelete={schema.views.length > 1}
               onSelect={() => selectView(v.id)}
-              onRename={name => commitLater({ ...schemaRef.current, views: schemaRef.current.views.map(x => (x.id === v.id ? { ...x, name } : x)) })}
-              onDefault={() => commitLater({ ...schemaRef.current, default_view: v.id })}
-              onDuplicate={() => {
-                const s = schemaRef.current
-                const copy = { ...JSON.parse(JSON.stringify(v)), id: newId('v'), name: `${v.name} copy` }
-                commitNow({ ...s, views: [...s.views, copy] }).then(() => selectView(copy.id))
-              }}
-              onDelete={() => {
-                const s = schemaRef.current
-                const views = s.views.filter(x => x.id !== v.id)
-                commitNow({ ...s, views, default_view: s.default_view === v.id ? views[0].id : s.default_view })
-                selectView(views[0].id)
-              }} />
+              onRename={name => editView(v.id, { name })}
+              onDefault={() => editView(v.id, {}, { makeDefault: true })}
+              onDuplicate={() => addViewOf({ ...JSON.parse(JSON.stringify(v)), id: newId('v'), name: `${v.name} copy` })}
+              onDelete={() => removeView(v.id)} />
           ))}
           <span style={{ position: 'relative', display: 'inline-flex' }}>
             <button type="button" className="fdb-tab" aria-label="Add a view" aria-expanded={menu === 'add-view'} onClick={() => setMenu(m => (m === 'add-view' ? null : 'add-view'))}>+</button>
@@ -436,10 +583,16 @@ export default function DatabaseView({ pageId, onOpenRow, isMobile }) {
         {view.type === 'calendar' && <CalendarView {...common} onReschedule={reschedule} />}
       </div>
 
+      {peek && peekRow && (
+        <RowPeek key={peek.id} row={peekRow} schema={schema} people={people} isMobile={isMobile}
+          onChange={changeCell} onCreateOption={createOption} onClose={closePeek}
+          onOpenPage={onOpenRow ? (row) => { cells.flushAll(); onOpenRow(row) } : undefined} />
+      )}
+
       <CsvImportDialog open={importOpen} onClose={() => setImportOpen(false)} dbId={pageId} schema={schema}
         onImported={res => {
-          if (res?.database) { schemaRef.current = res.database; setSchema(res.database) }
-          say(`${res?.created ?? 0} rows imported`)
+          if (res?.database) adopt(res.database)
+          say(res?.duplicate ? `Already imported: ${res?.created ?? 0} rows` : `${res?.created ?? 0} rows imported`)
           runQuery(0)
         }} />
     </div>

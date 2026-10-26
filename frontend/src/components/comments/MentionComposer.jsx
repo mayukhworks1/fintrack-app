@@ -6,6 +6,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { draftToTokens, insertMention, mentionQueryAt, tokensToDraft } from './commentsModel'
 import { Avatar } from './CommentBits'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+
+// Who the server lets a comment mention (routers/comments.py).
+export const MENTION_HINT = 'You can @mention the page owner and workspace admins.'
 
 export default function MentionComposer({
   onSubmit, searchMentions, initialBody = '', placeholder = 'Add a comment… type @ to mention',
@@ -16,6 +20,8 @@ export default function MentionComposer({
   const [mentions, setMentions] = useState(seed.current.mentions)
   const [at, setAt] = useState(null)
   const [results, setResults] = useState([])
+  const [searched, setSearched] = useState(false)
+  const touch = useMediaQuery('(hover: none), (pointer: coarse)')
   const [active, setActive] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -27,12 +33,12 @@ export default function MentionComposer({
 
   // Look people up while an "@query" is being typed.
   useEffect(() => {
-    if (!at || !searchMentions) { setResults([]); return }
+    if (!at || !searchMentions) { setResults([]); setSearched(false); return }
     const mine = ++seq.current
     const timer = setTimeout(() => {
       Promise.resolve(searchMentions(at.query))
-        .then(list => { if (mine === seq.current) { setResults(Array.isArray(list) ? list : []); setActive(0) } })
-        .catch(() => { if (mine === seq.current) setResults([]) })
+        .then(list => { if (mine === seq.current) { setResults(Array.isArray(list) ? list : []); setActive(0); setSearched(true) } })
+        .catch(() => { if (mine === seq.current) { setResults([]); setSearched(true) } })
     }, at.query ? 120 : 0)
     return () => clearTimeout(timer)
   }, [at?.query, at?.start, searchMentions]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -137,10 +143,15 @@ export default function MentionComposer({
           ))}
         </ul>
       )}
+      {!!at && searched && !results.length && (
+        <div role="status" style={{ marginTop: 4, fontSize: 12, color: 'var(--text-2)' }}>
+          No one by that name. {MENTION_HINT}
+        </div>
+      )}
       {error && <div role="alert" style={{ marginTop: 4, fontSize: 12, color: 'var(--fin-negative, #d70015)' }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginTop: 6 }}>
-        <span style={{ marginRight: 'auto', fontSize: 11, color: 'var(--text-3)' }}>
-          {compact ? '' : 'Ctrl + Enter to send'}
+        <span style={{ marginRight: 'auto', fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4 }}>
+          {compact ? '' : <>{MENTION_HINT}{touch ? '' : ' Ctrl + Enter to send.'}</>}
         </span>
         {onCancel && (
           <button type="button" onClick={onCancel} className="cmt-btn-ghost" disabled={busy}>Cancel</button>

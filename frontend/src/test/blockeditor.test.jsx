@@ -75,8 +75,9 @@ describe('slash menu', () => {
     key(editor, 'Enter')
 
     await waitFor(() => expect(document.querySelector('[data-slash-menu]')).toBeNull())
+    // onChange follows a pause in typing.
+    await waitFor(() => expect(last().content[0]).toMatchObject({ type: 'heading', attrs: { level: 2 } }))
     const doc = last()
-    expect(doc.content[0]).toMatchObject({ type: 'heading', attrs: { level: 2 } })
     // The "/head" query is removed, not left in the heading.
     expect(doc.content[0].content).toBeUndefined()
   })

@@ -9,8 +9,12 @@
 //   synced   true once the server's state has been applied
 //   stale    the server rebuilt its document (new epoch); this provider stops
 //            and the owner decides how to re-sync (see CollabDoc)
-//   fatal    (code) access refused / page gone / too large: no more retries
+//   fatal    (code) access refused / page gone / trashed / too large: no more retries
 //   saved    (isoTime) the server wrote the document to the page
+//   error    ({ code, message, mode? }) a server notice, e.g. code "too_large":
+//            with mode "rest" the page is not edited live at all (a 4413
+//            close follows); without it the room could not save the
+//            document (still live; edits are kept until it is smaller)
 import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
 import { Observable } from 'lib0/observable'
@@ -23,9 +27,9 @@ export const MSG_QUERY_AWARENESS = 3
 
 export const CLOSE = {
   UNAUTHORIZED: 4401, FORBIDDEN: 4403, NOT_FOUND: 4404, TIMEOUT: 4408,
-  RESET: 4409, TOO_LARGE: 4413, FULL: 4429, MESSAGE_TOO_BIG: 1009,
+  RESET: 4409, TRASHED: 4410, TOO_LARGE: 4413, FULL: 4429, MESSAGE_TOO_BIG: 1009,
 }
-const FATAL = new Set([CLOSE.UNAUTHORIZED, CLOSE.FORBIDDEN, CLOSE.NOT_FOUND, CLOSE.TOO_LARGE, CLOSE.MESSAGE_TOO_BIG])
+const FATAL = new Set([CLOSE.UNAUTHORIZED, CLOSE.FORBIDDEN, CLOSE.NOT_FOUND, CLOSE.TRASHED, CLOSE.TOO_LARGE, CLOSE.MESSAGE_TOO_BIG])
 
 const OPEN = 1
 
@@ -248,6 +252,9 @@ export class CollabProvider extends Observable {
 
   _onClose(code) {
     if (!this.ws) return
+    // Known before anyone hears "disconnected", so no listener mistakes a
+    // final close for a dropped connection worth retrying.
+    if (FATAL.has(code)) this.fatal = code
     this._teardown()
     const wasSynced = this.synced
     this.synced = false
