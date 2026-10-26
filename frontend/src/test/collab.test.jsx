@@ -110,10 +110,14 @@ describe('CollabProvider', () => {
     const server = seededServer()
     const { doc, p } = provider(server, { maxBackoffMs: 20 })
     await synced(p)
+    // Keep the server refusing reconnects while the edit is made, so the
+    // provider is reliably offline however fast its backoff retries.
+    server.refuse = 1006
     server.dropAll()
     await waitFor(() => expect(p.status).not.toBe('connected'))
     doc.getXmlFragment('default').get(0).get(0).insert(0, 'offline ')
     expect(p.unsynced).toBe(true)
+    server.refuse = null
     await waitFor(() => expect(p.synced).toBe(true))
     await waitFor(() => expect(text(server.doc)).toBe(text(doc)))
     expect(p.unsynced).toBe(false)
