@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useConfirm } from '../context/ConfirmContext'
 import { useAuth } from '../context/AuthContext'
@@ -18,13 +18,19 @@ import {
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
-  MoreHorizontal, EyeOff, Check, ArrowUpDown, Puzzle,
+  MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks, Puzzle,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
 import SheetView from '../components/sheet/SheetView'
 import SheetEditor from '../components/sheet/SheetEditor'
 import { tint } from '../utils/color'
+import { parseDoc, serializeDoc, docWordCount, docTemplates, markdownToDoc, plainTextToDoc, docToMarkdown } from '../components/blocks'
+
+// The block editor and its read-only renderer carry the whole editor runtime,
+// so they load only when a block document is actually opened.
+const BlockEditor = lazy(() => import('../components/blocks/BlockEditor'))
+const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
 import PageTreeShell from '../components/pagetree/PageTreeShell'
 import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
 import CommentsToggle from '../components/comments/CommentsToggle'
@@ -189,6 +195,13 @@ function ContentPreview({ contentType, content, meta }) {
   if (contentType === 'html' || contentType === 'artifact') return <HTMLPreview content={content} />
   if (contentType === 'csv') return <CSVPreview text={content} meta={meta} />
   if (contentType === 'text') return <pre style={{ margin:0, padding:12, fontSize:13, whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{content}</pre>
+  if (contentType === 'doc') return (
+    <div style={{ maxWidth:720, margin:'0 auto', padding:'24px 20px' }}>
+      <Suspense fallback={<div style={{ padding:20, fontSize:12, color:'var(--text-2)', textAlign:'center' }}>Loading…</div>}>
+        <BlockViewer content={content} />
+      </Suspense>
+    </div>
+  )
   return (
     <div style={{ padding:'12px 16px', lineHeight:1.75, fontSize:14, color:'var(--text-1)', fontFamily:'-apple-system,sans-serif' }}
       dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
@@ -211,7 +224,8 @@ function TypeIcon({ type, size = 15 }) {
   if (type === 'artifact')    return <Puzzle {...props} />
   if (type === 'csv' || type === 'spreadsheet') return <Table2 {...props} />
   if (type === 'text')        return <Type {...props} />
-  return <FileText {...props} />  // markdown default
+  if (type === 'markdown')    return <Hash {...props} />
+  return <FileText {...props} />  // block document
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +818,7 @@ const SHEET_TEMPLATES = [
 const BLANK_SHEET = SHEET_TEMPLATES[0]
 
 const TEMPLATES = {
+  doc: docTemplates(),
   markdown: [
     {
       name: 'Blank', icon: '📄',
@@ -1104,6 +1119,11 @@ function docStats(content, contentType) {
     const cols = rows.reduce((n, r) => Math.max(n, r.length), 0)
     return { words:0, chars, readTime:'—', lines:rows.length, label:`${rows.length.toLocaleString()} rows × ${cols} columns` }
   }
+  if (contentType === 'doc') {
+    const words = docWordCount(content)
+    const mins = Math.max(1, Math.round(words / 200))
+    return { words, chars, lines:0, readTime:`${mins} min read`, label:`${words.toLocaleString()} words` }
+  }
   const words = content.trim().split(/\s+/).filter(Boolean).length
   const lines = content.split('\n').length
   const mins = Math.max(1, Math.round(words / 200))
@@ -1285,7 +1305,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
             <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{new Date(previewVer.saved_at).toLocaleString()}</span>
             <button onClick={()=>setPreviewVer(null)} style={{ fontSize:18, border:'none', background:'none', cursor:'pointer', color:'var(--text-2)', lineHeight:1 }}>×</button>
           </div>
-          <div style={{ flex:1, overflow:'auto', background:previewVer.content_type === 'csv' ? 'var(--bg-base)' : '#fff', padding:'20px 24px' }}>
+          <div style={{ flex:1, overflow:'auto', background:previewVer.content_type === 'csv' ? 'var(--bg-base)' : previewVer.content_type === 'doc' ? 'var(--card-bg)' : '#fff', padding:'20px 24px' }}>
             <ContentPreview contentType={previewVer.content_type} content={previewVer.content} meta={previewVer.metadata?.sheet} />
           </div>
         </div>
@@ -1298,7 +1318,8 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
 // Page Drawer — Advanced editor
 // ---------------------------------------------------------------------------
 const CONTENT_TYPES = [
-  { value:'markdown',    label:'📝 Document',    hint:'Rich text / markdown' },
+  { value:'doc',         label:'📝 Document',    hint:'Block editor — type / for commands' },
+  { value:'markdown',    label:'#️⃣ Markdown (classic)', hint:'Rich text written as Markdown' },
   { value:'html',        label:'🌐 Web Page',     hint:'HTML / CSS / JS' },
   { value:'artifact',    label:'🧩 Artifact',     hint:'Interactive mini-app: calculator, form, dashboard' },
   { value:'csv',         label:'📊 Spreadsheet',  hint:'Editable grid / table' },
@@ -1846,7 +1867,70 @@ function snapOf(f) {
     description:f.description||'', folder:(f.folder||'').trim(), protect_source:!!f.protect_source,
     expires_at:f.expires_at||'',
     sheet:f.content_type === 'csv' && f.sheet ? f.sheet : null,
+    full_width:f.content_type === 'doc' && !!f.full_width,
   })
+}
+
+// Content carried across a type switch. Markdown and plain text become a
+// block document; a block document going back to a text type is written out
+// as Markdown, so nothing typed is lost either way.
+function convertContent(content, from, to) {
+  if (!content || !content.trim() || from === to) return content
+  if (to === 'doc') {
+    if (parseDoc(content)) return content
+    return serializeDoc(from === 'markdown' ? markdownToDoc(content) : plainTextToDoc(content))
+  }
+  if (from === 'doc') {
+    const d = parseDoc(content)
+    return d ? docToMarkdown(d) : content
+  }
+  return content
+}
+
+// Uploads go through the existing page-asset endpoint; the URL is made
+// absolute because published pages are served from another origin.
+async function uploadDocImage(file) {
+  const res = await api.pages.uploadAsset(file)
+  if (!res || res.error || res.detail) throw new Error(res?.detail || res?.error?.message || res?.error || 'Upload failed')
+  if (!res.is_image) throw new Error('That file is not an image')
+  return absUrl(res.url)
+}
+
+// The block document canvas: a Notion-style title over the editor, centred at
+// reading width unless the page is set to full width.
+function DocCanvas({ form, set, setContent, isMobile, stats }) {
+  const editorRef = useRef(null)
+  const titleRef = useRef(null)
+  useEffect(() => {
+    const t = titleRef.current
+    if (!t) return
+    t.style.height = 'auto'
+    t.style.height = `${t.scrollHeight}px`
+  }, [form.title, form.full_width, isMobile])
+  return (
+    <div className="ft-doc-scroll" style={{ flex:1, overflowY:'auto', overflowX:'hidden', background:'var(--card-bg)' }}>
+      <div style={{ maxWidth: form.full_width ? 'none' : (isMobile ? 'none' : 720 + 192), margin:'0 auto', padding: isMobile ? '12px 16px 0' : '28px 96px 0', boxSizing:'border-box' }}>
+        <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10, fontSize:12, color:'var(--text-2)', minHeight:24, marginBottom:isMobile?4:12 }}>
+          {stats?.label && <span aria-live="polite">{stats.label}</span>}
+          {!isMobile && (
+            <button type="button" onClick={()=>set('full_width', !form.full_width)} aria-pressed={!!form.full_width}
+              style={{ ...btnGhost, fontSize:12, padding:'3px 8px', display:'inline-flex', alignItems:'center', gap:5 }}
+              title={form.full_width ? 'Use reading width' : 'Use the full width of the screen'}>
+              {form.full_width ? <Minimize2 size={13} /> : <Maximize2 size={13} />} {form.full_width ? 'Reading width' : 'Full width'}
+            </button>
+          )}
+        </div>
+        <textarea ref={titleRef} rows={1} aria-label="Page title" placeholder="Page title…" value={form.title}
+          onChange={e=>set('title', e.target.value.replace(/\n/g, ' '))}
+          onKeyDown={e=>{ if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); const ed = editorRef.current; if (ed && !ed.isDestroyed) { ed.view.focus(); ed.commands.focus('start') } } }}
+          style={{ display:'block', width:'100%', resize:'none', overflow:'hidden', border:'none', outline:'none', background:'transparent', color:'var(--text-1)', fontFamily:'var(--font-sans)', fontSize:isMobile?30:40, fontWeight:700, lineHeight:1.2, letterSpacing:'-0.02em', padding:'0 2px', margin:'0 0 14px' }} />
+        <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:15, padding:'4px 2px' }}>Loading editor…</div>}>
+          <BlockEditor value={form.content} onChange={setContent} uploadImage={uploadDocImage}
+            onReady={ed => { editorRef.current = ed }} />
+        </Suspense>
+      </div>
+    </div>
+  )
 }
 
 function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenPage, onCreateChild }) {
@@ -1871,6 +1955,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
     protect_source:       !!page?.metadata?.protect_source,
     expires_at:           page?.expires_at || '',
     sheet:                page?.metadata?.sheet,
+    full_width:           !!page?.metadata?.full_width,
   })
   // Metadata keys this editor does not manage (set by other features) ride
   // along unchanged on every save instead of being dropped.
@@ -1883,6 +1968,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
     // Sheet formatting belongs to spreadsheets; other types keep whatever
     // metadata.sheet they already carry.
     ...(f.content_type === 'csv' ? { sheet: f.sheet || undefined } : {}),
+    ...(f.content_type === 'doc' ? { full_width: f.full_width || undefined } : {}),
   })
   const [slugManual, setSlugManual] = useState(!!page?.slug)
   const [tab, setTab] = useState('edit')
@@ -1904,13 +1990,17 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   const autoSaveKey = `pages_draft_${page?.id || 'new'}`
   const createdRef = useRef(false)   // guards against double-create races
   const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
-  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source, sheet:page?.metadata?.sheet }))
+  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source, sheet:page?.metadata?.sheet, full_width:page?.metadata?.full_width }))
+  const [converting, setConverting] = useState(false)
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
   const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
   const setSheet = useCallback((v) => setForm(f => ({ ...f, sheet: v })), [])
   const changeType = (type) => {
-    setForm(f => ({ ...f, content_type: type, ...(type === 'csv' && !f.content.trim() ? { content: BLANK_SHEET.content } : {}) }))
+    setForm(f => {
+      const content = convertContent(f.content, f.content_type, type)
+      return { ...f, content_type: type, content, ...(type === 'csv' && !content.trim() ? { content: BLANK_SHEET.content } : {}) }
+    })
     setShowTemplates(!page?.content && !isMobile)
   }
 
@@ -1940,6 +2030,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
       protect_source:       !!page?.metadata?.protect_source,
       expires_at:           page.expires_at || '',
       sheet:                page?.metadata?.sheet,
+      full_width:           !!page?.metadata?.full_width,
     }
     baseMetaRef.current = page.metadata || {}
     setForm(next)
@@ -1966,14 +2057,15 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   // Debounce the whole savable payload (~1.2s). First change on a new page
   // creates an unpublished draft; thereafter we PATCH. localStorage is kept as
   // an offline backup so nothing is lost if the network drops.
-  const savePayload = useMemo(() => ({
-    title:        form.title,
-    content_type: form.content_type,
-    content:      form.content,
-    slug:         form.slug || undefined,
-    metadata:     metadataOf(form),
-    expires_at:   form.expires_at || '',
-  }), [form]) // eslint-disable-line react-hooks/exhaustive-deps
+  const payloadOf = (f) => ({
+    title:        f.title,
+    content_type: f.content_type,
+    content:      f.content,
+    slug:         f.slug || undefined,
+    metadata:     metadataOf(f),
+    expires_at:   f.expires_at || '',
+  })
+  const savePayload = useMemo(() => payloadOf(form), [form]) // eslint-disable-line react-hooks/exhaustive-deps
   const snapshot = useMemo(() => snapOf(form), [form])
   const debouncedSnap = useDebounce(snapshot, 1200)
 
@@ -2098,9 +2190,41 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   const isSpreadsheet = form.content_type === 'csv'
   const isHtml = form.content_type === 'html'
   const isMarkdown = form.content_type === 'markdown'
+  const isDoc = form.content_type === 'doc'
+  // The page generator writes Markdown; a block document hands it Markdown
+  // and turns the result back into blocks.
+  const aiContent = useMemo(() => (isDoc ? convertContent(form.content, 'doc', 'markdown') : form.content), [isDoc, form.content])
+
+  // Markdown page -> block document. The current Markdown is kept as a named
+  // version first (the same request writes it), so the switch can be undone
+  // from History.
+  const convertToBlocks = async () => {
+    if (!(await confirm({
+      title: 'Convert to blocks',
+      message: 'This page becomes a block document: headings, lists, tables and images carry over. The Markdown version is saved in History first, so you can restore it at any time.',
+      confirmLabel: 'Convert',
+      tone: 'default',
+    }))) return
+    const next = { ...form, content_type: 'doc', content: serializeDoc(markdownToDoc(form.content)) }
+    if (currentId) {
+      setConverting(true); setError('')
+      try {
+        const saved = await api.pages.update(currentId, { ...payloadOf(next), version_note: 'Before converting to blocks' })
+        if (!saved || saved.detail || saved.error) throw new Error(saved?.detail || saved?.error?.message || saved?.error || 'Conversion failed')
+        savedSnapRef.current = snapOf(next)
+      } catch (e) {
+        setError(e?.message || 'Conversion failed')
+        return
+      } finally { setConverting(false) }
+    }
+    setForm(next)
+    setTab('edit')
+    setShowTemplates(false)
+  }
   const isArtifact = form.content_type === 'artifact'
 
   const placeholders = {
+    doc: '',
     markdown: '# Start writing…\n\nUse the toolbar above for formatting, or write markdown directly.',
     html: '<!DOCTYPE html>\n<html><head>…</head><body>…</body></html>',
     text: 'Start typing your plain text content…',
@@ -2158,12 +2282,18 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 10px 8px 4px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button onClick={flushAndClose} aria-label="Close editor" disabled={saving}
                 style={{ ...btnGhost, padding:'4px 10px', fontSize:20, lineHeight:1.1, flexShrink:0 }}>×</button>
+              {isDoc && !mobileSettingsMode ? (
+                <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:'var(--text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'4px 2px' }}>
+                  {form.title || 'Untitled'}
+                </span>
+              ) : (
               <input
                 aria-label="Page title"
                 placeholder="Page title…"
                 value={form.title}
                 onChange={e=>set('title',e.target.value)}
                 style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, border:'none', outline:'none', background:'transparent', color:'var(--text-1)', padding:'4px 2px' }} />
+              )}
               {currentId && <CommentsToggle pageId={currentId} compact />}
               <button onClick={()=>handleSave(true)} disabled={saving}
                 style={{ ...btnPrimary, padding:'8px 13px', flexShrink:0, whiteSpace:'nowrap' }}>
@@ -2242,7 +2372,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
                 {CONTENT_TYPES.find(t=>t.value===form.content_type)?.hint}
               </div>
             </div>
-          ) : (
+          ) : isDoc && tab === 'edit' ? null : (
             <div style={{ flex:'3 1 200px' }}>
               <input style={{ ...inputStyle, fontSize:16, fontWeight:700, border:'none', borderBottom:'2px solid var(--border)', borderRadius:0, padding:'6px 0', background:'transparent' }}
                 placeholder="Page title…"
@@ -2327,12 +2457,12 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             Text are structured formats the generator has no useful contract for.
             The server refuses page generation without module.ai.use, as it does
             the AI Assistant, so the composer is hidden from whoever lacks it. */}
-        {(isHtml || isMarkdown) && tab === 'edit' && hasPerm('module.ai.use') && (
+        {(isHtml || isMarkdown || isDoc) && tab === 'edit' && hasPerm('module.ai.use') && (
           <AiComposer
-            contentType={form.content_type}
-            content={form.content}
+            contentType={isDoc ? 'markdown' : form.content_type}
+            content={aiContent}
             isMobile={isMobile}
-            onApply={c=>{ setContent(c); setShowTemplates(false) }}
+            onApply={c=>{ setContent(isDoc ? convertContent(c, 'markdown', 'doc') : c); setShowTemplates(false) }}
           />
         )}
 
@@ -2371,8 +2501,14 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
               {t === 'history' ? '🕐 History' : t}
             </button>
           ))}
+          {isMarkdown && tab !== 'history' && (
+            <button onClick={convertToBlocks} disabled={converting} title="Turn this Markdown page into a block document. The current version is kept in History."
+              style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px', display:'inline-flex', alignItems:'center', gap:5, color:'var(--accent)' }}>
+              <Blocks size={13} /> {converting ? 'Converting…' : 'Convert to blocks'}
+            </button>
+          )}
           {!showTemplates && tab !== 'history' && !isArtifact && (
-            <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
+            <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:isMarkdown?0:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
           )}
         </div>
 
@@ -2382,12 +2518,13 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
         {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
+              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
             </span>
             <span>
               {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
                 : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
                 : isArtifact ? 'A working mini-app in one HTML file — runs sandboxed, shared like a web page'
+                : isDoc ? 'Type / for blocks, select text to format, drag ⋮⋮ to reorder. Markdown shortcuts work: #, -, 1., [ ], >, ```'
                 : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
                 : 'Plain text / code'}
             </span>
@@ -2412,7 +2549,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
                 }))
                 // The server still holds the current formatting; comparing with
                 // it makes the next auto-save write the version's.
-                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', sheet:restoredPage.metadata?.sheet })
+                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', sheet:restoredPage.metadata?.sheet, full_width:restoredPage.metadata?.full_width })
                 setTab('edit')
                 onSaved(restoredPage)
               }}
@@ -2429,6 +2566,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
           ) : isSpreadsheet ? (
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
               fileName={form.title || form.slug} />
+          ) : isDoc && tab === 'edit' ? (
+            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} />
           ) : tab === 'edit' ? (
             <textarea
               ref={textareaRef}
@@ -2439,7 +2578,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
               spellCheck={isMarkdown}
             />
           ) : (
-            <div style={{ flex:1, overflow:'auto', background:'#fff', borderTop:'1px solid var(--border)' }}>
+            <div style={{ flex:1, overflow:'auto', background:isDoc ? 'var(--card-bg)' : '#fff', borderTop:'1px solid var(--border)' }}>
               <ContentPreview contentType={form.content_type} content={form.content} />
             </div>
           )}
@@ -2955,7 +3094,7 @@ export default function PagesManager() {
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'artifact'})}>
             <Puzzle size={15} strokeWidth={2} /> New artifact
           </button>
-          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'markdown'})}>
+          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'doc'})}>
             <Plus size={15} strokeWidth={2.5} /> New Page
           </button>
         </div>
@@ -3049,7 +3188,7 @@ export default function PagesManager() {
           <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
           <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
-            {[{Icon:FileText,label:'Document',type:'markdown'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
+            {[{Icon:FileText,label:'Document',type:'doc'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
               <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
                 <b.Icon size={13} strokeWidth={1.75} /> {b.label}
               </button>
@@ -3093,7 +3232,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'markdown')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
+      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'doc')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
       {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}

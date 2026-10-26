@@ -36,6 +36,7 @@ from ..utils.client_ip import client_ip
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from ..services import page_share
+from ..services import page_doc
 from ..services import artifact
 from ..services import page_tree
 
@@ -419,24 +420,35 @@ async def sweep_inline_images_once(delay_s: float = 90.0) -> dict[str, int]:
     return {"pages": pages, "images": images}
 
 
-def _word_count(text: str | None) -> int:
-    if not text:
-        return 0
-    return len(text.split())
+def _word_count(text: str | None, content_type: str | None = None) -> int:
+    return page_doc.word_count(text, content_type)
 
 
-async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None) -> None:
+def _check_doc_content(content_type: str | None, content: str | None) -> None:
+    """A block document's content must be document JSON (or empty)."""
+    if content_type != page_doc.DOC_TYPE:
+        return
+    try:
+        page_doc.validate_doc(content)
+    except page_doc.InvalidDoc as exc:
+        raise HTTPException(422, str(exc))
+
+
+async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None,
+                            note: str | None = None) -> None:
     """Insert a version snapshot, throttled to at most once per 5 minutes per page.
 
     Called from update_page before applying changes so the snapshot captures
-    what the page looked like BEFORE this edit.
+    what the page looked like BEFORE this edit. A snapshot with a note (an
+    explicit checkpoint, such as before converting a page to blocks) is always
+    written, whatever the throttle says.
     """
     try:
         last = await conn.fetchrow(
             "SELECT saved_at FROM page_versions WHERE page_id = $1 ORDER BY saved_at DESC LIMIT 1",
             page_id,
         )
-        if last:
+        if last and not note:
             age = (datetime.now(timezone.utc) - last["saved_at"]).total_seconds()
             if age < 300:  # 5-minute throttle: don't spam versions on every auto-save
                 return
@@ -448,8 +460,8 @@ async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None) -
         await conn.execute(
             """
             INSERT INTO page_versions
-                (page_id, version_num, title, content, content_type, metadata, saved_by, word_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (page_id, version_num, title, content, content_type, metadata, saved_by, word_count, note)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
             page_id,
             last_num + 1,
@@ -458,7 +470,8 @@ async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None) -
             row["content_type"],
             row["metadata"] if isinstance(row["metadata"], str) else json.dumps(row["metadata"] or {}),
             user_id,
-            _word_count(row["content"]),
+            _word_count(row["content"], row["content_type"]),
+            (note or "")[:200] or None,
         )
     except Exception:
         pass  # best-effort; never block the actual save
@@ -577,6 +590,9 @@ class UpdatePageBody(BaseModel):
     is_password_protected: bool | None = None
     password: str | None = None
     expires_at: str | None = None
+    # Writes a named version of the page as it stands before this update,
+    # regardless of the usual five-minute throttle.
+    version_note: str | None = None
 
 
 class PublishBody(BaseModel):
@@ -672,6 +688,8 @@ async def create_page(
     # Slug resolution
     base_slug = _slugify(body.slug or body.title)
     slug = base_slug
+
+    _check_doc_content(body.content_type, body.content)
 
     # Before a connection is held: the upload can take a few seconds.
     content, _moved = await externalise_inline_images(body.content)
@@ -1090,8 +1108,15 @@ async def update_page(
         if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
             raise HTTPException(403, "Access denied")
 
+        # Checked against the type the page will have after this update.
+        if body.content_type is not None or new_content is not None:
+            _check_doc_content(
+                body.content_type if body.content_type is not None else row["content_type"],
+                new_content if new_content is not None else row["content"],
+            )
+
         # Snapshot the current state as a version BEFORE applying this update
-        await _snapshot_version(conn, page_id, row, user_id)
+        await _snapshot_version(conn, page_id, row, user_id, note=body.version_note)
 
         # Build update fields
         updates: dict[str, Any] = {"updated_at": datetime.now(timezone.utc), "updated_by": user_id}
@@ -1489,7 +1514,7 @@ async def restore_page_version(
             page["content_type"],
             page["metadata"] if isinstance(page["metadata"], str) else json.dumps(dict(page["metadata"]) if page["metadata"] else {}),
             user_id,
-            _word_count(page["content"]),
+            _word_count(page["content"], page["content_type"]),
             f"Auto-saved before restoring v{ver['version_num']}",
         )
 
@@ -1575,6 +1600,10 @@ def _share_fields(row) -> dict:
     if row["is_password_protected"]:
         return {"title": row["title"] or "Protected page", "description": "Enter the password to view this page.", "badge": "Password protected"}
     description = (meta.get("description") or "").strip()
+    if not description and row["content_type"] == page_doc.DOC_TYPE:
+        # A block document with no written description is previewed by its
+        # opening text.
+        description = page_doc.doc_excerpt(row["content"])
     if not description and row["content_type"] == artifact.CONTENT_TYPE:
         # An artifact rarely gets a description typed in; its own document has one.
         description = artifact.describe(row["content"])
