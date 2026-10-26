@@ -170,15 +170,18 @@ class TestLinkPreview:
 
 class TestEmbedById:
     def test_needs_a_token(self, page):
+        # Answered as a small HTML page: it is shown inside the embedding
+        # iframe, where a JSON error would be printed raw.
         pool = page()
-        with pytest.raises(HTTPException) as e:
-            asyncio.run(A.render_artifact_by_id(str(pool.row["id"]), None))
-        assert e.value.status_code == 401
+        resp = asyncio.run(A.render_artifact_by_id(str(pool.row["id"]), None))
+        assert resp.status_code == 401 and resp.media_type == "text/html"
+        assert b"expired" in resp.body and b"location.reload()" in resp.body
+        assert str(pool.row["content"]).encode()[:20] not in resp.body
 
     def test_a_slug_token_does_not_unlock_it(self, page):
         pool = page()
-        with pytest.raises(HTTPException):
-            asyncio.run(A.render_artifact_by_id(str(pool.row["id"]), P._render_token("gst")))
+        resp = asyncio.run(A.render_artifact_by_id(str(pool.row["id"]), P._render_token("gst")))
+        assert resp.status_code == 401
 
     def test_owner_mints_a_token_that_renders(self, page):
         pool = page(is_published=False, created_by="u1")

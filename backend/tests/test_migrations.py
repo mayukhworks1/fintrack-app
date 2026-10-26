@@ -58,10 +58,11 @@ class TestRevisionGraph:
 
     def test_exactly_one_head(self):
         heads = self._script().get_heads()
-        assert heads == ["0005_comments"], heads
+        assert heads == ["0006_pages_perf"], heads
 
     def test_the_chain_is_linear_from_the_baseline(self):
         script = self._script()
+        assert script.get_revision("0006_pages_perf").down_revision == "0005_comments"
         assert script.get_revision("0005_comments").down_revision == "0004_page_tree"
         assert script.get_revision("0004_page_tree").down_revision == "0003_ai_gateway"
         assert script.get_revision("0003_ai_gateway").down_revision == "0002_sync_log_indexes"

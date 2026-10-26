@@ -2199,7 +2199,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
         : await api.pages.create(payload)
       if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
       if (saved?.id) setCurrentId(saved.id)
-      if (publish && !saved.is_published) saved = await api.pages.publish(saved.id, true)
+      // Publishing copies the working copy to the public version, so it runs
+      // on Update too, not only the first time a page goes live.
+      if (publish && saved?.id) saved = await api.pages.publish(saved.id, true)
       localStorage.removeItem(autoSaveKey)
       onSaved(saved)
     } catch (e) { setError(e?.message || 'Failed to save.') }

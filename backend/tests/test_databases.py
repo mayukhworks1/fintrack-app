@@ -2,10 +2,11 @@
 Databases: schema validation, values, the row query's SQL, CSV, and the
 router's row CRUD and ownership.
 
-The router is called directly against an in-memory store that answers the
-statements it sends (recognised by a distinctive fragment of each), as in
-test_page_tree.py. The filter/sort SQL itself is pinned at the builder: every
-client value must arrive as a bind parameter, never in the SQL text.
+The router is called directly against a real Postgres (tests/pg_harness.py;
+those tests are skipped without one): its writes are set-based SQL that an
+in-memory stand-in could not check. The filter/sort SQL itself is pinned at
+the builder: every client value must arrive as a bind parameter, never in
+the SQL text.
 """
 
 import asyncio
@@ -14,7 +15,7 @@ import io
 import json
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -23,7 +24,6 @@ from fastapi import HTTPException
 import app.routers.databases as R
 import app.routers.pages as P
 import app.services.databases as D
-import app.services.page_tree as T
 
 ALICE = str(uuid.uuid4())
 BOB = str(uuid.uuid4())
@@ -34,7 +34,7 @@ def run(coro):
 
 
 def req(user=ALICE, role="editor"):
-    return SimpleNamespace(state=SimpleNamespace(auth_user_id=user, auth_role=role))
+    return SimpleNamespace(state=SimpleNamespace(auth_user_id=user, auth_role=role), headers={})
 
 
 def schema(**extra):
@@ -314,267 +314,149 @@ class TestTemplates:
 
 
 # ---------------------------------------------------------------------------
-# Router against an in-memory store
+# Router against Postgres (tests/pg_harness.py; skipped without one)
 # ---------------------------------------------------------------------------
 
-class FakeDB:
-    def __init__(self):
-        self.pages: dict[str, dict] = {}
-        self.queries: list[tuple[str, list]] = []
-        self._t = 0
+class Env:
+    def __init__(self, pg):
+        self.pg = pg
+        self.alice = pg.user("Alice")
+        self.bob = pg.user("Bob")
 
-    def add(self, title, owner=ALICE, parent=None, content_type="markdown", metadata=None, **over):
-        self._t += 1
-        pid = str(uuid.uuid4())
-        now = datetime(2026, 10, 1, tzinfo=timezone.utc) + timedelta(minutes=self._t)
-        self.pages[pid] = {
-            "id": pid, "slug": f"{title.lower().replace(' ', '-')}-{self._t}", "title": title, "icon": None,
-            "cover": None, "parent_id": parent, "position": float(self._t), "content_type": content_type,
-            "content": "", "is_published": False, "updated_at": now, "created_at": now, "created_by": owner,
-            "updated_by": owner, "deleted_at": None, "expires_at": None, "is_password_protected": False,
-            "password_hash": None, "published_at": None, "metadata": json.dumps(metadata or {}), "view_count": 0,
-        }
-        self.pages[pid].update(over)
-        return pid
+    def call(self, fn):
+        return self.pg.run(lambda pool: fn())
 
-    def with_props(self, p):
-        return {**p, "props": json.dumps(D.props_of(p["metadata"]))}
+    def page(self, pid):
+        r = self.pg.sql("SELECT * FROM published_pages WHERE id = $1", pid)
+        return dict(r[0]) if r else None
 
-    # -- pool / connection protocol -----------------------------------------
-    def acquire(self):
-        return self
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def transaction(self):
-        return self
-
-    async def fetchval(self, sql, *a):
-        if "information_schema.columns" in sql:
-            return True
-        if "WHERE slug = $1" in sql:
-            return next((p["id"] for p in self.pages.values() if p["slug"] == a[0]), None)
-        if "SELECT metadata FROM published_pages" in sql:
-            return self.pages[str(a[0])]["metadata"]
-        if "MAX(position)" in sql:
-            return max((p["position"] for p in self.pages.values() if p["parent_id"] == a[0]), default=None)
-        raise AssertionError(f"unexpected fetchval: {sql}")
-
-    async def fetchrow(self, sql, *a):
-        if sql.startswith("INSERT INTO published_pages"):
-            self._t += 1
-            now = datetime(2026, 10, 2, tzinfo=timezone.utc) + timedelta(minutes=self._t)
-            pid = str(uuid.uuid4())
-            row = {
-                "id": pid, "slug": a[0], "title": a[1], "content_type": a[2], "metadata": a[3],
-                "created_by": a[4], "updated_by": a[4], "parent_id": a[5], "content": "",
-                "is_published": False, "created_at": now, "updated_at": now, "deleted_at": None,
-                "expires_at": None, "cover": None, "is_password_protected": False, "password_hash": None,
-                "published_at": None, "view_count": 0,
-            }
-            if "position" in sql.split("VALUES")[0]:
-                row["position"] = a[6] if a[6] is not None else 10_000.0 + self._t
-                row["icon"] = a[7]
-            else:
-                row["position"] = 10_000.0 + self._t
-                row["icon"] = a[6]
-            self.pages[pid] = row
-            return self.with_props(row)
-        if sql.startswith("UPDATE published_pages SET"):
-            p = self.pages[str(a[-1])]
-            cols = sql.split("SET ", 1)[1].split(" WHERE")[0].split(", ")
-            for col, value in zip(cols, a):
-                p[col.split(" = ")[0]] = value
-            return self.with_props(p)
-        if "LEFT JOIN published_pages d" in sql:
-            p = self.pages.get(str(a[0]))
-            if not p:
-                return None
-            d = self.pages.get(str(p["parent_id"])) if p["parent_id"] else None
-            return {**p, "db_id": d and d["id"], "db_title": d and d["title"], "db_icon": None,
-                    "db_metadata": d and d["metadata"], "db_type": d and d["content_type"],
-                    "db_owner": d and d["created_by"]}
-        if "FROM published_pages WHERE id = $1" in sql:
-            p = self.pages.get(str(a[0]))
-            return dict(p) if p else None
-        raise AssertionError(f"unexpected fetchrow: {sql}")
-
-    async def fetch(self, sql, *a):
-        if "COUNT(*) OVER ()" in sql:
-            self.queries.append((sql, list(a)))
-            rows = [p for p in self.pages.values() if p["parent_id"] == a[0] and p["deleted_at"] is None]
-            if "p.created_by = $2" in sql:
-                rows = [p for p in rows if str(p["created_by"]) == str(a[1])]
-            rows.sort(key=lambda p: p["position"])
-            limit, offset = a[-2], a[-1]
-            page = rows[offset:offset + limit]
-            return [{**self.with_props(p), "total_count": len(rows)} for p in page]
-        if "WITH RECURSIVE down" in sql:
-            out, frontier, depth = [], [str(a[0])], 0
-            while frontier:
-                out += [{**self.pages[i], "depth": depth} for i in frontier]
-                frontier = [p["id"] for p in self.pages.values() if p["parent_id"] in frontier]
-                depth += 1
-            return out
-        if "SELECT id, metadata FROM published_pages WHERE parent_id = $1" in sql:
-            return [dict(p) for p in self.pages.values() if p["parent_id"] == a[0]]
-        raise AssertionError(f"unexpected fetch: {sql}")
-
-    async def execute(self, sql, *a):
-        if "SET metadata = $1::jsonb, updated_at" in sql:
-            self.pages[str(a[3])]["metadata"] = a[0]
-            return "UPDATE 1"
-        if "SET deleted_at = $1 WHERE id = ANY" in sql:
-            for i in a[1]:
-                self.pages[str(i)]["deleted_at"] = a[0]
-            return f"UPDATE {len(a[1])}"
-        if "SET is_published = $1" in sql:
-            n = 0
-            for p in self.pages.values():
-                if p["parent_id"] == a[2] and p["deleted_at"] is None and (len(a) < 4 or p["created_by"] == a[3]):
-                    p["is_published"] = a[0]
-                    n += 1
-            return f"UPDATE {n}"
-        raise AssertionError(f"unexpected execute: {sql}")
-
-    async def executemany(self, sql, rows):
-        assert "SET metadata = $1::jsonb WHERE id = $2" in sql
-        for meta, pid in rows:
-            self.pages[str(pid)]["metadata"] = meta
+    def children(self, pid):
+        return [dict(r) for r in self.pg.sql(
+            "SELECT * FROM published_pages WHERE parent_id = $1 ORDER BY position", pid)]
 
 
 @pytest.fixture
-def db(monkeypatch):
-    fake = FakeDB()
-    monkeypatch.setattr(R, "get_pool", lambda: fake)
-    monkeypatch.setattr(P, "get_pool", lambda: fake)
-    T.reset_ready_cache()
-    yield fake
-    T.reset_ready_cache()
+def db(pg):
+    return Env(pg)
 
 
-def make_db(fake, template="tasks", user=ALICE, role="editor"):
-    return run(R.create_database(R.CreateDatabaseBody(title="Work", template=template), req(user, role), role))
+def make_db(env, template="tasks", user=None, role="editor"):
+    user = user or env.alice
+    return env.call(lambda: R.create_database(R.CreateDatabaseBody(title="Work", template=template),
+                                              req(user, role), role))
+
+
+def fails(env, fn):
+    with pytest.raises(HTTPException) as e:
+        env.call(fn)
+    return e.value.status_code
 
 
 class TestRouter:
     def test_create_from_template_makes_rows(self, db):
         out = make_db(db)
         assert out["database"]["views"][0]["type"] == "board"
-        rows = [p for p in db.pages.values() if p["parent_id"] == out["id"]]
+        rows = db.children(out["id"])
         assert len(rows) == 3 and all(json.loads(r["metadata"])["db_row"] == out["id"] for r in rows)
-        assert db.pages[out["id"]]["content_type"] == "database"
+        assert db.page(out["id"])["content_type"] == "database"
 
     def test_unknown_template(self, db):
-        with pytest.raises(HTTPException) as e:
-            run(R.create_database(R.CreateDatabaseBody(template="nope"), req(), "editor"))
-        assert e.value.status_code == 422
+        assert fails(db, lambda: R.create_database(R.CreateDatabaseBody(template="nope"), req(db.alice), "editor")) == 422
 
     def test_row_crud(self, db):
         d = make_db(db, "blank")
-        row = run(R.create_row(d["id"], R.RowBody(title="First", props={"notes": "hello"}), req(), "editor"))
+        a = req(db.alice)
+        row = db.call(lambda: R.create_row(d["id"], R.RowBody(title="First", props={"notes": "hello"}), a, "editor"))
         assert row["title"] == "First" and row["props"] == {"notes": "hello"}
-        assert db.pages[row["id"]]["content_type"] == "doc"
-        upd = run(R.update_row(d["id"], row["id"], R.RowPatchBody(title="Renamed", props={"notes": None}), req(), "editor"))
+        assert db.page(row["id"])["content_type"] == "doc"
+        upd = db.call(lambda: R.update_row(d["id"], row["id"], R.RowPatchBody(title="Renamed", props={"notes": None}),
+                                           a, "editor"))
         assert upd["title"] == "Renamed" and upd["props"] == {}
-        listed = run(R.query_rows(d["id"], R.QueryBody(), req(), "editor"))
-        assert listed["total"] == 1
-        run(R.delete_rows(d["id"], R.IdsBody(ids=[row["id"]]), req(), "editor"))
-        assert db.pages[row["id"]]["deleted_at"] is not None
-        assert run(R.query_rows(d["id"], R.QueryBody(), req(), "editor"))["total"] == 0
+        assert db.call(lambda: R.query_rows(d["id"], R.QueryBody(), a, "editor"))["total"] == 1
+        db.call(lambda: R.delete_rows(d["id"], R.IdsBody(ids=[row["id"]]), a, "editor"))
+        assert db.page(row["id"])["deleted_at"] is not None
+        assert db.call(lambda: R.query_rows(d["id"], R.QueryBody(), a, "editor"))["total"] == 0
 
     def test_row_values_are_validated(self, db):
         d = make_db(db)
-        with pytest.raises(HTTPException) as e:
-            run(R.create_row(d["id"], R.RowBody(title="x", props={"status": "Nope"}), req(), "editor"))
-        assert e.value.status_code == 422
+        assert fails(db, lambda: R.create_row(d["id"], R.RowBody(title="x", props={"status": "Nope"}),
+                                              req(db.alice), "editor")) == 422
+        rid = db.children(d["id"])[0]["id"]
+        assert fails(db, lambda: R.update_row(d["id"], str(rid), R.RowPatchBody(props={"status": "Nope"}),
+                                              req(db.alice), "editor")) == 422
 
     def test_bulk_update_for_board_drag(self, db):
         d = make_db(db)
-        ids = [p["id"] for p in db.pages.values() if p["parent_id"] == d["id"]]
-        out = run(R.bulk_update_rows(d["id"], R.BulkBody(updates=[
+        ids = [str(p["id"]) for p in db.children(d["id"])]
+        out = db.call(lambda: R.bulk_update_rows(d["id"], R.BulkBody(updates=[
             R.BulkItem(id=ids[0], props={"status": "o3"}, position=1.5),
             R.BulkItem(id=ids[1], position=2.5),
-        ]), req(), "editor"))
+        ]), req(db.alice), "editor"))
         assert out["rows"][0]["props"]["status"] == "o3" and out["rows"][0]["position"] == 1.5
-        assert db.pages[ids[1]]["position"] == 2.5
+        assert db.page(ids[1])["position"] == 2.5
 
     def test_bulk_refuses_rows_of_another_database(self, db):
         d1, d2 = make_db(db), make_db(db)
-        stray = next(p["id"] for p in db.pages.values() if p["parent_id"] == d2["id"])
-        with pytest.raises(HTTPException) as e:
-            run(R.bulk_update_rows(d1["id"], R.BulkBody(updates=[R.BulkItem(id=stray, position=1)]), req(), "editor"))
-        assert e.value.status_code == 404
+        stray = str(db.children(d2["id"])[0]["id"])
+        assert fails(db, lambda: R.bulk_update_rows(d1["id"], R.BulkBody(updates=[R.BulkItem(id=stray, position=1)]),
+                                                    req(db.alice), "editor")) == 404
 
     def test_query_uses_view_and_parameters(self, db):
         d = make_db(db, "invoices")
-        run(R.query_rows(d["id"], R.QueryBody(view_id="v_unpaid"), req(), "editor"))
-        sql, args = db.queries[-1]
-        assert "jsonb" in sql and "paid" in args and False in args
-        with pytest.raises(HTTPException) as e:
-            run(R.query_rows(d["id"], R.QueryBody(filter={"rules": [{"prop": "amount", "cmp": "like", "value": 1}]}), req(), "editor"))
-        assert e.value.status_code == 422
-        with pytest.raises(HTTPException) as e:
-            run(R.query_rows(d["id"], R.QueryBody(view_id="nope"), req(), "editor"))
-        assert e.value.status_code == 404
+        out = db.call(lambda: R.query_rows(d["id"], R.QueryBody(view_id="v_unpaid"), req(db.alice), "editor"))
+        assert all(not r["props"].get("paid") for r in out["rows"])
+        assert fails(db, lambda: R.query_rows(d["id"], R.QueryBody(
+            filter={"rules": [{"prop": "amount", "cmp": "like", "value": 1}]}), req(db.alice), "editor")) == 422
+        assert fails(db, lambda: R.query_rows(d["id"], R.QueryBody(view_id="nope"), req(db.alice), "editor")) == 404
 
     def test_ownership(self, db):
         d = make_db(db)
+        b = req(db.bob)
         for call in (
-            lambda: R.get_database(d["id"], req(BOB), "editor"),
-            lambda: R.query_rows(d["id"], R.QueryBody(), req(BOB), "editor"),
-            lambda: R.create_row(d["id"], R.RowBody(title="x"), req(BOB), "editor"),
-            lambda: R.export_csv(d["id"], req(BOB), "editor"),
+            lambda: R.get_database(d["id"], b, "editor"),
+            lambda: R.query_rows(d["id"], R.QueryBody(), b, "editor"),
+            lambda: R.create_row(d["id"], R.RowBody(title="x"), b, "editor"),
+            lambda: R.export_csv(d["id"], b, "editor"),
         ):
-            with pytest.raises(HTTPException) as e:
-                run(call())
-            assert e.value.status_code == 403
+            assert fails(db, call) == 403
         # The superadmin reaches everything, and its listing is not scoped.
-        assert run(R.query_rows(d["id"], R.QueryBody(), req(BOB, "superadmin"), "superadmin"))["total"] == 3
-        assert "p.created_by =" not in db.queries[-1][0]
-        run(R.query_rows(d["id"], R.QueryBody(), req(), "editor"))
-        assert "p.created_by = $2" in db.queries[-1][0]
+        sa = req(db.bob, "superadmin")
+        db.call(lambda: R.create_row(d["id"], R.RowBody(title="Bob's"), sa, "superadmin"))
+        assert db.call(lambda: R.query_rows(d["id"], R.QueryBody(), sa, "superadmin"))["total"] == 4
+        assert db.call(lambda: R.query_rows(d["id"], R.QueryBody(), req(db.alice), "editor"))["total"] == 3
 
     def test_not_a_database(self, db):
-        pid = db.add("Plain")
-        with pytest.raises(HTTPException) as e:
-            run(R.get_database(pid, req(), "editor"))
-        assert e.value.status_code == 409
+        pid = db.pg.page(db.alice, "Plain")
+        assert fails(db, lambda: R.get_database(pid, req(db.alice), "editor")) == 409
 
     def test_trashed_database_refuses_writes(self, db):
         d = make_db(db)
-        db.pages[d["id"]]["deleted_at"] = datetime.now(timezone.utc)
-        with pytest.raises(HTTPException) as e:
-            run(R.create_row(d["id"], R.RowBody(title="x"), req(), "editor"))
-        assert e.value.status_code == 409
+        db.pg.sql("UPDATE published_pages SET deleted_at = NOW() WHERE id = $1", d["id"])
+        assert fails(db, lambda: R.create_row(d["id"], R.RowBody(title="x"), req(db.alice), "editor")) == 409
 
     def test_schema_update_retypes_rows(self, db):
         d = make_db(db, "blank")
-        row = run(R.create_row(d["id"], R.RowBody(title="r", props={"notes": "Urgent"}), req(), "editor"))
+        a = req(db.alice)
+        row = db.call(lambda: R.create_row(d["id"], R.RowBody(title="r", props={"notes": "Urgent"}), a, "editor"))
         props = d["database"]["properties"]
         props[1] = {**props[1], "type": "select", "options": []}
-        out = run(R.update_schema(d["id"], R.SchemaBody(properties=props), req(), "editor"))
+        out = db.call(lambda: R.update_schema(d["id"], R.SchemaBody(properties=props), a, "editor"))
         opt = out["database"]["properties"][1]["options"][0]
         assert opt["name"] == "Urgent"
-        assert D.props_of(db.pages[row["id"]]["metadata"]) == {"notes": opt["id"]}
-        assert json.loads(db.pages[d["id"]]["metadata"])["database"] == out["database"]
-        with pytest.raises(HTTPException) as e:
-            run(R.update_schema(d["id"], R.SchemaBody(properties=[]), req(), "editor"))
-        assert e.value.status_code == 422
+        assert D.props_of(db.page(row["id"])["metadata"]) == {"notes": opt["id"]}
+        assert json.loads(db.page(d["id"])["metadata"])["database"] == out["database"]
+        assert fails(db, lambda: R.update_schema(d["id"], R.SchemaBody(properties=[]), a, "editor")) == 422
 
     def test_csv_round_trip(self, db):
         d = make_db(db, "blank")
-        out = run(R.import_csv(d["id"], R.ImportBody(
+        a = req(db.alice)
+        out = db.call(lambda: R.import_csv(d["id"], R.ImportBody(
             csv="Name,Notes,Score\n=evil(),\"a, b\",7\nPlain,,\n",
             mapping=[{"column": 0, "prop": "title"}, {"column": 1, "prop": "notes"},
-                     {"column": 2, "new_type": "number"}]), req(), "editor"))
+                     {"column": 2, "new_type": "number"}]), a, "editor"))
         assert out["created"] == 2
         assert [p["name"] for p in out["database"]["properties"]] == ["Name", "Notes", "Score"]
-        resp = run(R.export_csv(d["id"], req(), "editor"))
+        resp = db.call(lambda: R.export_csv(d["id"], a, "editor"))
         text = resp.body.decode("utf-8").lstrip("﻿")
         rows = list(csv.reader(io.StringIO(text)))
         assert rows[0] == ["Name", "Notes", "Score"]
@@ -583,35 +465,34 @@ class TestRouter:
 
     def test_publish_rows_and_public_rows(self, db):
         d = make_db(db)
-        assert run(R.publish_rows(d["id"], R.PublishRowsBody(published=True), req(), "editor"))["updated"] == 3
-        first = next(p for p in db.pages.values() if p["parent_id"] == d["id"])
-        first["is_published"] = False
-        pub = run(R.public_rows(db, db.pages[d["id"]]))["database_rows"]
+        assert db.call(lambda: R.publish_rows(d["id"], R.PublishRowsBody(published=True), req(db.alice),
+                                              "editor"))["updated"] == 3
+        first = db.children(d["id"])[0]
+        db.pg.sql("UPDATE published_pages SET is_published = FALSE WHERE id = $1", first["id"])
+        page = db.page(d["id"])
+        pub = db.pg.run(lambda pool: R.public_rows(pool, page))["database_rows"]
         assert len(pub) == 3
         assert sum(1 for r in pub if r["slug"]) == 2
-        assert run(R.public_rows(db, {"content_type": "markdown"})) == {}
+        assert db.pg.run(lambda pool: R.public_rows(pool, {"content_type": "markdown"})) == {}
 
     def test_row_context(self, db):
         d = make_db(db)
-        rid = next(p["id"] for p in db.pages.values() if p["parent_id"] == d["id"])
-        ctx = run(R.row_context(rid, req(), "editor"))
+        rid = str(db.children(d["id"])[0]["id"])
+        ctx = db.call(lambda: R.row_context(rid, req(db.alice), "editor"))
         assert ctx["database"]["id"] == d["id"] and ctx["row"]["id"] == rid
-        plain = db.add("Plain")
-        assert run(R.row_context(plain, req(), "editor"))["database"] is None
+        plain = db.pg.page(db.alice, "Plain")
+        assert db.call(lambda: R.row_context(plain, req(db.alice), "editor"))["database"] is None
 
-    def test_page_editor_save_keeps_props_and_schema(self, db, monkeypatch):
-        async def noop(*a, **k):
-            return None
-        monkeypatch.setattr(P, "_snapshot_version", noop)
+    def test_page_editor_save_keeps_props_and_schema(self, db):
         d = make_db(db)
-        rid = next(p["id"] for p in db.pages.values() if p["parent_id"] == d["id"])
-        before = D.props_of(db.pages[rid]["metadata"])
-        db.pages[rid]["metadata"] = json.dumps({**json.loads(db.pages[rid]["metadata"])})
-        run(P.update_page(rid, P.UpdatePageBody(metadata={"description": "x", "props": {}}), req(), "editor"))
-        meta = json.loads(db.pages[rid]["metadata"])
+        a = req(db.alice)
+        rid = str(db.children(d["id"])[0]["id"])
+        before = D.props_of(db.page(rid)["metadata"])
+        db.call(lambda: P.update_page(rid, P.UpdatePageBody(metadata={"description": "x", "props": {}}), a, "editor"))
+        meta = json.loads(db.page(rid)["metadata"])
         assert meta["props"] == before and meta["description"] == "x"
-        run(P.update_page(d["id"], P.UpdatePageBody(metadata={"folder": "f"}), req(), "editor"))
-        assert "database" in json.loads(db.pages[d["id"]]["metadata"])
+        db.call(lambda: P.update_page(d["id"], P.UpdatePageBody(metadata={"folder": "f"}), a, "editor"))
+        assert "database" in json.loads(db.page(d["id"])["metadata"])
 
 
 def test_database_routes_take_their_id_from_the_path():

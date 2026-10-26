@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
@@ -32,6 +33,7 @@ from ..config import settings
 from ..db import valkey as vk
 from ..db.postgres import get_pool
 from ..utils.uploads import read_upload, upload_limit
+from ..utils import fast_json
 from ..utils.client_ip import client_ip
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
@@ -282,6 +284,32 @@ def _can_see_all(role: str) -> bool:
     return role == "superadmin"
 
 
+def _owns_page(row, user_id, auth_role: str) -> bool:
+    """Who may open or change a page in the app: a superadmin, or its creator.
+    A session without a user id (a legacy token) matches no creator, not even
+    a page whose created_by is NULL: str(None) == str(None) let any such
+    session edit every ownerless page."""
+    if _can_see_all(auth_role):
+        return True
+    owner = row["created_by"]
+    return user_id is not None and owner is not None and str(owner) == str(user_id)
+
+
+# The same cap the live editor holds (services/collab.py). JSON bodies had no
+# limit at all: a 12 MB PUT was accepted and then too large to open.
+MAX_CONTENT_CHARS = 5_000_000
+TOO_LARGE_DETAIL = (
+    "This page is too large to save: it is over 5,000,000 characters. "
+    "Split it into sub-pages or move large embedded files out of it."
+)
+TRASHED_DETAIL = "This page is in the trash \u2014 restore it to edit."
+
+
+def _check_size(content: str | None) -> None:
+    if content is not None and len(content) > MAX_CONTENT_CHARS:
+        raise HTTPException(413, TOO_LARGE_DETAIL)
+
+
 def _page_uuid(page_id: str) -> str:
     """Path dependency for {page_id}. Page ids are UUIDs, and anything else sent
     to the uuid column raises in asyncpg — a 500 for what is a missing page."""
@@ -295,6 +323,10 @@ PageId = Annotated[str, Depends(_page_uuid)]
 
 
 _ASSET_PATH_RE = re.compile(r"/api/public/pages/asset/([^\s)\"'<>]+)")
+# What migration 0006's page_asset_paths() stores per page and version: the
+# path up to the first character a stored path never contains, so an HTML
+# entity (&quot;) or a JSON escape (\") after the URL is not taken as part of it.
+_ASSET_REF_RE = re.compile(r"/api/public/pages/asset/(pages/[^\s)\"'<>?#&\\]+)")
 
 
 def _extract_asset_paths(content: str | None) -> list[str]:
@@ -364,15 +396,22 @@ async def externalise_inline_images(content: str | None) -> tuple[str | None, in
     if not decoded:
         return content, 0
 
-    stamp = f"{datetime.now(timezone.utc):%Y/%m}"
+    # Content-addressed: the same image always lands on the same path, so an
+    # autosave of a page that still carries it inline (an editor that kept
+    # its own copy) does not upload it again and again under new names.
     files: list[tuple[bytes, str, str]] = []
     url_for: dict[str, str] = {}
+    by_path: dict[str, tuple[bytes, str, str]] = {}
     for key, (mime, data) in decoded.items():
-        path = f"pages/{stamp}/{secrets.token_hex(8)}-inline.{_INLINE_MIME_EXT.get(mime, 'bin')}"
-        files.append((data, path, mime))
+        digest = hashlib.sha1(data).hexdigest()
+        path = f"pages/inline/{digest[:2]}/{digest}.{_INLINE_MIME_EXT.get(mime, 'bin')}"
+        by_path.setdefault(path, (data, path, mime))
         url_for[key] = f"/api/public/pages/asset/{path}"
+    known = await _assets_already_stored(list(by_path))
+    files = [f for path, f in by_path.items() if path not in known]
     try:
-        await storage.upload_many(files)
+        if files:
+            await storage.upload_many(files)
     except Exception as exc:
         logger.warning("pages: inline image upload failed; content left as-is: %s", exc)
         return content, 0
@@ -380,7 +419,21 @@ async def externalise_inline_images(content: str | None) -> tuple[str | None, in
     def _swap(m: re.Match) -> str:
         return url_for.get(_key(m.group(2))) or m.group(0)
 
-    return _INLINE_IMAGE_RE.sub(_swap, content), len(files)
+    return _INLINE_IMAGE_RE.sub(_swap, content), len(by_path)
+
+
+async def _assets_already_stored(paths: list[str]) -> set[str]:
+    """Which of these content-addressed paths storage already holds. Asked
+    every time (no local memory: another worker may have deleted the file
+    since); any failure counts as "not stored", and uploading identical bytes
+    again is harmless."""
+    from ..services import storage
+
+    exists = getattr(storage, "file_exists", None)
+    if not paths or exists is None:
+        return set()
+    results = await asyncio.gather(*(exists(p) for p in paths), return_exceptions=True)
+    return {p for p, ok in zip(paths, results) if ok is True}
 
 
 async def sweep_inline_images_once(delay_s: float = 90.0) -> dict[str, int]:
@@ -435,47 +488,132 @@ def _check_doc_content(content_type: str | None, content: str | None) -> None:
         raise HTTPException(422, str(exc))
 
 
+# word_count of a version written by snapshot_update_sql, which copies the
+# content inside the database and never sees it. Worked out when the version
+# list is next read (_fill_word_counts).
+WORD_COUNT_PENDING = -1
+
+
+def snapshot_update_sql(set_sql: str, *, page: str = "$1", now: str = "$3", user: str = "$4",
+                        force: str = "$6", note: str = "$7", guard: str = "TRUE",
+                        returning: str = "p.id", writer_rule: bool = False) -> str:
+    """Two CTEs, `snap` and `upd`, for a WITH clause: write the page and, in
+    the same statement, keep a version of it as it was before.
+
+    Every CTE of one statement reads the same snapshot, so `snap` copies the
+    content as it stood before `upd` changes it, inside the database: the
+    old content never travels to the API. A version is written when `force`
+    is true, when none was written in the last five minutes, and (writer_rule)
+    when the page was last written by someone else or the last version was
+    saved by someone else, so one person's work is always kept in History
+    before another's save replaces it. `guard` must also hold (it is checked
+    again on the row being updated) or neither happens.
+    """
+    writer = ""
+    if writer_rule:
+        writer = (
+            f" OR p.updated_by IS DISTINCT FROM {user}"
+            f" OR (SELECT v.saved_by FROM page_versions v WHERE v.page_id = p.id"
+            f"      ORDER BY v.saved_at DESC LIMIT 1) IS DISTINCT FROM {user}"
+        )
+    return (
+        "snap AS ("
+        " INSERT INTO page_versions"
+        "   (page_id, version_num, title, content, content_type, metadata, saved_by, word_count, note)"
+        " SELECT p.id,"
+        "        COALESCE((SELECT MAX(v.version_num) FROM page_versions v WHERE v.page_id = p.id), 0) + 1,"
+        f"        p.title, p.content, p.content_type, p.metadata, {user}, {WORD_COUNT_PENDING}, {note}::text"
+        "   FROM published_pages p"
+        f"  WHERE p.id = {page} AND ({guard})"
+        f"    AND ({force}::boolean"
+        "         OR NOT EXISTS (SELECT 1 FROM page_versions v WHERE v.page_id = p.id"
+        f"                         AND v.saved_at > {now}::timestamptz - interval '5 minutes')"
+        f"         {writer})"
+        " RETURNING id), "
+        "upd AS ("
+        f" UPDATE published_pages p SET {set_sql}"
+        f"  WHERE p.id = {page} AND ({guard})"
+        f" RETURNING {returning})"
+    )
+
+
+async def _fill_word_counts(conn, rows: list[dict]) -> None:
+    """Word counts of versions written by snapshot_update_sql, computed once
+    from their content and stored, so the list shows real numbers."""
+    pending = [r["id"] for r in rows if (r.get("word_count") or 0) < 0]
+    if not pending:
+        return
+    try:
+        found = await conn.fetch(
+            "SELECT id, content, content_type FROM page_versions WHERE id = ANY($1::bigint[])", pending)
+        counts = {r["id"]: _word_count(r["content"], r["content_type"]) for r in found}
+        if counts:
+            await conn.execute(
+                "UPDATE page_versions v SET word_count = u.n "
+                "FROM unnest($1::bigint[], $2::int[]) AS u(id, n) WHERE v.id = u.id",
+                list(counts), list(counts.values()),
+            )
+        for r in rows:
+            if r["id"] in counts:
+                r["word_count"] = counts[r["id"]]
+    except Exception as exc:
+        logger.warning("pages: filling version word counts failed: %s", exc)
+        for r in rows:
+            if (r.get("word_count") or 0) < 0:
+                r["word_count"] = 0
+
+
 async def _snapshot_version(conn, page_id: str, row: Any, user_id: str | None,
                             note: str | None = None) -> None:
     """Insert a version snapshot, throttled to at most once per 5 minutes per page.
 
-    Called from update_page before applying changes so the snapshot captures
-    what the page looked like BEFORE this edit. A snapshot with a note (an
-    explicit checkpoint, such as before converting a page to blocks) is always
+    Called before applying changes so the snapshot captures what the page
+    looked like BEFORE this edit. A snapshot with a note (an explicit
+    checkpoint, such as before converting a page to blocks) is always
     written, whatever the throttle says.
+
+    Best-effort, inside a savepoint: a failed insert must not abort the
+    caller's transaction (inside one, the next statement would fail with
+    "current transaction is aborted" and the save itself would be lost).
     """
     try:
-        last = await conn.fetchrow(
-            "SELECT saved_at FROM page_versions WHERE page_id = $1 ORDER BY saved_at DESC LIMIT 1",
-            page_id,
-        )
-        if last and not note:
-            age = (datetime.now(timezone.utc) - last["saved_at"]).total_seconds()
-            if age < 300:  # 5-minute throttle: don't spam versions on every auto-save
-                return
+        async with conn.transaction():
+            await _snapshot_version_inner(conn, page_id, row, user_id, note)
+    except Exception as exc:
+        logger.warning("pages: version snapshot of %s skipped: %s", page_id, exc)
 
-        last_num = await conn.fetchval(
-            "SELECT COALESCE(MAX(version_num), 0) FROM page_versions WHERE page_id = $1",
-            page_id,
-        )
-        await conn.execute(
-            """
-            INSERT INTO page_versions
-                (page_id, version_num, title, content, content_type, metadata, saved_by, word_count, note)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            """,
-            page_id,
-            last_num + 1,
-            row["title"],
-            row["content"],
-            row["content_type"],
-            row["metadata"] if isinstance(row["metadata"], str) else json.dumps(row["metadata"] or {}),
-            user_id,
-            _word_count(row["content"], row["content_type"]),
-            (note or "")[:200] or None,
-        )
-    except Exception:
-        pass  # best-effort; never block the actual save
+
+async def _snapshot_version_inner(conn, page_id: str, row: Any, user_id: str | None,
+                                  note: str | None = None) -> None:
+    last = await conn.fetchrow(
+        "SELECT saved_at FROM page_versions WHERE page_id = $1 ORDER BY saved_at DESC LIMIT 1",
+        page_id,
+    )
+    if last and not note:
+        age = (datetime.now(timezone.utc) - last["saved_at"]).total_seconds()
+        if age < 300:  # 5-minute throttle: don't spam versions on every auto-save
+            return
+
+    last_num = await conn.fetchval(
+        "SELECT COALESCE(MAX(version_num), 0) FROM page_versions WHERE page_id = $1",
+        page_id,
+    )
+    await conn.execute(
+        """
+        INSERT INTO page_versions
+            (page_id, version_num, title, content, content_type, metadata, saved_by, word_count, note)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """,
+        page_id,
+        last_num + 1,
+        row["title"],
+        row["content"],
+        row["content_type"],
+        row["metadata"] if isinstance(row["metadata"], str) else json.dumps(row["metadata"] or {}),
+        user_id,
+        _word_count(row["content"], row["content_type"]),
+        (note or "")[:200] or None,
+    )
 
 
 _ASSET_URL_PREFIX = "/api/public/pages/asset/"
@@ -494,6 +632,28 @@ async def _asset_page_owners(pool, paths: list[str]) -> dict[str, set]:
     for p in paths:
         for form in (p, quote(p, safe="/")):
             needles.setdefault(_ASSET_URL_PREFIX + form, p)
+    owners: dict[str, set] = {}
+    async with pool.acquire() as conn:
+        if await page_tree.perf_ready(conn):
+            # Migration 0006: the references are an indexed array per page
+            # and per version (kept by a trigger), not a scan of all content.
+            forms = {n[len(_ASSET_URL_PREFIX):]: p for n, p in needles.items()}
+            rows = await conn.fetch(
+                """
+                SELECT f.ref, p.created_by
+                  FROM unnest($1::text[]) AS f(ref)
+                  JOIN published_pages p ON p.asset_paths @> ARRAY[f.ref]
+                UNION
+                SELECT f.ref, p.created_by
+                  FROM unnest($1::text[]) AS f(ref)
+                  JOIN page_versions v ON v.asset_paths @> ARRAY[f.ref]
+                  JOIN published_pages p ON p.id = v.page_id
+                """,
+                list(forms),
+            )
+            for r in rows:
+                owners.setdefault(forms[r["ref"]], set()).add(r["created_by"])
+            return owners
     rows = await pool.fetch(
         """
         SELECT n.needle, p.created_by
@@ -507,7 +667,6 @@ async def _asset_page_owners(pool, paths: list[str]) -> dict[str, set]:
         """,
         list(needles),
     )
-    owners: dict[str, set] = {}
     for r in rows:
         owners.setdefault(needles[r["needle"]], set()).add(r["created_by"])
     return owners
@@ -521,7 +680,13 @@ async def _delete_page_assets(content: str | None) -> None:
     asset URL lifted from someone else's published page. Those files stay —
     deleting them would break that page.
     """
-    paths = _extract_asset_paths(content)
+    await _delete_asset_paths(_extract_asset_paths(content))
+
+
+async def _delete_asset_paths(paths: list[str]) -> None:
+    """_delete_page_assets for paths already gathered, from any number of
+    deleted pages: one reference check for all of them."""
+    paths = [p for p in dict.fromkeys(paths or []) if p.startswith("pages/") and ".." not in p]
     if not paths:
         return
     from ..services import storage
@@ -580,6 +745,10 @@ class CreatePageBody(BaseModel):
     is_password_protected: bool = False
     password: str | None = None
     expires_at: str | None = None
+    # Idempotency key chosen by the client for this create. A retry with the
+    # same id (same user, within CREATE_DEDUPE_S) returns the page the first
+    # request made instead of making another.
+    client_request_id: str | None = None
 
 
 class UpdatePageBody(BaseModel):
@@ -594,6 +763,11 @@ class UpdatePageBody(BaseModel):
     # Writes a named version of the page as it stands before this update,
     # regardless of the usual five-minute throttle.
     version_note: str | None = None
+    # Optimistic concurrency: the updated_at the client's copy was loaded at
+    # (as the API returned it). When given and the page has changed since,
+    # nothing is written and the answer is 409 with the server copy's
+    # metadata. Absent, the update applies unconditionally (older clients).
+    base_updated_at: str | None = None
 
 
 class PublishBody(BaseModel):
@@ -674,12 +848,28 @@ class AIFixErrorBody(BaseModel):
 # Authenticated endpoints
 # ---------------------------------------------------------------------------
 
+# Retries of one create (same client_request_id) within this window return
+# the first page instead of making another.
+CREATE_DEDUPE_S = 600
+_create_local: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+def _request_key(user_id, request) -> str:
+    return str(user_id) if user_id else "anon:" + str(getattr(request.state, "token_hint", "") or "")
+
+
 @router.post("/api/pages/")
 async def create_page(
     body: CreatePageBody,
     request: Request,
     role: str = Depends(require_auth),
 ):
+    return await _create_page(body, request, role)
+
+
+async def _create_page(body: CreatePageBody, request: Request, role: str, parent_id: str | None = None) -> dict:
+    """Create a page, optionally under a parent, in one INSERT. A client
+    request id makes a retried create return the page already made."""
     pool = get_pool()
     if not pool:
         raise HTTPException(503, "Database unavailable")
@@ -690,41 +880,78 @@ async def create_page(
     base_slug = _slugify(body.slug or body.title)
     slug = base_slug
 
+    _check_size(body.content)
     _check_doc_content(body.content_type, body.content)
+    request_id = (body.client_request_id or "").strip()[:100] or None
+    if request_id and len(request_id) < 8:
+        raise HTTPException(422, "client_request_id must be at least 8 characters")
 
     # Before a connection is held: the upload can take a few seconds.
     content, _moved = await externalise_inline_images(body.content)
+    _check_size(content)
+    metadata = {k: v for k, v in (body.metadata or {}).items() if k != "_slim"}
 
     async with pool.acquire() as conn:
-        # Check slug uniqueness, append suffix if taken
-        existing = await conn.fetchval(
-            "SELECT id FROM published_pages WHERE slug = $1", slug
-        )
-        if existing:
-            slug = f"{base_slug}-{_random_suffix()}"
+        dedupe_table = bool(request_id) and await page_tree.perf_ready(conn)
+        key = _request_key(user_id, request)
+        if request_id and not dedupe_table:
+            # Before migration 0006: this process remembers recent ids.
+            now = time.time()
+            for k in [k for k, (t, _) in _create_local.items() if now - t > CREATE_DEDUPE_S]:
+                _create_local.pop(k, None)
+            hit = _create_local.get((key, request_id))
+            if hit:
+                row = await conn.fetchrow("SELECT * FROM published_pages WHERE id = $1", hit[1])
+                if row:
+                    return _page_dict(row)
 
         pw_hash = _hash_password(body.password) if body.is_password_protected and body.password else None
-
         _, expires_at = _parse_expiry(body.expires_at)
+        cols = ("slug, title, content_type, content, metadata, "
+                "is_password_protected, password_hash, created_by, updated_by, expires_at")
+        vals = "$1,$2,$3,$4,$5,$6,$7,$8,$8,$9"
+        args: list[Any] = [slug, body.title, body.content_type, content, json.dumps(metadata),
+                           body.is_password_protected, pw_hash, user_id, expires_at]
+        if parent_id is not None:
+            cols += ", parent_id"
+            vals += ",$10"
+            args.append(parent_id)
 
-        row = await conn.fetchrow(
-            """
-            INSERT INTO published_pages
-                (slug, title, content_type, content, metadata,
-                 is_password_protected, password_hash, created_by, updated_by, expires_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)
-            RETURNING *
-            """,
-            slug,
-            body.title,
-            body.content_type,
-            content,
-            json.dumps(body.metadata or {}),
-            body.is_password_protected,
-            pw_hash,
-            user_id,
-            expires_at,
-        )
+        async with (conn.transaction() if dedupe_table else contextlib.nullcontext()):
+            if dedupe_table:
+                # The claim blocks a concurrent retry until this one commits,
+                # which then finds the page.
+                await conn.execute(
+                    "DELETE FROM page_create_requests WHERE user_key = $1 AND request_id = $2 "
+                    f"AND created_at < NOW() - interval '{CREATE_DEDUPE_S} seconds'",
+                    key, request_id,
+                )
+                claimed = await conn.fetchval(
+                    "INSERT INTO page_create_requests (user_key, request_id) VALUES ($1, $2) "
+                    "ON CONFLICT DO NOTHING RETURNING TRUE",
+                    key, request_id,
+                )
+                if not claimed:
+                    row = await conn.fetchrow(
+                        "SELECT p.* FROM page_create_requests r JOIN published_pages p ON p.id = r.page_id "
+                        "WHERE r.user_key = $1 AND r.request_id = $2",
+                        key, request_id,
+                    )
+                    if row:
+                        return _page_dict(row)
+                    raise HTTPException(409, "This page is still being created. Try again in a moment.")
+            if await conn.fetchval("SELECT id FROM published_pages WHERE slug = $1", slug):
+                args[0] = slug = f"{base_slug}-{_random_suffix()}"
+            row = await conn.fetchrow(
+                f"INSERT INTO published_pages ({cols}) VALUES ({vals}) RETURNING *", *args
+            )
+            if dedupe_table:
+                await conn.execute(
+                    "UPDATE page_create_requests SET page_id = $3 WHERE user_key = $1 AND request_id = $2",
+                    key, request_id, row["id"],
+                )
+        if request_id and not dedupe_table:
+            _create_local[(key, request_id)] = (time.time(), str(row["id"]))
         return _page_dict(row)
 
 
@@ -884,7 +1111,11 @@ async def create_page_preview(body: PreviewBody, role: str = Depends(require_aut
     """
     content = body.content or ""
     if len(content) > MAX_PREVIEW_CHARS:
-        raise HTTPException(413, "This document is too large to preview.")
+        raise HTTPException(
+            413,
+            f"This document is too large to preview here (over {MAX_PREVIEW_CHARS:,} characters). "
+            "Save it and open the published page instead.",
+        )
 
     token = secrets.token_urlsafe(24)
     await _preview_put(token, content)
@@ -1016,11 +1247,32 @@ async def slug_check(slug: str, exclude_id: str | None = None, role: str = Depen
     return {"slug": base, "available": available, "suggestions": suggestions}
 
 
+# The metadata keys the page list shows (folder, description, protection,
+# width, icon). Everything else (a database's schema, a sheet's formatting)
+# stays out of the list; a list item's metadata is marked {"_slim": true} so
+# an update that sends it back merges into the stored metadata instead of
+# replacing it (see update_page).
+LIST_META_KEYS = ("folder", "description", "protect_source", "full_width", "icon")
+LIST_MAX = 1000
+
+
 @router.get("/api/pages/")
 async def list_pages(
     request: Request,
     role: str = Depends(require_auth),
+    limit: int | None = None,
+    offset: int = 0,
+    include_rows: bool = False,
+    full_metadata: bool = False,
 ):
+    """Every page the caller may open, newest first.
+
+    Rows of databases are left out (include_rows=true brings them back), and
+    metadata carries only LIST_META_KEYS (full_metadata=true for all of it).
+    limit/offset page through the list; the default is the whole list, as
+    before. X-Has-More says whether a further page exists. The response has
+    an ETag; If-None-Match gets a 304 when nothing changed.
+    """
     pool = get_pool()
     if not pool:
         raise HTTPException(503, "Database unavailable")
@@ -1028,33 +1280,45 @@ async def list_pages(
     user_id = getattr(request.state, "auth_user_id", None)
     auth_role = getattr(request.state, "auth_role", role) or role
 
+    meta = "p.metadata" if full_metadata else (
+        "jsonb_strip_nulls(jsonb_build_object("
+        + ", ".join(f"'{k}', p.metadata->'{k}'" for k in LIST_META_KEYS)
+        + ")) || '{\"_slim\": true}'::jsonb"
+    )
     async with pool.acquire() as conn:
-        # Trashed pages (migration 0004) are listed only by /api/pages/trash.
-        live = "deleted_at IS NULL" if await page_tree.tree_ready(conn) else "TRUE"
-        if _can_see_all(auth_role):
-            rows = await conn.fetch(
-                f"""
-                SELECT id, slug, title, content_type, is_published, view_count,
-                       created_at, updated_at, published_at, expires_at,
-                       is_password_protected, created_by, metadata
-                FROM published_pages
-                WHERE {live}
-                ORDER BY created_at DESC
-                """
-            )
-        else:
-            rows = await conn.fetch(
-                f"""
-                SELECT id, slug, title, content_type, is_published, view_count,
-                       created_at, updated_at, published_at, expires_at,
-                       is_password_protected, created_by, metadata
-                FROM published_pages
-                WHERE created_by = $1 AND {live}
-                ORDER BY created_at DESC
-                """,
-                user_id,
-            )
-    return [_page_list_dict(r) for r in rows]
+        ready = await page_tree.tree_ready(conn)
+        unpublished = (", " + _unpublished_sql("p")) if await page_tree.perf_ready(conn) else ""
+        where = ["TRUE"]
+        args: list[Any] = []
+        if ready:
+            # Trashed pages (migration 0004) are listed only by /api/pages/trash.
+            where.append("p.deleted_at IS NULL")
+            if not include_rows:
+                where.append(page_tree.not_db_row("p"))
+        if not _can_see_all(auth_role):
+            args.append(user_id)
+            where.append(f"p.created_by = ${len(args)}")
+        page_sql = ""
+        if limit is not None:
+            limit = max(1, min(int(limit), LIST_MAX))
+            args += [limit + 1, max(0, int(offset or 0))]
+            page_sql = f" LIMIT ${len(args) - 1} OFFSET ${len(args)}"
+        rows = await conn.fetch(
+            f"""
+            SELECT p.id, p.slug, p.title, p.content_type, p.is_published, p.view_count,
+                   p.created_at, p.updated_at, p.published_at, p.expires_at,
+                   p.is_password_protected, p.created_by, {meta} AS metadata{unpublished}
+            FROM published_pages p
+            WHERE {' AND '.join(where)}
+            ORDER BY p.created_at DESC, p.id{page_sql}
+            """,
+            *args,
+        )
+    headers = {}
+    if limit is not None:
+        headers["X-Has-More"] = "1" if len(rows) > limit else "0"
+        rows = rows[:limit]
+    return fast_json.json_response(request, [_page_list_dict(r) for r in rows], headers=headers)
 
 
 @router.get("/api/pages/{page_id}")
@@ -1071,14 +1335,90 @@ async def get_page(
     auth_role = getattr(request.state, "auth_role", role) or role
 
     async with pool.acquire() as conn:
+        cols = await page_cols_for(conn)
         row = await conn.fetchrow(
-            "SELECT * FROM published_pages WHERE id = $1", page_id
+            f"SELECT {cols} FROM published_pages WHERE id = $1", page_id
         )
     if not row:
         raise HTTPException(404, "Page not found")
-    if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
+    if not _owns_page(row, user_id, auth_role):
         raise HTTPException(403, "Access denied")
     return _page_dict(row)
+
+
+async def page_cols_for(conn, alias: str = "") -> str:
+    """The columns of a full page response: every column before migration
+    0006, after it every column but the published copy (which would double
+    the payload), plus has_unpublished_changes."""
+    if await page_tree.perf_ready(conn):
+        return _page_cols(await page_tree.tree_ready(conn), True, alias=alias, drafts=True)
+    return f"{alias}.*" if alias else "*"
+
+
+def _page_cols(tree: bool, content: bool = True, alias: str = "", drafts: bool = False) -> str:
+    """Every column a page response carries, so content can be left out (and
+    the published copy is never read for an editor's response)."""
+    a = f"{alias}." if alias else ""
+    cols = ["id", "slug", "title", "content_type", "is_published", "is_password_protected",
+            "created_by", "updated_by", "created_at", "updated_at", "published_at", "expires_at",
+            "view_count", "metadata"]
+    if tree:
+        cols += ["parent_id", "position", "icon", "cover", "deleted_at"]
+    if content:
+        cols.append("content")
+    out = [a + c for c in cols]
+    if drafts:
+        out += [f"{a}published_at_rev", _unpublished_sql(alias)]
+    return ", ".join(out)
+
+
+def _unpublished_sql(alias: str = "") -> str:
+    """has_unpublished_changes: a published page whose working copy differs
+    from what the public sees (draft_changed is kept by a 0006 trigger)."""
+    a = f"{alias}." if alias else ""
+    return f"({a}is_published AND {a}draft_changed) AS has_unpublished_changes"
+
+
+# Columns of the published copy (migration 0006). Never sent to the editor.
+_PUBLISHED_COLS = ("published_content", "published_content_type", "published_title", "draft_changed")
+
+
+def _public_copy(row) -> dict:
+    """The page as the public sees it: the published copy of its title and
+    content when there is one (migration 0006), else the page as stored."""
+    d = dict(row)
+    if d.get("published_content") is not None:
+        d["content"] = d["published_content"]
+        d["content_type"] = d.get("published_content_type") or d["content_type"]
+        d["title"] = d["published_title"] if d.get("published_title") is not None else d["title"]
+    return d
+
+
+def _parse_base(value: str | None) -> datetime | None:
+    if value is None or not str(value).strip():
+        return None
+    try:
+        when = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(422, "base_updated_at is not a valid timestamp")
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+
+
+def _conflict(current: Any) -> HTTPException:
+    """409 for a save made from an out-of-date copy, with what the server
+    holds now (no content: the client fetches the page if it wants it)."""
+    return HTTPException(409, {
+        "code": "conflict",
+        "message": "This page was changed since you opened it. Reload it to see the latest "
+                   "version; your text is still in the editor.",
+        "current": {
+            "id": str(current["id"]),
+            "title": current["title"],
+            "content_type": current["content_type"],
+            "updated_at": _dt(current["updated_at"]),
+            "updated_by": str(current["updated_by"]) if current["updated_by"] else None,
+        },
+    })
 
 
 @router.put("/api/pages/{page_id}")
@@ -1088,33 +1428,46 @@ async def update_page(
     request: Request,
     role: str = Depends(require_auth),
 ):
+    """Save a page. The stored content is never read back to the API: the
+    row is loaded without it, and the version snapshot and the write happen
+    in one statement (snapshot_update_sql). The response echoes the content
+    that was saved."""
     pool = get_pool()
     if not pool:
         raise HTTPException(503, "Database unavailable")
 
     user_id = getattr(request.state, "auth_user_id", None)
     auth_role = getattr(request.state, "auth_role", role) or role
+    _check_size(body.content)
+    base_at = _parse_base(body.base_updated_at)
 
     # Before a connection is held: the upload can take a few seconds.
     new_content = body.content
     if new_content is not None:
         new_content, _moved = await externalise_inline_images(new_content)
+        _check_size(new_content)
 
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM published_pages WHERE id = $1", page_id
-        )
+        tree = await page_tree.tree_ready(conn)
+        drafts = await page_tree.perf_ready(conn)
+        slim = f"SELECT {_page_cols(tree, content=False)} FROM published_pages WHERE id = $1"
+        row = await conn.fetchrow(slim, page_id)
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _owns_page(row, user_id, auth_role):
             raise HTTPException(403, "Access denied")
+        if page_tree.is_trashed(row):
+            raise HTTPException(409, TRASHED_DETAIL)
+        if base_at is not None and row["updated_at"] != base_at:
+            raise _conflict(row)
 
         # Checked against the type the page will have after this update.
-        if body.content_type is not None or new_content is not None:
-            _check_doc_content(
-                body.content_type if body.content_type is not None else row["content_type"],
-                new_content if new_content is not None else row["content"],
-            )
+        new_type = body.content_type if body.content_type is not None else row["content_type"]
+        if new_content is not None:
+            _check_doc_content(new_type, new_content)
+        elif body.content_type is not None and body.content_type != row["content_type"]:
+            _check_doc_content(new_type, await conn.fetchval(
+                "SELECT content FROM published_pages WHERE id = $1", page_id))
 
         # A live editing room owns a block document's content: refused (409)
         # while editors are connected, otherwise saved and closed first.
@@ -1125,10 +1478,9 @@ async def update_page(
             except collab.Busy as exc:
                 raise HTTPException(409, str(exc))
             if live_note:
-                row = await conn.fetchrow("SELECT * FROM published_pages WHERE id = $1", page_id)
-
-        # Snapshot the current state as a version BEFORE applying this update
-        await _snapshot_version(conn, page_id, row, user_id, note=body.version_note or live_note)
+                row = await conn.fetchrow(slim, page_id)
+                if base_at is not None and row and row["updated_at"] != base_at:
+                    raise _conflict(row)
 
         # Build update fields
         updates: dict[str, Any] = {"updated_at": datetime.now(timezone.utc), "updated_by": user_id}
@@ -1139,12 +1491,17 @@ async def update_page(
         if new_content is not None:
             updates["content"] = new_content
         if body.metadata is not None:
+            old_meta = _meta(row["metadata"])
+            new_meta = dict(body.metadata)
+            if new_meta.pop("_slim", None):
+                # Sent back from a page-list item, which carries only the
+                # list's keys: the rest of the stored metadata is kept.
+                kept = {k: v for k, v in old_meta.items() if k not in LIST_META_KEYS}
+                new_meta = {**kept, **new_meta}
             # A database's schema and a row's property values are written by
             # routers/databases.py; an editor saving its copy of the metadata
             # must not roll them back.
-            old_meta = _meta(row["metadata"])
-            new_meta = dict(body.metadata)
-            for owned in ("database", "props", "db_row"):
+            for owned in ("database", "props", "db_row", "imports"):
                 if owned in old_meta:
                     new_meta[owned] = old_meta[owned]
             updates["metadata"] = json.dumps(new_meta)
@@ -1168,15 +1525,59 @@ async def update_page(
                 new_slug = f"{new_slug}-{_random_suffix()}"
             updates["slug"] = new_slug
 
-        # Build dynamic SET clause
-        set_parts = [f"{k} = ${i+1}" for i, k in enumerate(updates.keys())]
         values = list(updates.values())
-        values.append(page_id)
-        query = f"UPDATE published_pages SET {', '.join(set_parts)} WHERE id = ${len(values)} RETURNING *"
-        updated = await conn.fetchrow(query, *values)
+        n = len(values)
+        set_sql = ", ".join(f"{k} = ${i + 1}{'::jsonb' if k == 'metadata' else ''}" for i, k in enumerate(updates))
+        note = body.version_note or live_note
+        guard = f"(${n + 4}::timestamptz IS NULL OR p.updated_at = ${n + 4}::timestamptz)"
+        if tree:
+            guard += " AND p.deleted_at IS NULL"
+        sql = "WITH " + snapshot_update_sql(
+            set_sql, page=f"${n + 1}", now="$1", user="$2", force=f"${n + 2}", note=f"${n + 3}",
+            guard=guard, returning=_page_cols(tree, content=new_content is None, alias="p", drafts=drafts),
+            writer_rule=True,
+        ) + " SELECT * FROM upd"
+        updated = await conn.fetchrow(
+            sql, *values, page_id, bool(note), (note or "")[:200] or None, base_at,
+        )
         if not updated:
-            raise HTTPException(404, "Page not found or was deleted")
-    return _page_dict(updated)
+            current = await conn.fetchrow(slim, page_id)
+            if not current:
+                raise HTTPException(404, "Page not found or was deleted")
+            if page_tree.is_trashed(current):
+                raise HTTPException(409, TRASHED_DETAIL)
+            raise _conflict(current)
+    out = _page_dict(updated)
+    if new_content is not None:
+        out["content"] = new_content
+    if tree and updated["parent_id"] is not None:
+        await _invalidate_public_rows(updated["parent_id"])
+    return out
+
+
+async def _invalidate_public_rows(db_id) -> None:
+    from .databases import invalidate_public_rows  # databases imports this module
+    await invalidate_public_rows(db_id)
+
+
+async def _trash_subtree(conn, page_id: str, user_id, auth_role: str) -> list:
+    """Move a page and everything under it that the caller owns to the trash,
+    stamped with one moment so a restore brings back exactly that set. Live
+    editing rooms on those pages are saved and closed first (close code
+    4410). Returns the ids trashed."""
+    now = datetime.now(timezone.utc)
+    ids = [r["id"] for r in await page_tree.descendants(conn, page_id)
+           if r["deleted_at"] is None and _owns_page(r, user_id, auth_role)]
+    if not ids:
+        return []
+    try:
+        await collab.close_pages([str(i) for i in ids])
+    except Exception as exc:
+        logger.warning("pages: closing live rooms before trash failed: %s", exc)
+    await conn.execute(
+        "UPDATE published_pages SET deleted_at = $1 WHERE id = ANY($2::uuid[])", now, ids
+    )
+    return ids
 
 
 @router.delete("/api/pages/{page_id}")
@@ -1193,12 +1594,32 @@ async def delete_page(
     auth_role = getattr(request.state, "auth_role", role) or role
 
     async with pool.acquire() as conn:
+        if await page_tree.tree_ready(conn):
+            # The page and its sub-pages (a database's rows included) go to
+            # the trash, as from the sidebar: restorable, and nothing left
+            # behind as an orphan. Deleting for good is the trash's job
+            # (DELETE /api/pages/{id}/forever).
+            row = await conn.fetchrow(
+                "SELECT id, created_by, deleted_at FROM published_pages WHERE id = $1", page_id
+            )
+            if not row:
+                raise HTTPException(404, "Page not found")
+            if not _owns_page(row, user_id, auth_role):
+                raise HTTPException(403, "Access denied")
+            if page_tree.is_trashed(row):
+                return {"ok": True, "trashed": []}
+            ids = await _trash_subtree(conn, page_id, user_id, auth_role)
+            if row and ids:
+                parent = await conn.fetchval("SELECT parent_id FROM published_pages WHERE id = $1", page_id)
+                if parent:
+                    await _invalidate_public_rows(parent)
+            return {"ok": True, "trashed": [str(i) for i in ids]}
         row = await conn.fetchrow(
             "SELECT id, created_by, content FROM published_pages WHERE id = $1", page_id
         )
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _owns_page(row, user_id, auth_role):
             raise HTTPException(403, "Access denied")
         await conn.execute("DELETE FROM published_pages WHERE id = $1", page_id)
     # Best-effort: remove the page's uploaded attachments from HF storage
@@ -1231,7 +1652,7 @@ async def delete_page_view(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
 
         result = await conn.execute(
@@ -1262,20 +1683,33 @@ async def publish_page(
     auth_role = getattr(request.state, "auth_role", role) or role
 
     async with pool.acquire() as conn:
+        tree = await page_tree.tree_ready(conn)
+        drafts = await page_tree.perf_ready(conn)
+        extra = ", deleted_at, parent_id" if tree else ""
         row = await conn.fetchrow(
-            "SELECT id, created_by FROM published_pages WHERE id = $1", page_id
+            f"SELECT id, created_by{extra} FROM published_pages WHERE id = $1", page_id
         )
         if not row:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
+        if not _owns_page(row, user_id, auth_role):
             raise HTTPException(403, "Access denied")
+        if page_tree.is_trashed(row):
+            raise HTTPException(409, TRASHED_DETAIL)
 
+        # Publishing copies the working copy to what the public sees; until
+        # the next publish, autosaves and live edits stay a draft.
+        snapshot = (
+            ", published_content = CASE WHEN $1 THEN content ELSE published_content END"
+            ", published_content_type = CASE WHEN $1 THEN content_type ELSE published_content_type END"
+            ", published_title = CASE WHEN $1 THEN title ELSE published_title END"
+            ", published_at_rev = CASE WHEN $1 THEN $2 ELSE published_at_rev END"
+        ) if drafts else ""
         updated = await conn.fetchrow(
-            """
+            f"""
             UPDATE published_pages
             SET is_published = $1,
                 published_at = CASE WHEN $1 = TRUE AND published_at IS NULL THEN $2 ELSE published_at END,
-                updated_at   = $2
+                updated_at   = $2{snapshot}
             WHERE id = $3
             RETURNING *
             """,
@@ -1283,6 +1717,9 @@ async def publish_page(
             datetime.now(timezone.utc),
             page_id,
         )
+    if page_tree.field(row, "parent_id"):
+        await _invalidate_public_rows(row["parent_id"])
+    await _invalidate_public_rows(page_id)
     return _page_dict(updated)
 
 
@@ -1307,7 +1744,7 @@ async def page_analytics(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
 
         rows = await conn.fetch(
@@ -1378,7 +1815,7 @@ async def page_insights(page_id: PageId, request: Request, role: str = Depends(r
         page = await conn.fetchrow("SELECT id, created_by FROM published_pages WHERE id = $1", page_id)
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
         raw = await conn.fetchval(_INSIGHTS_SQL, page_id)
     data = json.loads(raw) if isinstance(raw, str) else raw
@@ -1411,7 +1848,7 @@ async def list_page_versions(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
 
         rows = await conn.fetch(
@@ -1429,12 +1866,12 @@ async def list_page_versions(
             limit,
         )
 
-    def _ver_list(r):
-        d = dict(r)
-        d["saved_at"] = _dt(d.get("saved_at"))
-        return d
+        items = [dict(r) for r in rows]
+        await _fill_word_counts(conn, items)
 
-    return {"total": len(rows), "items": [_ver_list(r) for r in rows]}
+    for d in items:
+        d["saved_at"] = _dt(d.get("saved_at"))
+    return {"total": len(items), "items": items}
 
 
 @router.get("/api/pages/{page_id}/versions/{version_id}")
@@ -1457,7 +1894,7 @@ async def get_page_version(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
 
         row = await conn.fetchrow(
@@ -1474,6 +1911,9 @@ async def get_page_version(
             raise HTTPException(404, "Version not found")
 
     d = dict(row)
+    d.pop("asset_paths", None)
+    if (d.get("word_count") or 0) < 0:
+        d["word_count"] = _word_count(d.get("content"), d.get("content_type"))
     d["saved_at"] = _dt(d.get("saved_at"))
     if d.get("metadata"):
         d["metadata"] = _meta(d["metadata"])
@@ -1506,9 +1946,11 @@ async def restore_page_version(
         )
         if not page:
             raise HTTPException(404, "Page not found")
-        if not _can_see_all(auth_role) and str(page["created_by"]) != str(user_id):
+        if not _owns_page(page, user_id, auth_role):
             raise HTTPException(403, "Access denied")
 
+        if page_tree.is_trashed(page):
+            raise HTTPException(409, TRASHED_DETAIL)
         ver = await conn.fetchrow(
             "SELECT * FROM page_versions WHERE id = $1 AND page_id = $2",
             version_id, page_id,
@@ -1587,6 +2029,7 @@ async def public_get_page(slug: str, request: Request):
     import json as _json
     _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
 
+    row = _public_copy(row)
     if row["is_password_protected"]:
         return Response(
             content=_json.dumps({"requires_password": True, "title": row["title"], "id": str(row["id"]), "slug": row["slug"]}),
@@ -1594,9 +2037,9 @@ async def public_get_page(slug: str, request: Request):
             headers=_no_cache,
         )
 
-    # Sub-pages and the trail of published parents (empty before migration 0004).
-    family = await page_tree.public_family(pool, row)
-    rows = await _public_database_rows(pool, row)
+    # Sub-pages and the trail of published parents (empty before migration
+    # 0004), and a database's rows: independent, so fetched side by side.
+    family, rows = await asyncio.gather(page_tree.public_family(pool, row), _public_database_rows(pool, row))
     return Response(
         content=_json.dumps({**_public_page_dict(row, with_render_token=_source_protected(row)), **family, **rows}),
         media_type="application/json",
@@ -1643,7 +2086,7 @@ async def public_share_card(slug: str, request: Request):
     if pool:
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
-    f = _share_fields(row)
+    f = _share_fields(_public_copy(row) if row else row)
     origin = _public_origin(request)
     version = int(row["updated_at"].timestamp()) if row and row["updated_at"] else 0
     body = page_share.share_html(
@@ -1662,7 +2105,7 @@ async def public_share_image(slug: str, request: Request):
     if pool:
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
-    f = _share_fields(row)
+    f = _share_fields(_public_copy(row) if row else row)
     host = _public_origin(request).split("://", 1)[-1]
     version = row["updated_at"].timestamp() if row and row["updated_at"] else 0
     key = (slug, version, f["title"], f["description"], f["badge"])
@@ -1679,7 +2122,11 @@ async def public_render_preview(token: str):
     slug route so `preview` is never mistaken for a page slug."""
     content = await _preview_get(token)
     if content is None:
-        raise HTTPException(404, "This preview has expired. Close and reopen the preview.")
+        return notice_page(
+            "Preview expired",
+            "This preview has expired. Close the preview and open it again to see your latest changes.",
+            status=404,
+        )
     return HTMLResponse(
         content=page_render.build_document(content, padded=True, preview=True),
         headers={**page_render.render_headers(), "X-Robots-Tag": "noindex, nofollow"},
@@ -1716,7 +2163,7 @@ async def public_render_page(slug: str, t: str | None = None):
     # set to rather than living on in a cache for up to a minute more.
     cacheable = not (row["is_password_protected"] or protected or row["expires_at"])
     return HTMLResponse(
-        content=page_render.build_document(row["content"] or "", protect=protected),
+        content=page_render.build_document(_public_copy(row)["content"] or "", protect=protected),
         headers=page_render.render_headers(cacheable=cacheable),
     )
 
@@ -1737,6 +2184,7 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
     if _is_expired(row):
         raise HTTPException(410, "Page has expired")
 
+    row = _public_copy(row)
     if not row["is_password_protected"]:
         return _public_page_dict(row, with_render_token=_source_protected(row))
 
@@ -1745,8 +2193,8 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
 
     # The renderer serves the document straight into an iframe and has no way
     # to be told a password, so proof of the password travels as a token.
-    return {**_public_page_dict(row, with_render_token=True), **await page_tree.public_family(pool, row),
-            **await _public_database_rows(pool, row)}
+    family, rows = await asyncio.gather(page_tree.public_family(pool, row), _public_database_rows(pool, row))
+    return {**_public_page_dict(row, with_render_token=True), **family, **rows}
 
 
 async def _public_database_rows(pool, row) -> dict:
@@ -1762,8 +2210,9 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
         return {"ok": True}
 
     async with pool.acquire() as conn:
+        trashed = ", deleted_at" if await page_tree.tree_ready(conn) else ""
         row = await conn.fetchrow(
-            "SELECT * FROM published_pages WHERE slug = $1", slug
+            f"SELECT id, is_published{trashed} FROM published_pages WHERE slug = $1", slug
         )
 
     if not row or not row["is_published"] or page_tree.is_trashed(row):
@@ -1839,6 +2288,32 @@ async def public_page_asset(path: str):
 # Serialisation helpers
 # ---------------------------------------------------------------------------
 
+def notice_page(title: str, message: str, status: int = 404) -> HTMLResponse:
+    """A small self-contained HTML page for an iframe (an expired preview or
+    embed link): a framed document has nowhere to show a JSON error."""
+    from html import escape
+    body = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{escape(title)}</title><style>"
+        "body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#37352f;"
+        "background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh}"
+        "main{max-width:420px;padding:24px;text-align:center}h1{font-size:18px;margin:0 0 8px}"
+        "p{margin:0 0 16px;color:#6b6b6b}button{font:inherit;padding:6px 14px;border-radius:6px;"
+        "border:1px solid #d3d3d0;background:#f7f7f5;cursor:pointer}"
+        "@media (prefers-color-scheme:dark){body{background:#191919;color:#e3e3e1}p{color:#9b9b9b}"
+        "button{background:#2a2a2a;border-color:#3a3a3a;color:inherit}}"
+        "</style></head><body><main>"
+        f"<h1>{escape(title)}</h1><p>{escape(message)}</p>"
+        "<button onclick='location.reload()'>Reload</button>"
+        "</main></body></html>"
+    )
+    return HTMLResponse(body, status_code=status, headers={
+        "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
+    })
+
+
 def _dt(v) -> str | None:
     if v is None:
         return None
@@ -1869,11 +2344,30 @@ def _page_dict(row) -> dict:
     d["expires_at"] = _dt(d.get("expires_at"))
     d["metadata"] = _meta(d.get("metadata"))
     d.pop("password_hash", None)
+    d.pop("asset_paths", None)
+    _drafts_fields(d)
+    if "parent_id" in d and d["parent_id"] is not None:
+        d["parent_id"] = str(d["parent_id"])
+    if isinstance(d.get("deleted_at"), datetime):
+        d["deleted_at"] = d["deleted_at"].isoformat()
     return d
+
+
+def _drafts_fields(d: dict) -> None:
+    """has_unpublished_changes on every page response (False before 0006),
+    published_at_rev as ISO; the published copy itself is left out."""
+    if "has_unpublished_changes" not in d:
+        d["has_unpublished_changes"] = bool(d.get("is_published") and d.get("draft_changed"))
+    d["has_unpublished_changes"] = bool(d["has_unpublished_changes"])
+    for k in _PUBLISHED_COLS:
+        d.pop(k, None)
+    if isinstance(d.get("published_at_rev"), datetime):
+        d["published_at_rev"] = d["published_at_rev"].isoformat()
 
 
 def _page_list_dict(row) -> dict:
     d = dict(row)
+    _drafts_fields(d)
     d["id"] = str(d["id"])
     d["created_by"] = str(d["created_by"]) if d.get("created_by") else None
     d["created_at"] = _dt(d.get("created_at"))

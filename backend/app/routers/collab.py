@@ -122,6 +122,18 @@ async def collab_socket(websocket: WebSocket, page_id: str):
         client.close(collab.CLOSE_FULL, str(exc))
         await client.finish()
         return
+    except collab.TooLarge as exc:
+        # Live editing is for documents of up to max_live_content_chars; a
+        # larger one is edited and saved over REST. The client stops
+        # retrying on 4413 and falls back to that.
+        try:
+            await websocket.send_text(json.dumps({"type": "error", "code": "too_large", "mode": "rest",
+                                                  "limit": limits.max_live_content_chars, "message": str(exc)}))
+        except Exception:
+            pass
+        client.close(collab.CLOSE_TOO_LARGE, "too large for live editing")
+        await client.finish()
+        return
 
     # 3. Relay frames until either side goes.
     try:

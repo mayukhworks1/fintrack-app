@@ -223,34 +223,8 @@ class TestAuthoring:
         out = asyncio.run(P.create_page(P.CreatePageBody(title="x", content_type="markdown", content="{oops"), _req(), role="editor"))
         assert out["content"] == "{oops"
 
-    def test_converting_markdown_saves_a_named_version_first(self, pool):
-        p = pool(_row(content_type="markdown", content="# Q4 plan\n\nShip it."))
-        # A version saved moments ago would normally throttle the snapshot.
-        p.versions.append({"content": "older", "content_type": "markdown", "word_count": 1, "note": None})
-        body = P.UpdatePageBody(content_type="doc", content=DOC_JSON, version_note="Before converting to blocks")
-        out = asyncio.run(P.update_page(str(p.row["id"]), body, _req(), role="editor"))
-        assert out["content_type"] == "doc"
-        assert json.loads(out["content"]) == DOC
-        snap = p.versions[-1]
-        assert snap["content_type"] == "markdown" and snap["content"] == "# Q4 plan\n\nShip it."
-        assert snap["note"] == "Before converting to blocks"
-
-    def test_an_ordinary_autosave_stays_throttled(self, pool):
-        p = pool(_row())
-        p.versions.append({"content": "older", "content_type": "doc", "word_count": 1, "note": None})
-        asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(title="Renamed"), _req(), role="editor"))
-        assert len(p.versions) == 1
-
-    def test_doc_version_word_count_is_the_text(self, pool):
-        p = pool(_row())
-        asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(title="Renamed"), _req(), role="editor"))
-        assert p.versions[-1]["word_count"] == page_doc.word_count(DOC_JSON, "doc")
-
-    def test_switching_a_markdown_page_to_doc_needs_document_content(self, pool):
-        p = pool(_row(content_type="markdown", content="# hi"))
-        with pytest.raises(HTTPException) as e:
-            asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(content_type="doc"), _req(), role="editor"))
-        assert e.value.status_code == 422
+# Saving (version snapshots, conversion to blocks, word counts) is covered
+# against Postgres in tests/test_pages_perf_pg.py::TestUpdatePage.
 
 
 class TestPublic:

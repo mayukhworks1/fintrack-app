@@ -7,7 +7,6 @@ for the REST API's token check. "Clients" are pycrdt documents speaking the
 y-websocket sync protocol, the same frames the browser's provider sends.
 """
 
-import asyncio
 import functools
 import json
 import logging
@@ -21,9 +20,8 @@ from pycrdt import Doc, XmlElement, XmlFragment, XmlText, create_sync_message, c
 from starlette.websockets import WebSocketDisconnect
 
 import app.routers.collab as R
-import app.routers.pages as P
 from app.services import collab as C
-from tests.test_page_doc import DOC, DOC_JSON, FakePool, _req, _row
+from tests.test_page_doc import DOC, DOC_JSON
 
 ALICE = str(uuid.uuid4())
 BOB = str(uuid.uuid4())
@@ -402,6 +400,115 @@ class TestLimits:
         assert wait_for(lambda: pid not in C.get_hub().rooms)
 
 
+class TestSizeAndLifecycle:
+    def test_a_page_over_the_live_cap_is_sent_to_rest_saving(self, env):
+        store, tc = env
+        pid = store.add()
+        C.limits.max_live_content_chars = 50
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": "alice-token"}))
+            msg = ws.receive_json()
+            assert msg["type"] == "error" and msg["code"] == "too_large" and msg["mode"] == "rest"
+            assert msg["limit"] == 50
+            assert close_code(ws) == C.CLOSE_TOO_LARGE
+        assert pid not in C.get_hub().rooms
+
+    def test_the_room_is_seeded_off_the_loop_and_matches_the_page(self, env):
+        store, tc = env
+        pid = store.add()
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            a = Peer(ws).connect()
+            assert C.canonical(a.json()) == C.canonical(C.seed_json(DOC_JSON))
+
+    def test_a_save_over_the_content_cap_keeps_the_edits(self, env):
+        store, tc = env
+        C.limits.persist_debounce_s = 30.0
+        pid = store.add()
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            a = Peer(ws).connect()
+            C.limits.max_content_chars = len(DOC_JSON) + 10
+            a.edit(append_paragraph("z" * 200))
+            time.sleep(0.1)
+            room = C.get_hub().rooms[pid]
+            assert tc.portal.call(room.persist) is False
+            assert room.changed and room.too_large
+            # The editor is told once.
+            a.pump_one()
+            assert any(t.get("code") == "too_large" for t in a.texts)
+        # Not evicted with its edits unsaved...
+        tc.portal.call(C.get_hub()._evict_idle, True)
+        assert pid in C.get_hub().rooms
+        assert store.saves == []
+        # ...and saved once it fits again.
+        C.limits.max_content_chars = 5_000_000
+        assert tc.portal.call(C.get_hub().rooms[pid].persist) is True
+        assert "zzz" in store.pages[pid].content
+
+    def test_unchanged_state_is_not_converted_again(self, env, monkeypatch):
+        store, tc = env
+        C.limits.persist_debounce_s = 30.0
+        pid = store.add()
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            a = Peer(ws).connect()
+            a.edit(append_paragraph("once"))
+            time.sleep(0.1)
+            room = C.get_hub().rooms[pid]
+            assert tc.portal.call(room.persist) is True
+            calls = []
+            monkeypatch.setattr(C, "render_update", lambda u: calls.append(1) or ("", ""))
+            room.changed = True                      # a no-op update arrived
+            assert tc.portal.call(room.persist) is True
+            assert calls == [] and len(store.saves) == 1
+
+    def test_trash_closes_the_room_with_its_own_code(self, env):
+        store, tc = env
+        C.limits.persist_debounce_s = 30.0
+        pid = store.add()
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            a = Peer(ws).connect()
+            a.edit(append_paragraph("last words"))
+            time.sleep(0.1)
+            assert tc.portal.call(C.close_pages, [pid]) == 1
+            assert close_code(ws) == C.CLOSE_TRASHED
+        assert "last words" in store.pages[pid].content
+        assert pid not in C.get_hub().rooms
+
+    def test_shutdown_keeps_trying_and_says_what_was_lost(self, env, caplog):
+        store, tc = env
+        C.limits.persist_debounce_s = 30.0
+        C.limits.shutdown_timeout_s = 1.0
+        pid = store.add()
+        failures = {"n": 0}
+        real = store.save
+
+        async def flaky(page_id, content, *, base, user_id):
+            failures["n"] += 1
+            if failures["n"] < 3:
+                raise ConnectionError("database down")
+            return await real(page_id, content, base=base, user_id=user_id)
+        store.save = flaky
+        with tc.websocket_connect(URL.format(pid)) as ws:
+            a = Peer(ws).connect()
+            a.edit(append_paragraph("survives a blip"))
+            time.sleep(0.1)
+            tc.portal.call(C.get_hub().shutdown)
+        assert failures["n"] == 3 and "survives a blip" in store.pages[pid].content
+
+        pid2 = store.add()
+
+        async def down(page_id, content, *, base, user_id):
+            raise ConnectionError("database down")
+        store.save = down
+        C.limits.shutdown_timeout_s = 0.6
+        with tc.websocket_connect(URL.format(pid2)) as ws:
+            a = Peer(ws).connect()
+            a.edit(append_paragraph("lost"))
+            time.sleep(0.1)
+            with caplog.at_level(logging.ERROR, logger="fintrack.collab"):
+                tc.portal.call(C.get_hub().shutdown)
+        assert any(pid2 in r.getMessage() and "could not be saved" in r.getMessage() for r in caplog.records)
+
+
 class TestRestWrites:
     def test_a_rest_write_is_refused_while_editors_are_connected(self, env):
         store, tc = env
@@ -424,30 +531,9 @@ class TestRestWrites:
             assert close_code(ws) == C.CLOSE_RESET
         assert pid not in C.get_hub().rooms
 
-    def test_update_page_answers_409_while_live(self, monkeypatch):
-        p = FakePool(_row())
-        monkeypatch.setattr(P, "get_pool", lambda: p)
-
-        async def busy(page_id, force=False):
-            raise C.Busy("live")
-        monkeypatch.setattr(P.collab, "before_external_write", busy)
-        with pytest.raises(HTTPException) as e:
-            asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(content=DOC_JSON), _req(), role="editor"))
-        assert e.value.status_code == 409
-        # Title and settings still save while the content is live.
-        out = asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(title="Renamed", content_type="doc"), _req(), role="editor"))
-        assert out["title"] == "Renamed"
-
-    def test_live_edits_are_kept_in_history_before_a_rest_write(self, monkeypatch):
-        p = FakePool(_row())
-        p.versions.append({"content": "older", "content_type": "doc", "word_count": 1, "note": None})  # throttle
-        monkeypatch.setattr(P, "get_pool", lambda: p)
-
-        async def flushed(page_id, force=False):
-            return "Live edits before this change"
-        monkeypatch.setattr(P.collab, "before_external_write", flushed)
-        asyncio.run(P.update_page(str(p.row["id"]), P.UpdatePageBody(content=DOC_JSON), _req(), role="editor"))
-        assert p.versions[-1]["note"] == "Live edits before this change"
+    # update_page against a live room (409 while editors are connected, the
+    # flushed room's edits kept in History) is covered against Postgres in
+    # tests/test_pages_perf_pg.py::TestUpdatePage.
 
 
 class TestWiring:

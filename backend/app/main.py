@@ -350,7 +350,9 @@ class SSEAwareGZipMiddleware(GZipMiddleware):
 # proxy in front of the HF Space to do it. minimum_size keeps tiny responses
 # (health checks, auth verify) uncompressed, where gzip costs more than it saves.
 # Event streams are never compressed (see SSEAwareGZipMiddleware).
-app.add_middleware(SSEAwareGZipMiddleware, minimum_size=1000)
+# compresslevel 5: level 9 (the default) spent ~400 ms of event-loop time on
+# the 8 MB page list for a 0.80 MB body; level 5 takes ~80 ms for ~0.85 MB.
+app.add_middleware(SSEAwareGZipMiddleware, minimum_size=1000, compresslevel=5)
 
 app.add_middleware(
     CORSMiddleware,

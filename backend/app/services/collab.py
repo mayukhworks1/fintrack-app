@@ -68,7 +68,8 @@ CLOSE_FORBIDDEN = 4403
 CLOSE_NOT_FOUND = 4404
 CLOSE_TIMEOUT = 4408
 CLOSE_RESET = 4409          # the page was rewritten outside the room; reconnect
-CLOSE_TOO_LARGE = 4413
+CLOSE_TRASHED = 4410        # the page went to the trash; nothing more to edit
+CLOSE_TOO_LARGE = 4413      # too large for live editing: edit and save over REST
 CLOSE_FULL = 4429
 CLOSE_GOING_AWAY = 1001
 CLOSE_MESSAGE_TOO_BIG = 1009
@@ -78,9 +79,16 @@ CLOSE_MESSAGE_TOO_BIG = 1009
 class Limits:
     max_clients_per_room: int = 16
     max_rooms: int = 200
-    max_message_bytes: int = 1 << 20          # one inbound frame
+    # One inbound frame. A client's first sync step 2 carries its whole copy
+    # of the document, so this follows the live-editing size cap below.
+    max_message_bytes: int = 4 << 20
     max_doc_bytes: int = 8 << 20              # encoded Yjs state of one room
     max_content_chars: int = 5_000_000        # same cap as the REST editor
+    # A page whose stored JSON is longer than this is not opened live: seeding
+    # and saving it costs seconds of CPU per change. The client is told to
+    # edit it over REST (close code 4413, {"type":"error","code":"too_large"}).
+    max_live_content_chars: int = 1_500_000
+    max_total_doc_bytes: int = 512 << 20      # all rooms of this process
     max_awareness_bytes: int = 8 << 10
     persist_debounce_s: float = 3.0
     persist_max_wait_s: float = 20.0
@@ -90,6 +98,8 @@ class Limits:
     reauth_s: float = 300.0
     reap_interval_s: float = 10.0
     send_queue: int = 512
+    shutdown_timeout_s: float = 20.0          # final saves keep retrying this long
+    shutdown_concurrency: int = 8
 
 
 limits = Limits()
@@ -223,6 +233,28 @@ def seed_json(content: str | None) -> dict:
     return {"type": "doc", "content": content_list}
 
 
+def build_seed_update(content: str | None) -> bytes:
+    """The Yjs update a room starts from, built on a private Doc. Runs in a
+    worker thread: seeding a large document is O(n^2) in pycrdt and took
+    seconds of event-loop time for a 4 MB page."""
+    doc = Doc()
+    frag = doc.get(FRAGMENT, type=XmlFragment)
+    json_to_fragment(seed_json(content), frag)
+    return doc.get_update()
+
+
+def render_update(update: bytes) -> tuple[str, str]:
+    """(TipTap JSON, canonical form) of a room's encoded state, read from a
+    private copy so it can run in a worker thread while the room goes on."""
+    doc = Doc()
+    frag = doc.get(FRAGMENT, type=XmlFragment)
+    doc.apply_update(update)
+    doc_json = fragment_to_json(frag)
+    content = dumps(doc_json)
+    page_doc.validate_doc(content)
+    return content, canonical(doc_json)
+
+
 def canonical(content: str | dict | None) -> str:
     """Compare documents by meaning: null attrs and empty attrs/marks dropped,
     keys and marks sorted. Used to skip writes that would change nothing."""
@@ -287,10 +319,19 @@ class PageRecord:
     content_type: str
     created_by: str | None
     trashed: bool = False
+    # Length of the stored content when the record was loaded without it.
+    size: int | None = None
+
+    @property
+    def length(self) -> int:
+        return self.size if self.size is not None else len(self.content or "")
 
 
 class PageStore(Protocol):
-    async def load(self, page_id: str) -> PageRecord | None: ...
+    async def load(self, page_id: str) -> PageRecord | None:
+        """The page's access fields. May leave content out (None, with size
+        set); load_content is then asked when a room is created."""
+        ...
 
     async def save(self, page_id: str, content: str, *, base: str | None, user_id: str | None) -> bool:
         """Write the room's JSON. False when the page is gone or no longer a
@@ -301,6 +342,8 @@ class PageStore(Protocol):
 class PgPageStore:
     """published_pages, through the app's asyncpg pool."""
 
+    # Access fields only: the content (up to 5 MB) is read once, when a room
+    # is created, not on every connect and re-authorisation.
     async def load(self, page_id: str) -> PageRecord | None:
         from ..db.postgres import get_pool
         from . import page_tree
@@ -308,34 +351,74 @@ class PgPageStore:
         pool = get_pool()
         if not pool:
             raise RuntimeError("Database unavailable")
-        row = await pool.fetchrow("SELECT * FROM published_pages WHERE id = $1", page_id)
+        async with pool.acquire() as conn:
+            trashed = "deleted_at IS NOT NULL" if await page_tree.tree_ready(conn) else "FALSE"
+            row = await conn.fetchrow(
+                f"SELECT content_type, created_by, {trashed} AS trashed, length(content) AS size "
+                "FROM published_pages WHERE id = $1",
+                page_id,
+            )
         if not row:
             return None
-        return PageRecord(page_id, row["content"], row["content_type"], str(row["created_by"]) if row["created_by"] else None,
-                          page_tree.is_trashed(row))
+        return PageRecord(page_id, None, row["content_type"],
+                          str(row["created_by"]) if row["created_by"] else None,
+                          bool(row["trashed"]), size=int(row["size"] or 0))
+
+    async def load_content(self, page_id: str) -> str | None:
+        from ..db.postgres import get_pool
+
+        pool = get_pool()
+        if not pool:
+            raise RuntimeError("Database unavailable")
+        return await pool.fetchval("SELECT content FROM published_pages WHERE id = $1", page_id)
 
     async def save(self, page_id: str, content: str, *, base: str | None, user_id: str | None) -> bool:
+        """One statement in the common case: lock the row, check the stored
+        content is still the room's base (by md5, in SQL), snapshot a version
+        if one is due and write. Only when the page was written elsewhere is
+        the stored copy fetched and compared by meaning."""
         from ..db.postgres import get_pool
-        from ..routers.pages import _snapshot_version
+        from ..routers.pages import snapshot_update_sql
         from . import page_tree
 
         pool = get_pool()
         if not pool:
             raise RuntimeError("Database unavailable")
+        now = datetime.now(timezone.utc)
+        md5_base = hashlib.md5((base or "").encode("utf-8")).hexdigest()
+        set_sql = "content = $2, updated_at = $3, updated_by = $4"
         async with pool.acquire() as conn:
+            ready = await page_tree.tree_ready(conn)
+            trashed = "p.deleted_at IS NOT NULL" if ready else "FALSE"
+            row = await conn.fetchrow(
+                f"WITH cur AS (SELECT p.id, p.content_type, {trashed} AS trashed, md5(p.content) = $5 AS same_base "
+                "              FROM published_pages p WHERE p.id = $1 FOR UPDATE), "
+                + snapshot_update_sql(set_sql, guard=f"md5(p.content) = $5 AND p.content_type = 'doc' AND NOT ({trashed})")
+                + " SELECT cur.content_type, cur.trashed, cur.same_base, "
+                "         EXISTS (SELECT 1 FROM upd) AS updated FROM cur",
+                page_id, content, now, user_id, md5_base, False, None,
+            )
+            if not row or row["content_type"] != page_doc.DOC_TYPE or row["trashed"]:
+                return False
+            if row["updated"]:
+                return True
+            # Written elsewhere since the room last saw it (a race the REST
+            # guard should prevent): keep that copy in History first.
             async with conn.transaction():
-                row = await conn.fetchrow("SELECT * FROM published_pages WHERE id = $1 FOR UPDATE", page_id)
-                if not row or row["content_type"] != page_doc.DOC_TYPE or page_tree.is_trashed(row):
+                cur = await conn.fetchrow(
+                    f"SELECT p.content, p.content_type, {trashed} AS trashed FROM published_pages p "
+                    "WHERE p.id = $1 FOR UPDATE", page_id)
+                if not cur or cur["content_type"] != page_doc.DOC_TYPE or cur["trashed"]:
                     return False
-                # Written elsewhere since the room last saw it (a race the REST
-                # guard should prevent): keep that copy in History first.
+                stored = cur["content"] or ""
                 note = None
-                if (row["content"] or "") != (base or "") and canonical(row["content"]) != canonical(base):
-                    note = "Saved before live edits were merged"
-                await _snapshot_version(conn, page_id, row, user_id, note=note)
-                await conn.execute(
-                    "UPDATE published_pages SET content = $1, updated_at = $2, updated_by = $3 WHERE id = $4",
-                    content, datetime.now(timezone.utc), user_id, page_id,
+                if stored != (base or ""):
+                    differs = await asyncio.to_thread(lambda: canonical(stored) != canonical(base))
+                    if differs:
+                        note = "Saved before live edits were merged"
+                await conn.fetchrow(
+                    "WITH " + snapshot_update_sql(set_sql, force="$5", note="$6") + " SELECT 1",
+                    page_id, content, now, user_id, note is not None, note,
                 )
         return True
 
@@ -430,19 +513,32 @@ class RoomFull(Exception):
     pass
 
 
+TOO_LARGE_MESSAGE = "This page is too large for live editing; it is saved as you type instead."
+
+
 class Busy(Exception):
     """A REST write hit a page that is being edited live."""
 
 
+class TooLarge(Exception):
+    """The page is too large to be edited live."""
+
+
 class Room:
-    def __init__(self, record: PageRecord, store: PageStore):
+    def __init__(self, record: PageRecord, store: PageStore, seed_update: bytes | None = None):
         self.page_id = record.page_id
         self.store = store
         self.epoch = uuid.uuid4().hex
         self.doc = Doc()
         self.fragment = self.doc.get(FRAGMENT, type=XmlFragment)
-        json_to_fragment(seed_json(record.content), self.fragment)
+        if seed_update is not None:
+            self.doc.apply_update(seed_update)
+        else:
+            json_to_fragment(seed_json(record.content), self.fragment)
         self.base_content = record.content or ""
+        self._base_canon: str | None = None   # canonical(base_content), worked out once
+        self._saved_state: bytes | None = self.doc.get_state()
+        self.too_large = False                # last save refused for size; edits kept
         self.clients: dict[str, Client] = {}
         self.awareness: dict[int, tuple[int, str]] = {}
         self.changed = False          # edits not yet written to the page
@@ -582,25 +678,62 @@ class Room:
 
     async def persist(self) -> bool:
         """Write the room's document to the page if it changed. True when the
-        page holds the room's content afterwards."""
+        page holds the room's content afterwards.
+
+        The document is encoded on the loop (milliseconds) and turned into
+        JSON in a worker thread from that private copy, so a large page does
+        not hold up every other socket while it saves. Nothing is converted
+        when no update arrived since the last save (the state vector says so).
+        """
         async with self._persist_lock:
             if not self.changed:
                 return True
             if self._timer:
                 self._timer.cancel()
                 self._timer = None
+            state = self.doc.get_state()
+            if self._saved_state is not None and state == self._saved_state:
+                self.changed = False
+                return True
+            update = self.doc.get_update()
             self.changed = False
-            content = self.current_json()
-            if canonical(content) == canonical(self.base_content):
+            try:
+                content, canon = await asyncio.to_thread(render_update, update)
+                if self._base_canon is None:
+                    self._base_canon = await asyncio.to_thread(canonical, self.base_content)
+            except asyncio.CancelledError:
+                self.changed = True     # not saved: the next persist (or shutdown) does it
+                raise
+            except Exception as exc:
+                logger.warning("collab: reading page %s for saving failed: %s", self.page_id, exc)
+                self.changed = True
+                if not self.closed:
+                    self._schedule(5.0)
+                return False
+            if canon == self._base_canon:
+                self._saved_state = state
+                self.too_large = False
                 return True
             if len(content) > limits.max_content_chars:
-                logger.warning("collab: page %s is over the content cap; not saved", self.page_id)
-                self.broadcast(json.dumps({"type": "error", "code": "too_large",
-                                           "message": "This document is too large to save."}))
+                # The edits stay in the room (changed) so nothing is lost: the
+                # room is not evicted while they are unsaved, and the next edit
+                # that brings it back under the cap saves them.
+                self.changed = True
+                if not self.too_large:
+                    self.too_large = True
+                    logger.warning("collab: page %s is over the content cap (%d chars); not saved",
+                                   self.page_id, len(content))
+                    self.broadcast(json.dumps({
+                        "type": "error", "code": "too_large", "limit": limits.max_content_chars,
+                        "message": "This document is too large to save. Remove some content to keep "
+                                   "your changes.",
+                    }))
                 return False
             try:
-                page_doc.validate_doc(content)
                 ok = await self.store.save(self.page_id, content, base=self.base_content, user_id=self.last_editor)
+            except asyncio.CancelledError:
+                self.changed = True
+                raise
             except Exception as exc:
                 logger.warning("collab: saving page %s failed: %s", self.page_id, exc)
                 self.changed = True
@@ -612,6 +745,9 @@ class Room:
                     c.close(CLOSE_NOT_FOUND, "page is no longer a document")
                 return False
             self.base_content = content
+            self._base_canon = canon
+            self._saved_state = state
+            self.too_large = False
             self.broadcast(json.dumps({"type": "saved", "at": datetime.now(timezone.utc).isoformat()}))
             return True
 
@@ -641,15 +777,33 @@ class Hub:
             lock = self._locks[page_id] = asyncio.Lock()
         return lock
 
+    def total_bytes(self) -> int:
+        return sum(r.doc_bytes for r in self.rooms.values())
+
     async def join(self, record: PageRecord, client: Client) -> Room:
         async with self._lock(record.page_id):
             room = self.rooms.get(record.page_id)
             if room is None:
+                if record.length > limits.max_live_content_chars:
+                    raise TooLarge(TOO_LARGE_MESSAGE)
                 if len(self.rooms) >= limits.max_rooms:
                     await self._evict_idle(force_one=True)
                     if len(self.rooms) >= limits.max_rooms:
                         raise RoomFull("server is at its live-editing capacity")
-                room = Room(record, self.store)
+                if record.content is None and hasattr(self.store, "load_content"):
+                    content = await self.store.load_content(record.page_id)
+                    record = PageRecord(record.page_id, content, record.content_type, record.created_by,
+                                        record.trashed)
+                    if record.length > limits.max_live_content_chars:
+                        raise TooLarge(TOO_LARGE_MESSAGE)
+                # Rooms are held in memory: make room for this one, by bytes.
+                while self.rooms and self.total_bytes() + record.length > limits.max_total_doc_bytes:
+                    before = len(self.rooms)
+                    await self._evict_idle(force_one=True)
+                    if len(self.rooms) == before:
+                        raise RoomFull("server is at its live-editing capacity")
+                seed = await asyncio.to_thread(build_seed_update, record.content)
+                room = Room(record, self.store, seed_update=seed)
                 self.rooms[record.page_id] = room
             if len(room.clients) >= limits.max_clients_per_room:
                 raise RoomFull("too many editors on this page")
@@ -660,7 +814,9 @@ class Hub:
     async def leave(self, room: Room, client: Client) -> None:
         room.remove(client)
         if not room.clients:
-            await room.persist()
+            # Shielded: the socket's task may be cancelled as it closes, and
+            # the last editor's changes must still reach the page.
+            await asyncio.shield(room.persist())
 
     async def before_external_write(self, page_id: str, *, force: bool = False) -> str | None:
         """Called before the page's content is written outside the room.
@@ -689,6 +845,28 @@ class Hub:
                 c.close(CLOSE_RESET, "page was rewritten; reconnect")
             self._drop(room)
             return "Live edits before this change" if room.edited else None
+
+    async def close_pages(self, page_ids, code: int = CLOSE_TRASHED,
+                          reason: str = "page moved to the trash") -> int:
+        """Save and close the rooms of these pages (before they go to the
+        trash): editors are told why and do not reconnect into a dead page."""
+        n = 0
+        for pid in {str(p) for p in page_ids}:
+            if pid not in self.rooms:
+                continue
+            async with self._lock(pid):
+                room = self.rooms.get(pid)
+                if room is None:
+                    continue
+                try:
+                    await room.persist()
+                except Exception as exc:
+                    logger.warning("collab: saving page %s before closing failed: %s", pid, exc)
+                for c in list(room.clients.values()):
+                    c.close(code, reason)
+                self._drop(room)
+                n += 1
+        return n
 
     def _drop(self, room: Room) -> None:
         room.close()
@@ -731,16 +909,38 @@ class Hub:
                         return
 
     async def shutdown(self) -> None:
+        """Save every room, several at a time, retrying failed saves until the
+        shutdown window closes. A room whose edits could not be saved is
+        logged as an error with its size, never dropped quietly."""
         if self._reaper:
             self._reaper.cancel()
-        for room in list(self.rooms.values()):
-            try:
-                await asyncio.wait_for(room.persist(), timeout=10)
-            except Exception as exc:
-                logger.warning("collab: final save of page %s failed: %s", room.page_id, exc)
+        deadline = time.monotonic() + limits.shutdown_timeout_s
+        gate = asyncio.Semaphore(max(1, limits.shutdown_concurrency))
+
+        async def final(room: Room) -> None:
+            async with gate:
+                delay = 0.25
+                while True:
+                    left = deadline - time.monotonic()
+                    try:
+                        if left > 0 and await asyncio.wait_for(room.persist(), timeout=left):
+                            break
+                    except Exception as exc:
+                        logger.warning("collab: final save of page %s failed: %s", room.page_id, exc)
+                    if not room.changed:
+                        break
+                    if room.too_large or time.monotonic() + delay >= deadline:
+                        logger.error(
+                            "collab: page %s: live edits could not be saved before shutdown "
+                            "(%d bytes of document state lost)", room.page_id, room.doc_bytes)
+                        break
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 2.0)
             for c in list(room.clients.values()):
                 c.close(CLOSE_GOING_AWAY, "server restarting")
             self._drop(room)
+
+        await asyncio.gather(*(final(r) for r in list(self.rooms.values())), return_exceptions=True)
 
     def stats(self) -> dict:
         return {"rooms": len(self.rooms), "clients": sum(len(r.clients) for r in self.rooms.values())}
@@ -770,3 +970,7 @@ async def before_external_write(page_id: str, *, force: bool = False) -> str | N
 
 async def shutdown() -> None:
     await hub.shutdown()
+
+
+async def close_pages(page_ids, code: int = CLOSE_TRASHED, reason: str = "page moved to the trash") -> int:
+    return await hub.close_pages(page_ids, code, reason)

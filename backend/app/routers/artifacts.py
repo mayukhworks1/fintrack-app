@@ -48,7 +48,7 @@ async def mint_artifact_token(
         )
     if not row:
         raise HTTPException(404, "Page not found")
-    if not P._can_see_all(auth_role) and str(row["created_by"]) != str(user_id):
+    if not P._owns_page(row, user_id, auth_role):
         raise HTTPException(403, "Access denied")
     if not artifact.is_rendered(row["content_type"]):
         raise HTTPException(400, "Only artifacts and web pages can be embedded.")
@@ -61,7 +61,9 @@ async def mint_artifact_token(
 @router.get("/api/public/pages/by-id/{page_id}/render", response_class=HTMLResponse)
 async def render_artifact_by_id(page_id: P.PageId, t: str | None = None):
     if not P._render_token_valid(_scope(page_id), t):
-        raise HTTPException(401, "This embed link has expired. Reload the page.")
+        # Shown inside the embedding iframe: a page, not a JSON error.
+        return P.notice_page("Embed link expired",
+                             "This embed link has expired. Reload the page to show it again.", status=401)
     pool = get_pool()
     if not pool:
         raise HTTPException(503, "Database unavailable")

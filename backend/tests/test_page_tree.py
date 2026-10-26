@@ -1,16 +1,14 @@
 """
 Nested pages: moves, cycles, trash, favourites, ownership and the public family.
 
-The routes are called directly against an in-memory database that answers the
-handful of queries the tree makes (recognised by a distinctive fragment of
-each). The SQL itself is exercised against Postgres by the migration; what is
-pinned here is the behaviour the sidebar and the public viewer rely on.
+The routes are called directly against a real Postgres (tests/pg_harness.py;
+skipped without one). What is pinned here is the behaviour the sidebar and
+the public viewer rely on.
 """
 
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +17,7 @@ from fastapi import HTTPException
 import app.routers.page_tree as R
 import app.routers.pages as P
 import app.services.page_tree as T
+from app.utils.fast_json import body_of
 
 ALICE = str(uuid.uuid4())
 BOB = str(uuid.uuid4())
@@ -28,158 +27,52 @@ def _ids(rows):
     return [str(r["id"]) for r in rows]
 
 
-class FakeDB:
-    def __init__(self, ready=True):
-        self.ready = ready
-        self.pages: dict[str, dict] = {}
-        self.favs: list[tuple[str, str]] = []
-        self._t = 0
+class _Pages:
+    """db.pages[id] -> the row as a dict (ids as strings), read from Postgres."""
 
-    # -- helpers -------------------------------------------------------------
-    def add(self, title, owner=ALICE, parent=None, published=False, **over):
-        self._t += 1
-        pid = str(uuid.uuid4())
-        now = datetime(2026, 10, 1, tzinfo=timezone.utc) + timedelta(minutes=self._t)
-        self.pages[pid] = {
-            "id": pid, "slug": title.lower().replace(" ", "-"), "title": title, "icon": None,
-            "parent_id": parent, "position": float(self._t), "content_type": "markdown",
-            "content": "", "is_published": published, "updated_at": now, "created_at": now,
-            "created_by": owner, "deleted_at": None, "expires_at": None,
-            "is_password_protected": False, "password_hash": None, "published_at": now,
-            "metadata": json.dumps({}), "view_count": 0, "cover": None,
-        }
-        self.pages[pid].update(over)
-        return pid
+    def __init__(self, env):
+        self.env = env
 
-    def _ordered(self, rows):
-        return sorted(rows, key=lambda r: (r["position"] is None, r["position"] or 0, r["created_at"]))
+    def __getitem__(self, pid):
+        rows = self.env.sql("SELECT * FROM published_pages WHERE id = $1", str(pid))
+        if not rows:
+            raise KeyError(pid)
+        d = dict(rows[0])
+        for k in ("id", "parent_id", "created_by", "updated_by"):
+            if d.get(k) is not None:
+                d[k] = str(d[k])
+        return d
 
-    def _scoped(self, rows, args, idx):
-        if len(args) > idx:
-            rows = [r for r in rows if str(r["created_by"]) == str(args[idx])]
-        return rows
+    def __contains__(self, pid):
+        return bool(self.env.sql("SELECT 1 FROM published_pages WHERE id = $1", str(pid)))
 
-    # -- pool / connection protocol -----------------------------------------
-    def acquire(self):
-        return self
 
-    async def __aenter__(self):
-        return self
+class TreeDB:
+    """The tree's tests against Postgres (tests/pg_harness.py)."""
 
-    async def __aexit__(self, *exc):
-        return False
+    def __init__(self, env):
+        self.env = env
+        self.pages = _Pages(env)
+        for uid in (ALICE, BOB):
+            env.sql("INSERT INTO auth_users (id, email, email_normalized, full_name, status) "
+                    "VALUES ($1, $2, $2, 'T', 'active')", uid, f"{uid[:8]}@example.in")
 
-    def transaction(self):
-        return self
+    def add(self, title, owner=ALICE, parent=None, published=False):
+        return self.env.page(owner, title, parent=parent, published=published,
+                             slug=title.lower().replace(" ", "-"))
 
-    async def fetchval(self, sql, *a):
-        if "information_schema.columns" in sql:
-            return self.ready
-        raise AssertionError(f"unexpected fetchval: {sql}")
 
-    async def fetchrow(self, sql, *a):
-        if "UPDATE published_pages SET parent_id = $1::uuid, position = $2" in sql:
-            p = self.pages[a[2]]
-            p["parent_id"], p["position"] = a[0], a[1]
-            return dict(p)
-        if "UPDATE published_pages SET icon" in sql or "UPDATE published_pages SET cover" in sql:
-            p = self.pages[a[-1]]
-            for part, value in zip(sql.split("SET ", 1)[1].split(" WHERE")[0].split(", "), a):
-                p[part.split(" = ")[0]] = value
-            return dict(p)
-        if "WHERE slug = $1" in sql:
-            hit = [p for p in self.pages.values() if p["slug"] == a[0]]
-            return dict(hit[0]) if hit else None
-        if "FROM published_pages WHERE id = $1" in sql:
-            p = self.pages.get(str(a[0]))
-            return dict(p) if p else None
-        raise AssertionError(f"unexpected fetchrow: {sql}")
-
-    async def fetch(self, sql, *a):
-        live = [p for p in self.pages.values() if p["deleted_at"] is None]
-        if "WITH RECURSIVE up" in sql:
-            out, cur, depth = [], self.pages.get(str(a[0])), 0
-            while cur is not None and depth <= T.MAX_DEPTH:
-                out.append({**cur, "depth": depth})
-                cur = self.pages.get(str(cur["parent_id"])) if cur["parent_id"] else None
-                depth += 1
-            return out
-        if "WITH RECURSIVE down" in sql:
-            out, frontier, depth = [], [str(a[0])], 0
-            while frontier and depth <= T.MAX_DEPTH:
-                out += [{**self.pages[i], "depth": depth} for i in frontier]
-                frontier = [p["id"] for p in self.pages.values() if p["parent_id"] in frontier]
-                depth += 1
-            return out
-        if "SELECT page_id FROM page_favourites" in sql:
-            return [{"page_id": p} for u, p in self.favs if u == a[0]]
-        if "FROM page_favourites f JOIN" in sql:
-            rows = [self.pages[p] for u, p in self.favs if u == a[0] and self.pages[p]["deleted_at"] is None]
-            return self._scoped(rows, a, 1)
-        if "parent_id IS NOT DISTINCT FROM" in sql:
-            rows = [p for p in live if p["parent_id"] == a[0] and p["id"] != a[1]]
-            return self._ordered(self._scoped(rows, a, 2))
-        if "LEFT JOIN published_pages pp" in sql:
-            rows = [p for p in self.pages.values() if p["deleted_at"] is not None]
-            rows = self._scoped(rows, a, 0)
-            return [{**p, "parent_deleted_at": (self.pages[p["parent_id"]]["deleted_at"] if p["parent_id"] else None)}
-                    for p in sorted(rows, key=lambda r: r["deleted_at"], reverse=True)]
-        if "WHERE parent_id = $1 AND is_published" in sql:
-            return self._ordered([p for p in live if p["parent_id"] == str(a[0]) and p["is_published"]])
-        if "WHERE p.parent_id = $1" in sql:
-            rows = self._scoped([p for p in live if p["parent_id"] == a[0]], a, 1)
-            return [{**p, "has_children": any(c["parent_id"] == p["id"] for c in live)} for p in self._ordered(rows)]
-        if "view_count" in sql:  # GET /api/pages/
-            rows = live if "deleted_at IS NULL" in sql else list(self.pages.values())
-            return self._scoped(rows, a, 0)
-        if "ORDER BY created_at" in sql and "deleted_at" not in sql:  # flat, pre-migration
-            keep = ("id", "slug", "title", "content_type", "is_published", "updated_at", "created_by")
-            return [{k: p[k] for k in keep} for p in self._scoped(list(self.pages.values()), a, 0)]
-        if "WHERE deleted_at IS NULL" in sql:  # the tree
-            return self._ordered(self._scoped(live, a, 0))
-        raise AssertionError(f"unexpected fetch: {sql}")
-
-    async def execute(self, sql, *a):
-        if "SET deleted_at = $1 WHERE id = ANY" in sql:
-            for i in a[1]:
-                self.pages[str(i)]["deleted_at"] = a[0]
-        elif "SET deleted_at = NULL WHERE id = ANY" in sql:
-            for i in a[0]:
-                self.pages[str(i)]["deleted_at"] = None
-        elif "SET parent_id = NULL WHERE id" in sql:
-            self.pages[a[0]]["parent_id"] = None
-        elif sql.startswith("DELETE FROM published_pages WHERE id = ANY"):
-            for i in a[0]:
-                self.pages.pop(str(i), None)
-            for p in self.pages.values():  # ON DELETE SET NULL
-                if p["parent_id"] not in self.pages:
-                    p["parent_id"] = None
-        elif sql.startswith("INSERT INTO page_favourites"):
-            if (a[0], a[1]) not in self.favs:
-                self.favs.append((a[0], a[1]))
-        elif sql.startswith("DELETE FROM page_favourites"):
-            self.favs = [f for f in self.favs if f != (a[0], a[1])]
-        else:
-            raise AssertionError(f"unexpected execute: {sql}")
-
-    async def executemany(self, sql, rows):
-        assert sql.startswith("UPDATE published_pages SET position")
-        for pos, pid in rows:
-            self.pages[str(pid)]["position"] = pos
+_CURRENT: dict = {}
 
 
 @pytest.fixture
-def db(monkeypatch):
-    T.reset_ready_cache()
-    fake = FakeDB()
-    monkeypatch.setattr(R, "get_pool", lambda: fake)
-    monkeypatch.setattr(P, "get_pool", lambda: fake)
-
-    async def no_assets(content):
+def db(pg, monkeypatch):
+    async def no_assets(paths):
         return None
-    monkeypatch.setattr(R, "_delete_page_assets", no_assets)
-    yield fake
-    T.reset_ready_cache()
+    monkeypatch.setattr(R, "_delete_asset_paths", no_assets)
+    _CURRENT["env"] = pg
+    yield TreeDB(pg)
+    _CURRENT.clear()
 
 
 def req(user=ALICE, role="user"):
@@ -187,7 +80,13 @@ def req(user=ALICE, role="user"):
 
 
 def run(coro):
-    return asyncio.run(coro)
+    env = _CURRENT.get("env")
+    if env is None:
+        return asyncio.run(coro)
+
+    async def go(pool):
+        return await coro
+    return env.run(go)
 
 
 def status_of(coro):
@@ -228,7 +127,7 @@ class TestTree:
         root = db.add("Root")
         kid = db.add("Kid", parent=root)
         db.add("Bob page", owner=BOB)
-        d = run(R.page_tree(req(), role="editor"))
+        d = body_of(run(R.page_tree(req(), role="editor")))
         assert d["ready"] is True
         nodes = {n["id"]: n for n in d["pages"]}
         assert set(nodes) == {root, kid}
@@ -237,12 +136,17 @@ class TestTree:
     def test_superadmin_sees_every_page(self, db):
         db.add("Mine")
         db.add("Bob page", owner=BOB)
-        assert len(run(R.page_tree(req(role="superadmin"), role="editor"))["pages"]) == 2
+        assert len(body_of(run(R.page_tree(req(role="superadmin"), role="editor")))["pages"]) == 2
 
-    def test_before_the_migration_the_tree_is_flat_and_writes_say_why(self, db):
-        db.ready = False
-        a = db.add("A")
-        d = run(R.page_tree(req(), role="editor"))
+    def test_before_the_migration_the_tree_is_flat_and_writes_say_why(self, pg_upto, monkeypatch):
+        env = pg_upto("0003_ai_gateway")
+        monkeypatch.setitem(_CURRENT, "env", env)
+        owner = env.user()
+        # No tree columns before 0004: inserted by hand.
+        a = str(env.sql("INSERT INTO published_pages (slug, title, created_by) VALUES ('a', 'A', $1) RETURNING id",
+                        owner)[0][0])
+        req = lambda: SimpleNamespace(state=SimpleNamespace(auth_user_id=owner, auth_role="user"))  # noqa: E731
+        d = body_of(run(R.page_tree(req(), role="editor")))
         assert d["ready"] is False and d["pages"][0]["parent_id"] is None
         with pytest.raises(HTTPException) as e:
             run(R.trash_page(a, req(), role="editor"))
@@ -298,8 +202,8 @@ class TestTrash:
         keep = db.add("Keep")
         res = run(R.trash_page(a, req(), role="editor"))
         assert set(res["trashed"]) == {a, b}
-        assert _ids(run(P.list_pages(req(), role="editor"))) == [keep]
-        assert [n["id"] for n in run(R.page_tree(req(), role="editor"))["pages"]] == [keep]
+        assert _ids(body_of(run(P.list_pages(req(), role="editor")))) == [keep]
+        assert [n["id"] for n in body_of(run(R.page_tree(req(), role="editor")))["pages"]] == [keep]
         assert [t["id"] for t in run(R.page_trash(req(), role="editor"))] == [a]
 
     def test_restore_brings_the_subtree_back(self, db):
@@ -367,7 +271,7 @@ class TestFavourites:
         run(R.add_favourite(a, req(), role="editor"))
         run(R.add_favourite(a, req(), role="editor"))  # idempotent
         assert [f["id"] for f in run(R.page_favourites(req(), role="editor"))] == [a]
-        assert run(R.page_tree(req(), role="editor"))["favourites"] == [a]
+        assert body_of(run(R.page_tree(req(), role="editor")))["favourites"] == [a]
         run(R.remove_favourite(a, req(), role="editor"))
         assert run(R.page_favourites(req(), role="editor")) == []
 
@@ -380,7 +284,7 @@ class TestFavourites:
         run(R.add_favourite(a, req(), role="editor"))
         run(R.trash_page(a, req(), role="editor"))
         assert run(R.page_favourites(req(), role="editor")) == []
-        assert run(R.page_tree(req(), role="editor"))["favourites"] == []
+        assert body_of(run(R.page_tree(req(), role="editor")))["favourites"] == []
 
 
 class TestAppearance:

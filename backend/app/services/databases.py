@@ -779,8 +779,12 @@ def build_rows_query(
     offset: int = 0,
     owner: str | None = None,
     search: str | None = None,
+    with_total: bool = True,
+    max_limit: int = MAX_PAGE,
 ) -> tuple[str, list[Any]]:
-    """SELECT for a page of rows, with the total in every row.
+    """SELECT for a page of rows, with the total in every row (with_total).
+    An export or the public view reads one bounded page without the total
+    (max_limit above MAX_PAGE), in one statement.
 
     flt and sort must already be normalised against the schema (so every
     property id and operator is known). Client values only ever travel as
@@ -796,10 +800,11 @@ def build_rows_query(
     if search:
         where.append(f"p.title ILIKE {params.add(_like(search[:200], 'contains'), 'text')} ESCAPE '\\'")
     order = _sort_sql(sort or [], props, params) + ["p.position ASC NULLS LAST", "p.created_at ASC", "p.id ASC"]
-    limit = max(1, min(int(limit), MAX_PAGE))
+    limit = max(1, min(int(limit), max_limit))
     offset = max(0, int(offset))
+    total = ", COUNT(*) OVER () AS total_count" if with_total else ""
     sql = (
-        f"SELECT {ROW_COLS}, COUNT(*) OVER () AS total_count "
+        f"SELECT {ROW_COLS}{total} "
         "FROM published_pages p "
         f"WHERE {' AND '.join(where)} "
         f"ORDER BY {', '.join(order)} "

@@ -183,3 +183,18 @@ async def delete_path(path_in_repo: str) -> None:
         logger.info("storage: deleted %s/%s", repo, path_in_repo)
     except Exception as exc:
         logger.warning("storage: delete failed for %s: %s", path_in_repo, exc)
+
+
+async def file_exists(path_in_repo: str) -> bool:
+    """Whether the dataset holds this file. Raises when storage cannot say
+    (callers treat that as "not there")."""
+    if not settings.hf_token:
+        return False
+    api = _hf_api()
+    repo = _repo_id()
+
+    def _sync() -> bool:
+        return bool(api.file_exists(repo_id=repo, filename=path_in_repo, repo_type="dataset"))
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _sync)

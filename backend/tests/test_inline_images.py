@@ -76,6 +76,36 @@ class TestExternalise:
         assert asyncio.run(P.externalise_inline_images(html)) == (html, 0)
 
 
+class TestContentAddressed:
+    def test_the_same_image_always_gets_the_same_path(self, uploads):
+        html = f'<img src="data:image/png;base64,{PNG}">'
+        out1, _ = asyncio.run(P.externalise_inline_images(html))
+        out2, _ = asyncio.run(P.externalise_inline_images(html))
+        assert out1 == out2 and "/pages/inline/" in out1
+        import hashlib
+        digest = hashlib.sha1(base64.b64decode(PNG)).hexdigest()
+        assert f"pages/inline/{digest[:2]}/{digest}.png" in out1
+
+    def test_an_image_already_stored_is_not_uploaded_again(self, uploads, monkeypatch):
+        stored = set()
+
+        async def exists(path):
+            return path in stored
+        monkeypatch.setattr(S, "file_exists", exists)
+        html = f'<img src="data:image/png;base64,{PNG}"><img src="data:image/jpeg;base64,{JPG}">'
+        asyncio.run(P.externalise_inline_images(html))
+        stored.update(p for _, p, _ in uploads[0])
+        out, moved = asyncio.run(P.externalise_inline_images(html))
+        assert len(uploads) == 1 and moved == 2 and "base64" not in out
+
+    def test_a_failed_existence_check_uploads_anyway(self, uploads, monkeypatch):
+        async def broken(path):
+            raise RuntimeError("hub down")
+        monkeypatch.setattr(S, "file_exists", broken)
+        out, moved = asyncio.run(P.externalise_inline_images(f'<img src="data:image/png;base64,{PNG}">'))
+        assert moved == 1 and len(uploads) == 1
+
+
 class TestSweep:
     def _pool(self, rows, update_status):
         class Pool:
