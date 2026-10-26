@@ -37,6 +37,8 @@ from ..services.page_ai import generate_page, analyze_prompt_needs, stream_gener
 from ..services import page_render
 from ..services import page_share
 from ..services import page_doc
+from ..services import artifact
+from ..services import page_tree
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 from .ai import _ai_quota
@@ -1026,24 +1028,27 @@ async def list_pages(
     auth_role = getattr(request.state, "auth_role", role) or role
 
     async with pool.acquire() as conn:
+        # Trashed pages (migration 0004) are listed only by /api/pages/trash.
+        live = "deleted_at IS NULL" if await page_tree.tree_ready(conn) else "TRUE"
         if _can_see_all(auth_role):
             rows = await conn.fetch(
-                """
+                f"""
                 SELECT id, slug, title, content_type, is_published, view_count,
                        created_at, updated_at, published_at, expires_at,
                        is_password_protected, created_by, metadata
                 FROM published_pages
+                WHERE {live}
                 ORDER BY created_at DESC
                 """
             )
         else:
             rows = await conn.fetch(
-                """
+                f"""
                 SELECT id, slug, title, content_type, is_published, view_count,
                        created_at, updated_at, published_at, expires_at,
                        is_password_protected, created_by, metadata
                 FROM published_pages
-                WHERE created_by = $1
+                WHERE created_by = $1 AND {live}
                 ORDER BY created_at DESC
                 """,
                 user_id,
@@ -1550,9 +1555,7 @@ async def public_get_page(slug: str, request: Request):
             "SELECT * FROM published_pages WHERE slug = $1", slug
         )
 
-    if not row:
-        raise HTTPException(404, "Page not found")
-    if not row["is_published"]:
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
         raise HTTPException(404, "Page not found")
     if _is_expired(row):
         raise HTTPException(410, "Page has expired")
@@ -1567,8 +1570,10 @@ async def public_get_page(slug: str, request: Request):
             headers=_no_cache,
         )
 
+    # Sub-pages and the trail of published parents (empty before migration 0004).
+    family = await page_tree.public_family(pool, row)
     return Response(
-        content=_json.dumps(_public_page_dict(row, with_render_token=_source_protected(row))),
+        content=_json.dumps({**_public_page_dict(row, with_render_token=_source_protected(row)), **family}),
         media_type="application/json",
         headers=_no_cache,
     )
@@ -1587,7 +1592,7 @@ def _public_origin(request: Request) -> str:
 def _share_fields(row) -> dict:
     """What a link preview may say about a page. A protected or expired page
     gives away no more than its own password or expiry screen already does."""
-    if not row or not row["is_published"]:
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
         return {"title": "Page not found", "description": "", "badge": ""}
     if _is_expired(row):
         return {"title": "This link has expired", "description": "Ask the person who shared it for a new link.", "badge": ""}
@@ -1599,6 +1604,9 @@ def _share_fields(row) -> dict:
         # A block document with no written description is previewed by its
         # opening text.
         description = page_doc.doc_excerpt(row["content"])
+    if not description and row["content_type"] == artifact.CONTENT_TYPE:
+        # An artifact rarely gets a description typed in; its own document has one.
+        description = artifact.describe(row["content"])
     return {"title": row["title"] or "Untitled page", "description": description, "badge": ""}
 
 
@@ -1671,7 +1679,7 @@ async def public_render_page(slug: str, t: str | None = None):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
 
-    if not row or not row["is_published"]:
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
         raise HTTPException(404, "Page not found")
     if _is_expired(row):
         raise HTTPException(410, "Page has expired")
@@ -1699,7 +1707,7 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
             "SELECT * FROM published_pages WHERE slug = $1", slug
         )
 
-    if not row or not row["is_published"]:
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
         raise HTTPException(404, "Page not found")
     if _is_expired(row):
         raise HTTPException(410, "Page has expired")
@@ -1712,7 +1720,7 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
 
     # The renderer serves the document straight into an iframe and has no way
     # to be told a password, so proof of the password travels as a token.
-    return _public_page_dict(row, with_render_token=True)
+    return {**_public_page_dict(row, with_render_token=True), **await page_tree.public_family(pool, row)}
 
 
 @router.post("/api/public/pages/{slug}/view")
@@ -1723,10 +1731,10 @@ async def public_log_view(slug: str, body: LogViewBody, request: Request):
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, is_published FROM published_pages WHERE slug = $1", slug
+            "SELECT * FROM published_pages WHERE slug = $1", slug
         )
 
-    if not row or not row["is_published"]:
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
         return {"ok": True}
 
     ip = client_ip(request)
@@ -1860,9 +1868,9 @@ def _public_page_dict(row, with_render_token: bool = False) -> dict:
         "slug": row["slug"],
         "title": row["title"],
         "content_type": row["content_type"],
-        # A protected web page is shown only through its render URL, so its
-        # source is not handed out here as well.
-        "content": "" if protected and row["content_type"] == "html" else row["content"],
+        # A protected web page or artifact is shown only through its render
+        # URL, so its source is not handed out here as well.
+        "content": "" if protected and artifact.is_rendered(row["content_type"]) else row["content"],
         "published_at": _dt(row["published_at"]),
         "expires_at": _dt(row["expires_at"]),
         "metadata": meta,

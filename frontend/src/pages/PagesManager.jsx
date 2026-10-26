@@ -12,12 +12,13 @@ import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { csvCell } from '../utils/csv'
 import { downloadBlob } from '../utils/download'
 import AgentInterviewCard from '../components/AgentInterviewCard'
+import ArtifactStudio from '../components/artifacts/ArtifactStudio'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
-  MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks,
+  MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks, Puzzle,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
@@ -30,6 +31,8 @@ import { parseDoc, serializeDoc, docWordCount, docTemplates, markdownToDoc, plai
 // so they load only when a block document is actually opened.
 const BlockEditor = lazy(() => import('../components/blocks/BlockEditor'))
 const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
+import PageTreeShell from '../components/pagetree/PageTreeShell'
+import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -186,7 +189,7 @@ function HTMLPreview({ content, height = '100%' }) {
 }
 function ContentPreview({ contentType, content, meta }) {
   if (!content) return <div style={{ color:'var(--text-2)', fontSize:13, padding:'20px', textAlign:'center' }}>No content yet.</div>
-  if (contentType === 'html') return <HTMLPreview content={content} />
+  if (contentType === 'html' || contentType === 'artifact') return <HTMLPreview content={content} />
   if (contentType === 'csv') return <CSVPreview text={content} meta={meta} />
   if (contentType === 'text') return <pre style={{ margin:0, padding:12, fontSize:13, whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{content}</pre>
   if (contentType === 'doc') return (
@@ -215,6 +218,7 @@ function slugify(text) {
 function TypeIcon({ type, size = 15 }) {
   const props = { size, strokeWidth: 1.75 }
   if (type === 'html')        return <FileCode2 {...props} />
+  if (type === 'artifact')    return <Puzzle {...props} />
   if (type === 'csv' || type === 'spreadsheet') return <Table2 {...props} />
   if (type === 'text')        return <Type {...props} />
   if (type === 'markdown')    return <Hash {...props} />
@@ -1314,6 +1318,7 @@ const CONTENT_TYPES = [
   { value:'doc',         label:'📝 Document',    hint:'Block editor — type / for commands' },
   { value:'markdown',    label:'#️⃣ Markdown (classic)', hint:'Rich text written as Markdown' },
   { value:'html',        label:'🌐 Web Page',     hint:'HTML / CSS / JS' },
+  { value:'artifact',    label:'🧩 Artifact',     hint:'Interactive mini-app: calculator, form, dashboard' },
   { value:'csv',         label:'📊 Spreadsheet',  hint:'Editable grid / table' },
   { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
 ]
@@ -1925,7 +1930,7 @@ function DocCanvas({ form, set, setContent, isMobile, stats }) {
   )
 }
 
-function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
+function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenPage, onCreateChild }) {
   const confirm = useConfirm()
   const { hasPerm } = useAuth()
   const isMobile = useIsMobile()
@@ -2213,6 +2218,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
     setTab('edit')
     setShowTemplates(false)
   }
+  const isArtifact = form.content_type === 'artifact'
 
   const placeholders = {
     doc: '',
@@ -2343,6 +2349,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         </div>
         )}
 
+        {currentId && <PageBreadcrumbs pageId={currentId} title={form.title} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} />}
+
         {/* Meta fields. On a phone the whole block is behind Settings and gets
             its own scroll, so opening it can never push the editor off screen. */}
         {(!isMobile || showSettings) && (
@@ -2454,7 +2462,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         )}
 
         {/* Templates bar */}
-        {showTemplates && tab !== 'history' && (
+        {showTemplates && tab !== 'history' && !isArtifact && (
           <TemplatePicker contentType={form.content_type} onSelect={t=>{
             setForm(f => ({ ...f, content:t.content, ...(f.content_type === 'csv' ? { sheet:t.sheet } : {}) }))
             setShowTemplates(false)
@@ -2482,7 +2490,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
 
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
-          {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
+          {(isSpreadsheet || isArtifact ? ['edit','history'] : ['edit','preview','history']).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className="app-press"
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
               {t === 'history' ? '🕐 History' : t}
@@ -2494,7 +2502,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
               <Blocks size={13} /> {converting ? 'Converting…' : 'Convert to blocks'}
             </button>
           )}
-          {!showTemplates && tab !== 'history' && (
+          {!showTemplates && tab !== 'history' && !isArtifact && (
             <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:isMarkdown?0:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
           )}
         </div>
@@ -2505,11 +2513,12 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
+              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
             </span>
             <span>
               {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
                 : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
+                : isArtifact ? 'A working mini-app in one HTML file — runs sandboxed, shared like a web page'
                 : isDoc ? 'Type / for blocks, select text to format, drag ⋮⋮ to reorder. Markdown shortcuts work: #, -, 1., [ ], >, ```'
                 : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
                 : 'Plain text / code'}
@@ -2540,6 +2549,15 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
                 onSaved(restoredPage)
               }}
             />
+          ) : isArtifact ? (
+            <ArtifactStudio
+              content={form.content}
+              onChange={setContent}
+              onTitle={t=>setForm(f => f.title.trim() ? f : { ...f, title:t })}
+              pageId={currentId}
+              canUseAi={hasPerm('module.ai.use')}
+              isMobile={isMobile}
+            />
           ) : isSpreadsheet ? (
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
               fileName={form.title || form.slug} />
@@ -2560,6 +2578,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
             </div>
           )}
         </div>
+        {currentId && tab !== 'history' && <SubPagesList pageId={currentId} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} onAdd={onCreateChild && (id=>{ flushAndClose(); onCreateChild(id) })} />}
         </>)}
       </div>
     </div>
@@ -3028,7 +3047,24 @@ export default function PagesManager() {
 
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
 
+  // Sub-pages, from the tree panel or the editor: made on the server under
+  // their parent, then opened like any new page.
+  const handleCreateChild = async (parentId) => {
+    try {
+      const created = await api.pageTree.createChild(parentId, { title:'Untitled' })
+      handleTreeCreated(created)
+    } catch (e) { showToast(e?.message||'Could not add a sub-page', false) }
+  }
+  const handleTreeCreated = (created) => {
+    if (!created?.id) return
+    setPages(prev=>[created, ...prev.filter(p=>p.id!==created.id)])
+    setDrawerPage(created)
+  }
+
   return (
+    <PageTreeShell isMobile={isMobile} refreshKey={pages} currentId={drawerPage?.id}
+      onOpen={openEdit} onNewPage={()=>setDrawerPage({content_type:'markdown'})}
+      onCreated={handleTreeCreated} onChanged={()=>loadPages(true, true)} onToast={showToast}>
     <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1480, margin:'0 auto' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
@@ -3036,9 +3072,14 @@ export default function PagesManager() {
           <h1 style={{ margin:0, fontSize:isMobile?20:26, fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em' }}>Pages</h1>
           {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages — share publicly with full analytics on every view.</p>}
         </div>
-        <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'doc'})}>
-          <Plus size={15} strokeWidth={2.5} /> New Page
-        </button>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'artifact'})}>
+            <Puzzle size={15} strokeWidth={2} /> New artifact
+          </button>
+          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'doc'})}>
+            <Plus size={15} strokeWidth={2.5} /> New Page
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -3129,7 +3170,7 @@ export default function PagesManager() {
           <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
           <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
-            {[{Icon:FileText,label:'Document',type:'doc'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'}].map(b=>(
+            {[{Icon:FileText,label:'Document',type:'doc'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
               <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
                 <b.Icon size={13} strokeWidth={1.75} /> {b.label}
               </button>
@@ -3173,7 +3214,7 @@ export default function PagesManager() {
         </div>
       )}
 
-      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'doc')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} />}
+      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'doc')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
       {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
@@ -3185,6 +3226,7 @@ export default function PagesManager() {
         </div>
       )}
     </div>
+    </PageTreeShell>
   )
 }
 

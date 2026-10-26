@@ -20,7 +20,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from . import ai_gateway as gateway
-from . import page_design, page_edit
+from . import artifact, page_design, page_edit
 from .openrouter import (
     _SSE_DONE,
     _Cascade,
@@ -200,7 +200,14 @@ def _rules_for(content_type: str, brief: str = "", style: str | None = None) -> 
 
 
 def _rules_for_base(content_type: str) -> str:
+    if content_type == artifact.CONTENT_TYPE:
+        return artifact.ARTIFACT_RULES
     return _MARKDOWN_RULES if content_type == "markdown" else _HTML_RULES
+
+
+# Types the page builder writes. An artifact is HTML with a different brief.
+_SUPPORTED_TYPES = ("html", "markdown", artifact.CONTENT_TYPE)
+_UNSUPPORTED_TYPE = "AI generation supports the Web Page and Document types, and Artifacts."
 
 
 # --- asset enrichment & placeholder sanitizer -----------------------------
@@ -436,8 +443,10 @@ def clean_output(raw: str, content_type: str) -> tuple[str, list[str]]:
     if found and min(found) > 0:
         text = text[min(found):]
 
-    # Enrich assets: sanitize placeholder boxes/URLs and ensure real imagery/icons
-    text = enrich_page_assets(text)
+    # Enrich assets: sanitize placeholder boxes/URLs and ensure real imagery/icons.
+    # Not for an artifact: a calculator has no use for a stock photograph.
+    if content_type != artifact.CONTENT_TYPE:
+        text = enrich_page_assets(text)
 
     text, collapsed = repair_layout_collapse(text)
     warnings = find_fragile_patterns(text)
@@ -471,8 +480,8 @@ async def generate_page(
         raise ValueError("A prompt is required.")
     if len(prompt) > MAX_PROMPT_CHARS:
         raise ValueError(f"Prompt is too long (max {MAX_PROMPT_CHARS} characters).")
-    if content_type not in ("html", "markdown"):
-        raise ValueError("AI generation supports the Web Page and Document types.")
+    if content_type not in _SUPPORTED_TYPES:
+        raise ValueError(_UNSUPPORTED_TYPE)
 
     messages = [{"role": "system", "content": _rules_for(content_type, prompt, style)}]
 
@@ -513,7 +522,7 @@ async def generate_page(
     if not content.strip():
         raise ValueError("The model returned an empty document. Try rephrasing the prompt.")
 
-    if content_type == "html":
+    if artifact.is_rendered(content_type):
         # Better to refuse than to hand back markup that publishes as a blank page.
         reason = find_truncation(content)
         if reason:
@@ -605,8 +614,8 @@ async def analyze_prompt_needs(
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("A prompt is required.")
-    if content_type not in ("html", "markdown"):
-        raise ValueError("AI generation supports the Web Page and Document types.")
+    if content_type not in _SUPPORTED_TYPES:
+        raise ValueError(_UNSUPPORTED_TYPE)
 
     # Build few-shot examples into the message list
     messages: list[dict[str, str]] = [
@@ -733,8 +742,8 @@ async def stream_generate_page(
         raise ValueError("A prompt is required.")
     if len(prompt) > MAX_PROMPT_CHARS:
         raise ValueError(f"Prompt is too long (max {MAX_PROMPT_CHARS} characters).")
-    if content_type not in ("html", "markdown"):
-        raise ValueError("AI generation supports the Web Page and Document types.")
+    if content_type not in _SUPPORTED_TYPES:
+        raise ValueError(_UNSUPPORTED_TYPE)
 
     # Build the enriched prompt with clarification context
     user_content = prompt
@@ -756,8 +765,11 @@ async def stream_generate_page(
         )
 
     if revising:
+        edit_rules = page_edit.EDIT_RULES
+        if content_type == artifact.CONTENT_TYPE:
+            edit_rules = f"{edit_rules}\n\n{artifact.REVISION_NOTE}"
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": page_edit.EDIT_RULES},
+            {"role": "system", "content": edit_rules},
             {"role": "user", "content": page_edit.revision_context(base, user_content)},
         ]
     else:
@@ -774,6 +786,7 @@ async def stream_generate_page(
     yield {
         "type": "thought",
         "text": (f"Editing the page: {prompt[:100]}" if revising
+                 else f"Building artifact: {prompt[:100]}" if content_type == artifact.CONTENT_TYPE
                  else f"Designing {content_type} page: {prompt[:100]}"),
         "mode": "edit" if revising else "create",
     }
@@ -884,7 +897,7 @@ async def stream_generate_page(
             cascade.succeeded(spec, started, http_status=status, tokens=usage)
             settled = True
 
-            if content_type == "html":
+            if artifact.is_rendered(content_type):
                 reason = find_truncation(content)
                 if reason:
                     warnings.append(f"Page may be incomplete: {reason}")

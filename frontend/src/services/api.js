@@ -792,6 +792,23 @@ export const api = {
     usage:         ()          => request('/api/studio/usage'),
   },
 
+  // Nested pages: the sidebar tree, trash and favourites (routers/page_tree.py).
+  pageTree: {
+    tree:          ()          => request('/api/pages/tree', { fresh: true }),
+    recent:        ()          => request('/api/pages/recent', { fresh: true }),
+    trash:         ()          => request('/api/pages/trash', { fresh: true }),
+    favourites:    ()          => request('/api/pages/favourites', { fresh: true }),
+    breadcrumbs:   (id)        => request(`/api/pages/${id}/breadcrumbs`, { fresh: true }),
+    children:      (id)        => request(`/api/pages/${id}/children`, { fresh: true }),
+    move:          (id, data)  => request(`/api/pages/${id}/move`, { method: 'POST', body: JSON.stringify(data) }),
+    createChild:   (id, data)  => request(`/api/pages/${id}/children`, { method: 'POST', body: JSON.stringify(data) }),
+    appearance:    (id, data)  => request(`/api/pages/${id}/appearance`, { method: 'PUT', body: JSON.stringify(data) }),
+    trashPage:     (id)        => request(`/api/pages/${id}/trash`, { method: 'POST' }),
+    restore:       (id)        => request(`/api/pages/${id}/restore`, { method: 'POST' }),
+    deleteForever: (id)        => request(`/api/pages/${id}/forever`, { method: 'DELETE' }),
+    favourite:     (id, on)    => request(`/api/pages/${id}/favourite`, { method: on ? 'PUT' : 'DELETE' }),
+  },
+
   pages: {
     list:          (opts={})    => request('/api/pages/', opts),
     create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),
@@ -816,6 +833,8 @@ export const api = {
     // Parks unsaved editor content so the public renderer can serve it. The
     // preview and the published page then come out of the same pipeline.
     preview:       (content)   => request('/api/pages/preview', { method: 'POST', body: JSON.stringify({ content }) }),
+    // Short-lived token that frames an artifact by id (for embedding), even before it is published.
+    artifactToken: (id)        => request(`/api/pages/${id}/artifact-token`, { method: 'POST' }),
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
     deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),

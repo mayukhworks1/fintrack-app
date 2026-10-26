@@ -6,6 +6,8 @@ import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import SheetView from '../components/sheet/SheetView'
 import { docHeadings, docWordCount, docExcerpt } from '../components/blocks'
+import ArtifactFrame from '../components/artifacts/ArtifactFrame'
+import { PublicBreadcrumbs, PublicSubPages } from '../components/pagetree/PublicPageFamily'
 
 // Block documents render through the editor's own schema in read-only mode,
 // loaded only when a page of that type is opened.
@@ -322,6 +324,8 @@ function PageContent({ page, slug }) {
   // Checked before the empty-content guard: a protected web page arrives with
   // its source blanked and is shown only through its render URL.
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
+  // An artifact is a Web Page that keeps its state on the visitor's device.
+  if (content_type === 'artifact') return <ArtifactFrame slug={slug} token={page.render_token} title={page.title} fullBleed />
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
   if (content_type === 'csv') {
     return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
@@ -377,7 +381,7 @@ function FloatingShare() {
 // ---------------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------------
-function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, fullWidth, children }) {
+function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, fullWidth, children, above }) {
   const isDoc = contentType === 'doc'
   const toc = contentType === 'markdown' ? extractTOC(content || '') : isDoc ? docHeadings(content || '') : []
   const showTOC = toc.length >= 3 && !fullWidth
@@ -431,6 +435,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
         <div style={{ flex:1, minWidth:0 }}>
           {title && (
             <header style={{ marginBottom: 36 }}>
+              {above}
               <h1 style={{ margin: 0, fontSize: 'clamp(24px,5vw,40px)', fontWeight: 900, lineHeight: 1.15, color: 'var(--pv-ink)', letterSpacing: '-0.03em' }}>{title}</h1>
               <div style={{ display:'flex', gap:16, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
                 {publishedAt && <span style={{ fontSize: 13, color: 'var(--pv-mute)' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
@@ -474,6 +479,7 @@ export default function PageViewer() {
   useEffect(() => {
     if (!slug) { setState('notfound'); return }
     setState('loading'); setPage(null)
+    viewLogged.current = false  // a sub-page link reuses this component
     api.pages.publicGet(slug)
       .then(data => {
         if (data?.expired) { setState('expired'); return }
@@ -514,7 +520,7 @@ export default function PageViewer() {
   // Code protection for documents and sheets, which render here rather than in
   // the framed document (that one carries its own guard).
   useEffect(() => {
-    if (state !== 'loaded' || !page?.metadata?.protect_source || page.content_type === 'html') return
+    if (state !== 'loaded' || !page?.metadata?.protect_source || page.content_type === 'html' || page.content_type === 'artifact') return
     const menu = (e) => e.preventDefault()
     const keys = (e) => {
       const k = (e.key || '').toLowerCase(), m = e.ctrlKey || e.metaKey
@@ -632,7 +638,7 @@ export default function PageViewer() {
     </>
   )
 
-  const isHtml = page?.content_type === 'html'
+  const isHtml = page?.content_type === 'html' || page?.content_type === 'artifact'
 
   return (
     <>{!isHtml && <style>{PV_THEME}</style>}
@@ -644,8 +650,10 @@ export default function PageViewer() {
       contentType={page?.content_type}
       content={page?.content}
       fullWidth={!!page?.metadata?.full_width}
+      above={<PublicBreadcrumbs page={page} />}
     >
       <PageContent page={page} slug={slug} />
+      {!isHtml && <PublicSubPages page={page} />}
     </ViewerShell>
     </>
   )
