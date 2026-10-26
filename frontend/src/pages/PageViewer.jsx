@@ -1,10 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useParams } from 'react-router-dom'
 import { api, API_BASE_URL } from '../services/api'
 import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import SheetView from '../components/sheet/SheetView'
+import { docHeadings, docWordCount, docExcerpt } from '../components/blocks'
+
+// Block documents render through the editor's own schema in read-only mode,
+// loaded only when a page of that type is opened.
+const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -249,7 +254,7 @@ function TableOfContents({ items }) {
     const obs = new IntersectionObserver(entries => {
       for (const e of entries) { if (e.isIntersecting) setActive(e.target.id) }
     }, { rootMargin:'-20% 0px -60% 0px' })
-    const headings = document.querySelectorAll('.md h1, .md h2, .md h3')
+    const headings = document.querySelectorAll('.md h1, .md h2, .md h3, .ft-blocks .ft-prose > h1, .ft-blocks .ft-prose > h2, .ft-blocks .ft-prose > h3')
     headings.forEach(h => obs.observe(h))
     return () => obs.disconnect()
   }, [items])
@@ -321,6 +326,13 @@ function PageContent({ page, slug }) {
   if (content_type === 'csv') {
     return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
   }
+  if (content_type === 'doc') {
+    return (
+      <Suspense fallback={<div aria-busy="true" style={{ minHeight: 200 }} />}>
+        <BlockViewer content={content} variant="public" protect={!!page.metadata?.protect_source} />
+      </Suspense>
+    )
+  }
   if (content_type === 'text') {
     return (
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14, lineHeight: 1.7, color: 'var(--pv-ink)', background: 'var(--pv-subtle)', border: '1px solid var(--pv-line)', borderRadius: 10, padding: '20px 24px', margin: 0, fontFamily: 'ui-monospace,"SF Mono",Menlo,monospace' }}>
@@ -365,10 +377,11 @@ function FloatingShare() {
 // ---------------------------------------------------------------------------
 // Shell
 // ---------------------------------------------------------------------------
-function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, children }) {
-  const toc = contentType === 'markdown' ? extractTOC(content || '') : []
-  const showTOC = toc.length >= 3
-  const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
+function ViewerShell({ title, publishedAt, description, isHtml, contentType, content, fullWidth, children }) {
+  const isDoc = contentType === 'doc'
+  const toc = contentType === 'markdown' ? extractTOC(content || '') : isDoc ? docHeadings(content || '') : []
+  const showTOC = toc.length >= 3 && !fullWidth
+  const wordCount = isDoc ? docWordCount(content || '') : content ? content.trim().split(/\s+/).filter(Boolean).length : 0
   const readMins = Math.max(1, Math.round(wordCount / 200))
 
   // Title and description go through the shared hook, which restores the
@@ -382,7 +395,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   // no business advertising the tool that published it.
   usePageMeta({
     title: title ? (isHtml ? title : `${title} — FinTrack Pages`) : undefined,
-    description: title ? (description || `${title} — shared via FinTrack Pages`) : undefined,
+    description: title ? (description || (isDoc && docExcerpt(content || '', 160)) || `${title} — shared via FinTrack Pages`) : undefined,
   })
 
   // og:url and og:type are specific to a published page and have no equivalent
@@ -413,7 +426,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   return (
     <div style={{ minHeight: '100vh', background: 'var(--pv-bg)', fontFamily: 'var(--font-sans)', color: 'var(--pv-ink)' }}>
       <ReadingProgress />
-      <div style={{ maxWidth: showTOC ? 1060 : contentType === 'csv' ? 1240 : 820, margin: '0 auto', padding: '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
+      <div style={{ maxWidth: isDoc && fullWidth ? 'none' : showTOC ? 1060 : contentType === 'csv' ? 1240 : isDoc ? 768 : 820, margin: '0 auto', padding: isDoc && fullWidth ? '52px clamp(16px,6vw,96px) 80px' : '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
         {/* Main content */}
         <div style={{ flex:1, minWidth:0 }}>
           {title && (
@@ -421,7 +434,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
               <h1 style={{ margin: 0, fontSize: 'clamp(24px,5vw,40px)', fontWeight: 900, lineHeight: 1.15, color: 'var(--pv-ink)', letterSpacing: '-0.03em' }}>{title}</h1>
               <div style={{ display:'flex', gap:16, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
                 {publishedAt && <span style={{ fontSize: 13, color: 'var(--pv-mute)' }}>Published {new Date(publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
-                {contentType==='markdown' && wordCount>0 && <span style={{ fontSize:13, color:'var(--pv-mute)' }}>{readMins} min read · {wordCount.toLocaleString()} words</span>}
+                {(contentType==='markdown' || isDoc) && wordCount>0 && <span style={{ fontSize:13, color:'var(--pv-mute)' }}>{readMins} min read · {wordCount.toLocaleString()} words</span>}
               </div>
               {description && <p style={{ marginTop: 14, fontSize: 16, color: 'var(--pv-mute)', lineHeight: 1.7 }}>{description}</p>}
               <hr style={{ marginTop: 28, border: 'none', borderTop: '1px solid var(--pv-line)' }} />
@@ -630,6 +643,7 @@ export default function PageViewer() {
       isHtml={isHtml}
       contentType={page?.content_type}
       content={page?.content}
+      fullWidth={!!page?.metadata?.full_width}
     >
       <PageContent page={page} slug={slug} />
     </ViewerShell>
