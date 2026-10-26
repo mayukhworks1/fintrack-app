@@ -12,12 +12,13 @@ import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { csvCell } from '../utils/csv'
 import { downloadBlob } from '../utils/download'
 import AgentInterviewCard from '../components/AgentInterviewCard'
+import ArtifactStudio from '../components/artifacts/ArtifactStudio'
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
-  MoreHorizontal, EyeOff, Check, ArrowUpDown,
+  MoreHorizontal, EyeOff, Check, ArrowUpDown, Puzzle,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
@@ -180,7 +181,7 @@ function HTMLPreview({ content, height = '100%' }) {
 }
 function ContentPreview({ contentType, content, meta }) {
   if (!content) return <div style={{ color:'var(--text-2)', fontSize:13, padding:'20px', textAlign:'center' }}>No content yet.</div>
-  if (contentType === 'html') return <HTMLPreview content={content} />
+  if (contentType === 'html' || contentType === 'artifact') return <HTMLPreview content={content} />
   if (contentType === 'csv') return <CSVPreview text={content} meta={meta} />
   if (contentType === 'text') return <pre style={{ margin:0, padding:12, fontSize:13, whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>{content}</pre>
   return (
@@ -202,6 +203,7 @@ function slugify(text) {
 function TypeIcon({ type, size = 15 }) {
   const props = { size, strokeWidth: 1.75 }
   if (type === 'html')        return <FileCode2 {...props} />
+  if (type === 'artifact')    return <Puzzle {...props} />
   if (type === 'csv' || type === 'spreadsheet') return <Table2 {...props} />
   if (type === 'text')        return <Type {...props} />
   return <FileText {...props} />  // markdown default
@@ -1293,6 +1295,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
 const CONTENT_TYPES = [
   { value:'markdown',    label:'📝 Document',    hint:'Rich text / markdown' },
   { value:'html',        label:'🌐 Web Page',     hint:'HTML / CSS / JS' },
+  { value:'artifact',    label:'🧩 Artifact',     hint:'Interactive mini-app: calculator, form, dashboard' },
   { value:'csv',         label:'📊 Spreadsheet',  hint:'Editable grid / table' },
   { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
 ]
@@ -2090,6 +2093,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
   const isSpreadsheet = form.content_type === 'csv'
   const isHtml = form.content_type === 'html'
   const isMarkdown = form.content_type === 'markdown'
+  const isArtifact = form.content_type === 'artifact'
 
   const placeholders = {
     markdown: '# Start writing…\n\nUse the toolbar above for formatting, or write markdown directly.',
@@ -2324,7 +2328,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         )}
 
         {/* Templates bar */}
-        {showTemplates && tab !== 'history' && (
+        {showTemplates && tab !== 'history' && !isArtifact && (
           <TemplatePicker contentType={form.content_type} onSelect={t=>{
             setForm(f => ({ ...f, content:t.content, ...(f.content_type === 'csv' ? { sheet:t.sheet } : {}) }))
             setShowTemplates(false)
@@ -2352,13 +2356,13 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
 
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
-          {(isSpreadsheet ? ['edit','history'] : ['edit','preview','history']).map(t=>(
+          {(isSpreadsheet || isArtifact ? ['edit','history'] : ['edit','preview','history']).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className="app-press"
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
               {t === 'history' ? '🕐 History' : t}
             </button>
           ))}
-          {!showTemplates && tab !== 'history' && (
+          {!showTemplates && tab !== 'history' && !isArtifact && (
             <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
           )}
         </div>
@@ -2369,11 +2373,12 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
         {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
+              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isMarkdown ? '📝 Document' : '📄 Plain Text'}
             </span>
             <span>
               {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
                 : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
+                : isArtifact ? 'A working mini-app in one HTML file — runs sandboxed, shared like a web page'
                 : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
                 : 'Plain text / code'}
             </span>
@@ -2402,6 +2407,15 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [] }) {
                 setTab('edit')
                 onSaved(restoredPage)
               }}
+            />
+          ) : isArtifact ? (
+            <ArtifactStudio
+              content={form.content}
+              onChange={setContent}
+              onTitle={t=>setForm(f => f.title.trim() ? f : { ...f, title:t })}
+              pageId={currentId}
+              canUseAi={hasPerm('module.ai.use')}
+              isMobile={isMobile}
             />
           ) : isSpreadsheet ? (
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
@@ -2897,9 +2911,14 @@ export default function PagesManager() {
           <h1 style={{ margin:0, fontSize:isMobile?20:26, fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em' }}>Pages</h1>
           {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages — share publicly with full analytics on every view.</p>}
         </div>
-        <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'markdown'})}>
-          <Plus size={15} strokeWidth={2.5} /> New Page
-        </button>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'artifact'})}>
+            <Puzzle size={15} strokeWidth={2} /> New artifact
+          </button>
+          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'markdown'})}>
+            <Plus size={15} strokeWidth={2.5} /> New Page
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -2990,7 +3009,7 @@ export default function PagesManager() {
           <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
           <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
           <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
-            {[{Icon:FileText,label:'Document',type:'markdown'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'}].map(b=>(
+            {[{Icon:FileText,label:'Document',type:'markdown'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
               <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
                 <b.Icon size={13} strokeWidth={1.75} /> {b.label}
               </button>

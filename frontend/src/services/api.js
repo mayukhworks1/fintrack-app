@@ -816,6 +816,8 @@ export const api = {
     // Parks unsaved editor content so the public renderer can serve it. The
     // preview and the published page then come out of the same pipeline.
     preview:       (content)   => request('/api/pages/preview', { method: 'POST', body: JSON.stringify({ content }) }),
+    // Short-lived token that frames an artifact by id (for embedding), even before it is published.
+    artifactToken: (id)        => request(`/api/pages/${id}/artifact-token`, { method: 'POST' }),
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
     deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),

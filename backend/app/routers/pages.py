@@ -36,6 +36,7 @@ from ..utils.client_ip import client_ip
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
 from ..services import page_render
 from ..services import page_share
+from ..services import artifact
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 from .ai import _ai_quota
@@ -1569,7 +1570,11 @@ def _share_fields(row) -> dict:
     meta = _meta(row["metadata"])
     if row["is_password_protected"]:
         return {"title": row["title"] or "Protected page", "description": "Enter the password to view this page.", "badge": "Password protected"}
-    return {"title": row["title"] or "Untitled page", "description": (meta.get("description") or "").strip(), "badge": ""}
+    description = (meta.get("description") or "").strip()
+    if not description and row["content_type"] == artifact.CONTENT_TYPE:
+        # An artifact rarely gets a description typed in; its own document has one.
+        description = artifact.describe(row["content"])
+    return {"title": row["title"] or "Untitled page", "description": description, "badge": ""}
 
 
 @router.get("/api/public/pages/{slug}/share", response_class=HTMLResponse)
@@ -1830,9 +1835,9 @@ def _public_page_dict(row, with_render_token: bool = False) -> dict:
         "slug": row["slug"],
         "title": row["title"],
         "content_type": row["content_type"],
-        # A protected web page is shown only through its render URL, so its
-        # source is not handed out here as well.
-        "content": "" if protected and row["content_type"] == "html" else row["content"],
+        # A protected web page or artifact is shown only through its render
+        # URL, so its source is not handed out here as well.
+        "content": "" if protected and artifact.is_rendered(row["content_type"]) else row["content"],
         "published_at": _dt(row["published_at"]),
         "expires_at": _dt(row["expires_at"]),
         "metadata": meta,

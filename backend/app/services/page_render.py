@@ -165,13 +165,34 @@ VIEWER_PRELUDE = r"""
   // the whole page's behaviour down with it. An in-memory stand-in makes the
   // access succeed. A published page is ephemeral anyway, so losing
   // persistence between visits costs far less than losing the page.
-  function memoryStorage(){
+  //
+  // An artifact framed by the app can keep that state after all: the frame's
+  // name carries what was saved last time ("__ftstore:" + JSON), and every
+  // change is posted back to the frame's parent, which keeps it in its own
+  // storage. Only the parent decides to do this, by naming the frame.
+  var STORE_MARK = '__ftstore:';
+  var seed = null;
+  try {
+    if (typeof window.name === 'string' && window.name.indexOf(STORE_MARK) === 0) {
+      seed = JSON.parse(window.name.slice(STORE_MARK.length)) || {};
+      window.name = '';
+    }
+  } catch (e) { seed = null; }
+  function memoryStorage(initial, onChange){
     var m = Object.create(null);
+    if (initial && typeof initial === 'object') {
+      Object.keys(initial).forEach(function(k){ m[k] = String(initial[k]); });
+    }
+    function changed(){
+      if (!onChange) return;
+      var copy = {}; Object.keys(m).forEach(function(k){ copy[k] = m[k]; });
+      onChange(copy);
+    }
     return {
       getItem: function(k){ k = String(k); return k in m ? m[k] : null; },
-      setItem: function(k, v){ m[String(k)] = String(v); },
-      removeItem: function(k){ delete m[String(k)]; },
-      clear: function(){ m = Object.create(null); },
+      setItem: function(k, v){ m[String(k)] = String(v); changed(); },
+      removeItem: function(k){ delete m[String(k)]; changed(); },
+      clear: function(){ m = Object.create(null); changed(); },
       key: function(i){ var ks = Object.keys(m); return i < ks.length ? ks[i] : null; },
       get length(){ return Object.keys(m).length; }
     };
@@ -181,7 +202,11 @@ VIEWER_PRELUDE = r"""
     try { var s = window[name]; s.setItem('__ft__','1'); s.removeItem('__ft__'); }
     catch (e) { usable = false; }
     if (usable) return;
-    try { Object.defineProperty(window, name, { value: memoryStorage(), configurable: true }); }
+    var persist = name === 'localStorage' && seed
+      ? function(data){ try { parent.postMessage({ type: '__ft_artifact_store', data: data }, '*'); } catch (e) {} }
+      : null;
+    var store = memoryStorage(name === 'localStorage' ? seed : null, persist);
+    try { Object.defineProperty(window, name, { value: store, configurable: true }); }
     catch (e) {}
   });
 

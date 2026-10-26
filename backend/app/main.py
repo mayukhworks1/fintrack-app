@@ -23,6 +23,7 @@ from .routers import status as status_router
 from .routers import shared_views as shared_views_router
 from .routers import storage as storage_router
 from .routers import pages as pages_router
+from .routers import artifacts as artifacts_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
@@ -366,6 +367,7 @@ app.include_router(status_router.router)
 app.include_router(shared_views_router.router)
 app.include_router(storage_router.router)
 app.include_router(pages_router.router)
+app.include_router(artifacts_router.router)
 app.include_router(studio_router.router)
 
 

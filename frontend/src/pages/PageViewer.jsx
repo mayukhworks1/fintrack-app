@@ -5,6 +5,7 @@ import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import SheetView from '../components/sheet/SheetView'
+import ArtifactFrame from '../components/artifacts/ArtifactFrame'
 
 // Page asset/storage URLs are backend-relative (/api/...). The published page
 // is served from a DIFFERENT origin than the backend, so a relative src 404s.
@@ -317,6 +318,8 @@ function PageContent({ page, slug }) {
   // Checked before the empty-content guard: a protected web page arrives with
   // its source blanked and is shown only through its render URL.
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
+  // An artifact is a Web Page that keeps its state on the visitor's device.
+  if (content_type === 'artifact') return <ArtifactFrame slug={slug} token={page.render_token} title={page.title} fullBleed />
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
   if (content_type === 'csv') {
     return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
@@ -501,7 +504,7 @@ export default function PageViewer() {
   // Code protection for documents and sheets, which render here rather than in
   // the framed document (that one carries its own guard).
   useEffect(() => {
-    if (state !== 'loaded' || !page?.metadata?.protect_source || page.content_type === 'html') return
+    if (state !== 'loaded' || !page?.metadata?.protect_source || page.content_type === 'html' || page.content_type === 'artifact') return
     const menu = (e) => e.preventDefault()
     const keys = (e) => {
       const k = (e.key || '').toLowerCase(), m = e.ctrlKey || e.metaKey
@@ -619,7 +622,7 @@ export default function PageViewer() {
     </>
   )
 
-  const isHtml = page?.content_type === 'html'
+  const isHtml = page?.content_type === 'html' || page?.content_type === 'artifact'
 
   return (
     <>{!isHtml && <style>{PV_THEME}</style>}
