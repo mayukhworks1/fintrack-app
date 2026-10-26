@@ -27,6 +27,9 @@ import SheetEditor from '../components/sheet/SheetEditor'
 import { tint } from '../utils/color'
 import PageTreeShell from '../components/pagetree/PageTreeShell'
 import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
+import CommentsToggle from '../components/comments/CommentsToggle'
+import { openCommentsPanel } from '../components/comments/commentsModel'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -2161,6 +2164,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
                 value={form.title}
                 onChange={e=>set('title',e.target.value)}
                 style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, border:'none', outline:'none', background:'transparent', color:'var(--text-1)', padding:'4px 2px' }} />
+              {currentId && <CommentsToggle pageId={currentId} compact />}
               <button onClick={()=>handleSave(true)} disabled={saving}
                 style={{ ...btnPrimary, padding:'8px 13px', flexShrink:0, whiteSpace:'nowrap' }}>
                 {saving ? '…' : isEdit && page?.is_published ? 'Update' : 'Publish'}
@@ -2209,6 +2213,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
           </div>
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
             {error && <span style={{ color:'var(--fin-negative)', fontSize:12 }}>{error}</span>}
+            {currentId && <CommentsToggle pageId={currentId} />}
             <button onClick={()=>setFullscreen(f=>!f)} style={{ ...btnGhost, fontSize:14, padding:'5px 10px' }} title={fullscreen?'Exit fullscreen':'Fullscreen'}>{fullscreen?'⊡':'⊞'}</button>
             <button onClick={flushAndClose} style={btnGhost} disabled={saving}>Close</button>
             <button onClick={()=>handleSave(false)} style={btnSecondary} disabled={saving}>{saving?'Saving…':'Save Draft'}</button>
@@ -2877,6 +2882,19 @@ export default function PagesManager() {
       setOpeningId(null)
     }
   }
+
+  // /pages?page=<id>&comments=1&thread=<id> (from a notification): open that
+  // page, with its comments panel on the thread.
+  const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    const q = new URLSearchParams(location.search)
+    const id = q.get('page')
+    if (!id) return
+    if (q.get('comments')) openCommentsPanel(id, q.get('thread'))
+    if (drawerPage?.id !== id) openEdit({ id })
+    navigate('/pages', { replace:true })
+  }, [location.search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const folderCounts = useMemo(() => {
     const m = new Map()

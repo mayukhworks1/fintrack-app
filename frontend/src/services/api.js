@@ -887,4 +887,22 @@ export const api = {
       method: 'POST', body: JSON.stringify(data), timeout: 120000,
     }, 0),
   },
+
+  // Page comments, @mentions and notifications (routers/comments.py).
+  comments: {
+    list:     (pageId, status = 'all') => request(`/api/pages/${pageId}/comments?status=${status}`, { fresh: true }),
+    create:   (pageId, data)           => request(`/api/pages/${pageId}/comments`, { method: 'POST', body: JSON.stringify(data) }),
+    reply:    (pageId, threadId, data) => request(`/api/pages/${pageId}/comments/${threadId}/replies`, { method: 'POST', body: JSON.stringify(data) }),
+    edit:     (pageId, commentId, body) => request(`/api/pages/${pageId}/comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
+    remove:   (pageId, commentId)      => request(`/api/pages/${pageId}/comments/${commentId}`, { method: 'DELETE' }),
+    resolve:  (pageId, threadId)       => request(`/api/pages/${pageId}/comments/${threadId}/resolve`, { method: 'POST' }),
+    reopen:   (pageId, threadId)       => request(`/api/pages/${pageId}/comments/${threadId}/reopen`, { method: 'POST' }),
+    mentions: (pageId, q = '')         => request(`/api/pages/${pageId}/mentions?q=${encodeURIComponent(q)}`, { fresh: true }),
+  },
+  notifications: {
+    list:        (opts = {}) => request(`/api/notifications?unread=${opts.unread ? 'true' : 'false'}&limit=${opts.limit || 30}`, { fresh: true }),
+    unreadCount: ()          => request('/api/notifications/unread-count', { fresh: true }, 0),
+    markRead:    (id)        => request(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: (pageId)    => request('/api/notifications/read-all', { method: 'POST', body: JSON.stringify(pageId ? { page_id: pageId } : {}) }),
+  },
 }

@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import BrandMark from './BrandMark'
+import NotificationBell from './notifications/NotificationBell'
 
 /* ── New Invoice quick-action button ── */
 function NewQuickAction({ collapsed }) {
@@ -218,6 +219,7 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
 
       {/* Bottom controls */}
       <div className={`runey-sidebar-footer ${collapsed ? 'is-collapsed' : ''}`}>
+        <NotificationBell variant="sidebar" collapsed={collapsed} />
         {/* Theme toggle */}
         <button
           onClick={toggle}
@@ -417,6 +419,8 @@ export default function Layout({ children, style }) {
             </span>
           </Link>
 
+          <div className="flex items-center gap-1">
+          <NotificationBell variant="icon" />
           {/* Hamburger — opens drawer only */}
           <button
             onClick={() => setDrawerOpen(true)}
@@ -428,6 +432,7 @@ export default function Layout({ children, style }) {
           >
             <Menu size={16} aria-hidden="true" />
           </button>
+          </div>
         </header>
 
         <main
