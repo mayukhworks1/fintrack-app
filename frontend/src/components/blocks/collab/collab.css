@@ -1,0 +1,49 @@
+/* Live editing: presence header and remote carets. */
+
+.ft-presence { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+.ft-presence-avatars { display: inline-flex; align-items: center; }
+.ft-presence-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
+  border: 2px solid var(--card-bg, #fff); margin-left: -6px; cursor: default;
+  user-select: none;
+}
+.ft-presence-avatar:first-child { margin-left: 0; }
+.ft-presence-more { background: var(--text-3, #8a8a8a); }
+
+.ft-presence-chip {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font-size: 12px; line-height: 1; padding: 4px 8px; border-radius: 999px;
+  border: 1px solid var(--border, rgba(0,0,0,.12)); color: var(--text-2, #555);
+  background: var(--bg-base, transparent);
+}
+.ft-presence-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.ft-presence-chip.is-live { color: #0f7b6c; border-color: color-mix(in srgb, #0f7b6c 35%, transparent); }
+.ft-presence-chip.is-wait { color: #b26b00; border-color: color-mix(in srgb, #b26b00 35%, transparent); }
+.ft-presence-chip.is-wait .ft-presence-dot { animation: ft-presence-pulse 1.2s ease-in-out infinite; }
+.ft-presence-chip.is-off { color: var(--text-2, #666); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ft-presence-chip.is-live { color: #4dd4b5; }
+  :root:not([data-theme="light"]) .ft-presence-chip.is-wait { color: #f0b04a; }
+}
+:root[data-theme="dark"] .ft-presence-chip.is-live { color: #4dd4b5; }
+:root[data-theme="dark"] .ft-presence-chip.is-wait { color: #f0b04a; }
+@keyframes ft-presence-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .ft-presence-chip.is-wait .ft-presence-dot { animation: none; } }
+
+@media (max-width: 480px) {
+  .ft-presence-chip { padding: 3px 7px; font-size: 11px; }
+}
+
+/* Remote carets (CollaborationCaret's default markup). */
+.ft-blocks .collaboration-carets__caret {
+  position: relative; margin-left: -1px; margin-right: -1px;
+  border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none;
+}
+.ft-blocks .collaboration-carets__label {
+  position: absolute; top: -1.35em; left: -1px; white-space: nowrap; user-select: none; pointer-events: none;
+  font-size: 11px; font-style: normal; font-weight: 600; line-height: normal; color: #fff;
+  padding: 1px 5px; border-radius: 3px 3px 3px 0; font-family: var(--font-sans, system-ui, sans-serif);
+}

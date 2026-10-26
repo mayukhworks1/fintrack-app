@@ -28,6 +28,7 @@ from .routers import pages as pages_router
 from .routers import artifacts as artifacts_router
 from .routers import databases as databases_router
 from .routers import studio as studio_router
+from .routers import collab as collab_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
 from .utils.client_ip import client_ip
@@ -223,6 +224,13 @@ async def lifespan(app: FastAPI):
         except asyncio.TimeoutError:
             logger.warning("Audit queue did not drain within 5 s — some events may be lost")
 
+    # 2. Live document rooms write their last edits while the pool is open.
+    try:
+        from .services import collab as _collab
+        await _collab.shutdown()
+    except Exception as exc:
+        logger.warning("Live editing rooms did not save cleanly at shutdown: %s", exc)
+
     for task in (_sync_task, _audit_task, _aging_refresh_task, _embed_task, _duration_refresh_task, _alert_task):
         if task and not task.done():
             task.cancel()
@@ -376,6 +384,7 @@ app.include_router(pages_router.router)
 app.include_router(artifacts_router.router)
 app.include_router(databases_router.router)
 app.include_router(studio_router.router)
+app.include_router(collab_router.router)
 
 
 # ── Paths to skip audit (cheap probes — no value logging them) ──────────────
@@ -417,6 +426,14 @@ class _AccessLogQueryRedactor(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         args = record.args
+        # uvicorn.error logs WebSocket handshakes as '%s - "WebSocket %s" ...'
+        # with the path and query as the second argument.
+        if (isinstance(args, tuple) and len(args) >= 2 and isinstance(args[1], str)
+                and isinstance(record.msg, str) and '"WebSocket %s"' in record.msg):
+            path, sep, query = args[1].partition("?")
+            if sep and query:
+                record.args = (args[0], f"{path}?{_redact_query(query) or '[REDACTED]'}", *args[2:])
+            return True
         if not (isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str)):
             return True
         path, sep, query = args[2].partition("?")
@@ -438,9 +455,10 @@ _ACCESS_LOG_REDACTOR = _AccessLogQueryRedactor()
 
 def _install_access_log_redaction() -> None:
     """Attach the redactor to uvicorn's access logger (idempotent)."""
-    access_logger = logging.getLogger("uvicorn.access")
-    if _ACCESS_LOG_REDACTOR not in access_logger.filters:
-        access_logger.addFilter(_ACCESS_LOG_REDACTOR)
+    for name in ("uvicorn.access", "uvicorn.error"):
+        access_logger = logging.getLogger(name)
+        if _ACCESS_LOG_REDACTOR not in access_logger.filters:
+            access_logger.addFilter(_ACCESS_LOG_REDACTOR)
 
 
 # Installed at import (uvicorn has already configured its loggers by the time it

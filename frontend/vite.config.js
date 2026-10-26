@@ -29,6 +29,8 @@ export default defineConfig(({ mode }) => {
         target: proxyTarget,
         changeOrigin: true,
         secure: true,
+        // Live document editing (/api/collab/...) is a WebSocket.
+        ws: true,
         // Disable response buffering so SSE streams (/api/status/stream) flow immediately
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {

@@ -159,8 +159,10 @@ function linkAllowed(url, ctx) {
  * @param {Array} [o.commands]  "/" menu entries (defaults to BLOCK_COMMANDS)
  * @param {Array} [o.extra]     further extensions from later features
  * @param {boolean} [o.protect] viewer: hide copy affordances
+ * @param {boolean} [o.history=true] ProseMirror undo; off when live editing
+ *                                   brings Yjs' own undo (only your edits)
  */
-export function createExtensions({ editable = true, uploadImage, commands = BLOCK_COMMANDS, extra = [], protect = false } = {}) {
+export function createExtensions({ editable = true, uploadImage, commands = BLOCK_COMMANDS, extra = [], protect = false, history = true } = {}) {
   const list = [
     StarterKit.configure({
       codeBlock: false,
@@ -174,7 +176,7 @@ export function createExtensions({ editable = true, uploadImage, commands = BLOC
         isAllowedUri: linkAllowed,
         HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer nofollow', class: null },
       },
-      undoRedo: editable ? {} : false,
+      undoRedo: editable && history ? {} : false,
       trailingNode: editable ? {} : false,
     }),
     TaskList,
