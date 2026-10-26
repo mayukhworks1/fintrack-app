@@ -612,3 +612,21 @@ class TestRouter:
         assert meta["props"] == before and meta["description"] == "x"
         run(P.update_page(d["id"], P.UpdatePageBody(metadata={"folder": "f"}), req(), "editor"))
         assert "database" in json.loads(db.pages[d["id"]]["metadata"])
+
+
+def test_database_routes_take_their_id_from_the_path():
+    """Every /{db_id} route must read db_id from the path. A dependency that
+    names its parameter page_id turned into a required query parameter, and
+    every database request answered 422."""
+    from fastapi.dependencies.utils import get_flat_dependant
+    from app.routers import databases as D
+
+    checked = 0
+    for route in D.router.routes:
+        if "{db_id}" not in getattr(route, "path", ""):
+            continue
+        flat = get_flat_dependant(route.dependant)
+        assert not [q.name for q in flat.query_params if q.name in ("page_id", "db_id")], route.path
+        assert "db_id" in [p.name for p in flat.path_params], route.path
+        checked += 1
+    assert checked >= 9

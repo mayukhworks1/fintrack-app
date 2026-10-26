@@ -28,6 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -36,7 +37,15 @@ from ..db.postgres import get_pool
 from ..services import databases as D
 from ..services import page_tree as T
 from .deps import require_auth
-from .pages import PageId, _can_see_all, _random_suffix, _slugify
+from .pages import PageId, _can_see_all, _page_uuid, _random_suffix, _slugify
+
+
+def _db_uuid(db_id: str) -> str:
+    """Path dependency for {db_id}; PageId reads a parameter named page_id."""
+    return _page_uuid(db_id)
+
+
+DbId = Annotated[str, Depends(_db_uuid)]
 
 router = APIRouter()
 
@@ -350,7 +359,7 @@ async def row_context(page_id: PageId, request: Request, role: str = Depends(req
 
 
 @router.get("/api/databases/{db_id}")
-async def get_database(db_id: PageId, request: Request, role: str = Depends(require_auth)):
+async def get_database(db_id: DbId, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         row, schema = await _load_db(conn, db_id, user_id, auth_role)
@@ -358,7 +367,7 @@ async def get_database(db_id: PageId, request: Request, role: str = Depends(requ
 
 
 @router.put("/api/databases/{db_id}/schema")
-async def update_schema(db_id: PageId, body: SchemaBody, request: Request, role: str = Depends(require_auth)):
+async def update_schema(db_id: DbId, body: SchemaBody, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         await _ready(conn)
@@ -413,7 +422,7 @@ async def update_schema(db_id: PageId, body: SchemaBody, request: Request, role:
 
 
 @router.post("/api/databases/{db_id}/query")
-async def query_rows(db_id: PageId, body: QueryBody, request: Request, role: str = Depends(require_auth)):
+async def query_rows(db_id: DbId, body: QueryBody, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         await _ready(conn)
@@ -445,7 +454,7 @@ async def query_rows(db_id: PageId, body: QueryBody, request: Request, role: str
 # ---------------------------------------------------------------------------
 
 @router.post("/api/databases/{db_id}/rows")
-async def create_row(db_id: PageId, body: RowBody, request: Request, role: str = Depends(require_auth)):
+async def create_row(db_id: DbId, body: RowBody, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         await _ready(conn)
@@ -461,7 +470,7 @@ async def create_row(db_id: PageId, body: RowBody, request: Request, role: str =
 
 
 @router.patch("/api/databases/{db_id}/rows/{row_id}")
-async def update_row(db_id: PageId, row_id: str, body: RowPatchBody, request: Request,
+async def update_row(db_id: DbId, row_id: str, body: RowPatchBody, request: Request,
                      role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     row_id = _uuid(row_id)
@@ -477,7 +486,7 @@ async def update_row(db_id: PageId, row_id: str, body: RowPatchBody, request: Re
 
 
 @router.post("/api/databases/{db_id}/rows/bulk")
-async def bulk_update_rows(db_id: PageId, body: BulkBody, request: Request, role: str = Depends(require_auth)):
+async def bulk_update_rows(db_id: DbId, body: BulkBody, request: Request, role: str = Depends(require_auth)):
     """Several rows at once, all or nothing: a card dragged to another column
     changes its group and its place, and its new neighbours may be renumbered."""
     user_id, auth_role = _who(request, role)
@@ -497,7 +506,7 @@ async def bulk_update_rows(db_id: PageId, body: BulkBody, request: Request, role
 
 
 @router.post("/api/databases/{db_id}/rows/delete")
-async def delete_rows(db_id: PageId, body: IdsBody, request: Request, role: str = Depends(require_auth)):
+async def delete_rows(db_id: DbId, body: IdsBody, request: Request, role: str = Depends(require_auth)):
     """Rows go to the trash, like any page, and can be restored from there."""
     user_id, auth_role = _who(request, role)
     ids = list(dict.fromkeys(_uuid(i) for i in body.ids))[: D.MAX_PAGE]
@@ -520,7 +529,7 @@ async def delete_rows(db_id: PageId, body: IdsBody, request: Request, role: str 
 
 
 @router.post("/api/databases/{db_id}/rows/publish")
-async def publish_rows(db_id: PageId, body: PublishRowsBody, request: Request, role: str = Depends(require_auth)):
+async def publish_rows(db_id: DbId, body: PublishRowsBody, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         await _ready(conn)
@@ -544,7 +553,7 @@ async def publish_rows(db_id: PageId, body: PublishRowsBody, request: Request, r
 # ---------------------------------------------------------------------------
 
 @router.get("/api/databases/{db_id}/export.csv")
-async def export_csv(db_id: PageId, request: Request, role: str = Depends(require_auth)):
+async def export_csv(db_id: DbId, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     async with _pool().acquire() as conn:
         await _ready(conn)
@@ -571,7 +580,7 @@ async def export_csv(db_id: PageId, request: Request, role: str = Depends(requir
 
 
 @router.post("/api/databases/{db_id}/import")
-async def import_csv(db_id: PageId, body: ImportBody, request: Request, role: str = Depends(require_auth)):
+async def import_csv(db_id: DbId, body: ImportBody, request: Request, role: str = Depends(require_auth)):
     user_id, auth_role = _who(request, role)
     try:
         grid = D.parse_csv(body.csv)
