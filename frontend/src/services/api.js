@@ -792,6 +792,23 @@ export const api = {
     usage:         ()          => request('/api/studio/usage'),
   },
 
+  // Nested pages: the sidebar tree, trash and favourites (routers/page_tree.py).
+  pageTree: {
+    tree:          ()          => request('/api/pages/tree', { fresh: true }),
+    recent:        ()          => request('/api/pages/recent', { fresh: true }),
+    trash:         ()          => request('/api/pages/trash', { fresh: true }),
+    favourites:    ()          => request('/api/pages/favourites', { fresh: true }),
+    breadcrumbs:   (id)        => request(`/api/pages/${id}/breadcrumbs`, { fresh: true }),
+    children:      (id)        => request(`/api/pages/${id}/children`, { fresh: true }),
+    move:          (id, data)  => request(`/api/pages/${id}/move`, { method: 'POST', body: JSON.stringify(data) }),
+    createChild:   (id, data)  => request(`/api/pages/${id}/children`, { method: 'POST', body: JSON.stringify(data) }),
+    appearance:    (id, data)  => request(`/api/pages/${id}/appearance`, { method: 'PUT', body: JSON.stringify(data) }),
+    trashPage:     (id)        => request(`/api/pages/${id}/trash`, { method: 'POST' }),
+    restore:       (id)        => request(`/api/pages/${id}/restore`, { method: 'POST' }),
+    deleteForever: (id)        => request(`/api/pages/${id}/forever`, { method: 'DELETE' }),
+    favourite:     (id, on)    => request(`/api/pages/${id}/favourite`, { method: on ? 'PUT' : 'DELETE' }),
+  },
+
   pages: {
     list:          (opts={})    => request('/api/pages/', opts),
     create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),
