@@ -7,6 +7,7 @@ import { pageRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import SheetView from '../components/sheet/SheetView'
 import { docHeadings, docWordCount, docExcerpt } from '../components/blocks'
 import ArtifactFrame from '../components/artifacts/ArtifactFrame'
+import PublicDatabase from '../components/database/PublicDatabase'
 import { PublicBreadcrumbs, PublicSubPages } from '../components/pagetree/PublicPageFamily'
 
 // Block documents render through the editor's own schema in read-only mode,
@@ -326,6 +327,8 @@ function PageContent({ page, slug }) {
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
   // An artifact is a Web Page that keeps its state on the visitor's device.
   if (content_type === 'artifact') return <ArtifactFrame slug={slug} token={page.render_token} title={page.title} fullBleed />
+  // A database's rows arrive with it; its content field is empty.
+  if (content_type === 'database') return <PublicDatabase page={page} />
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>
   if (content_type === 'csv') {
     return <SheetView text={content} meta={page.metadata?.sheet} protect={!!page.metadata?.protect_source} title={page.title} theme="public" />
@@ -430,7 +433,7 @@ function ViewerShell({ title, publishedAt, description, isHtml, contentType, con
   return (
     <div style={{ minHeight: '100vh', background: 'var(--pv-bg)', fontFamily: 'var(--font-sans)', color: 'var(--pv-ink)' }}>
       <ReadingProgress />
-      <div style={{ maxWidth: isDoc && fullWidth ? 'none' : showTOC ? 1060 : contentType === 'csv' ? 1240 : isDoc ? 768 : 820, margin: '0 auto', padding: isDoc && fullWidth ? '52px clamp(16px,6vw,96px) 80px' : '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
+      <div style={{ maxWidth: isDoc && fullWidth ? 'none' : showTOC ? 1060 : contentType === 'csv' || contentType === 'database' ? 1240 : isDoc ? 768 : 820, margin: '0 auto', padding: isDoc && fullWidth ? '52px clamp(16px,6vw,96px) 80px' : '52px 24px 80px', display:'flex', gap:48, alignItems:'flex-start' }}>
         {/* Main content */}
         <div style={{ flex:1, minWidth:0 }}>
           {title && (
@@ -653,7 +656,7 @@ export default function PageViewer() {
       above={<PublicBreadcrumbs page={page} />}
     >
       <PageContent page={page} slug={slug} />
-      {!isHtml && <PublicSubPages page={page} />}
+      {!isHtml && page?.content_type !== 'database' && <PublicSubPages page={page} />}
     </ViewerShell>
     </>
   )

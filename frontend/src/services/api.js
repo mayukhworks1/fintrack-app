@@ -809,6 +809,24 @@ export const api = {
     favourite:     (id, on)    => request(`/api/pages/${id}/favourite`, { method: on ? 'PUT' : 'DELETE' }),
   },
 
+  // Databases: typed rows over the page tree (routers/databases.py).
+  databases: {
+    templates:     ()          => request('/api/databases/templates'),
+    people:        ()          => request('/api/databases/people'),
+    create:        (data)      => request('/api/databases', { method: 'POST', body: JSON.stringify(data) }),
+    get:           (id)        => request(`/api/databases/${id}`, { fresh: true }),
+    rowContext:    (pageId)    => request(`/api/databases/row-context/${pageId}`, { fresh: true }),
+    saveSchema:    (id, data)  => request(`/api/databases/${id}/schema`, { method: 'PUT', body: JSON.stringify(data) }),
+    query:         (id, data)  => request(`/api/databases/${id}/query`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    createRow:     (id, data)  => request(`/api/databases/${id}/rows`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    updateRow:     (id, rowId, data) => request(`/api/databases/${id}/rows/${rowId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    bulkUpdate:    (id, updates) => request(`/api/databases/${id}/rows/bulk`, { method: 'POST', body: JSON.stringify({ updates }) }),
+    deleteRows:    (id, ids)   => request(`/api/databases/${id}/rows/delete`, { method: 'POST', body: JSON.stringify({ ids }) }),
+    publishRows:   (id, published) => request(`/api/databases/${id}/rows/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+    exportCsv:     (id)        => requestBlob(`/api/databases/${id}/export.csv`),
+    importCsv:     (id, data)  => request(`/api/databases/${id}/import`, { method: 'POST', body: JSON.stringify(data), timeout: 60000 }, 0),
+  },
+
   pages: {
     list:          (opts={})    => request('/api/pages/', opts),
     create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),

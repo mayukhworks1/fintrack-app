@@ -1127,7 +1127,15 @@ async def update_page(
         if new_content is not None:
             updates["content"] = new_content
         if body.metadata is not None:
-            updates["metadata"] = json.dumps(body.metadata)
+            # A database's schema and a row's property values are written by
+            # routers/databases.py; an editor saving its copy of the metadata
+            # must not roll them back.
+            old_meta = _meta(row["metadata"])
+            new_meta = dict(body.metadata)
+            for owned in ("database", "props", "db_row"):
+                if owned in old_meta:
+                    new_meta[owned] = old_meta[owned]
+            updates["metadata"] = json.dumps(new_meta)
         if body.is_password_protected is not None:
             updates["is_password_protected"] = body.is_password_protected
         if body.password is not None:
@@ -1572,8 +1580,9 @@ async def public_get_page(slug: str, request: Request):
 
     # Sub-pages and the trail of published parents (empty before migration 0004).
     family = await page_tree.public_family(pool, row)
+    rows = await _public_database_rows(pool, row)
     return Response(
-        content=_json.dumps({**_public_page_dict(row, with_render_token=_source_protected(row)), **family}),
+        content=_json.dumps({**_public_page_dict(row, with_render_token=_source_protected(row)), **family, **rows}),
         media_type="application/json",
         headers=_no_cache,
     )
@@ -1720,7 +1729,14 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
 
     # The renderer serves the document straight into an iframe and has no way
     # to be told a password, so proof of the password travels as a token.
-    return {**_public_page_dict(row, with_render_token=True), **await page_tree.public_family(pool, row)}
+    return {**_public_page_dict(row, with_render_token=True), **await page_tree.public_family(pool, row),
+            **await _public_database_rows(pool, row)}
+
+
+async def _public_database_rows(pool, row) -> dict:
+    """A published database carries its rows (empty for any other page)."""
+    from .databases import public_rows  # databases imports this module
+    return await public_rows(pool, row)
 
 
 @router.post("/api/public/pages/{slug}/view")

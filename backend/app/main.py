@@ -26,6 +26,7 @@ from .routers import page_tree as page_tree_router
 from .routers import comments as comments_router
 from .routers import pages as pages_router
 from .routers import artifacts as artifacts_router
+from .routers import databases as databases_router
 from .routers import studio as studio_router
 from .routers.web_projects import projects_router as web_projects_router, resources_router as web_resources_router
 from .utils.cache import cache
@@ -373,6 +374,7 @@ app.include_router(page_tree_router.router)
 app.include_router(comments_router.router)
 app.include_router(pages_router.router)
 app.include_router(artifacts_router.router)
+app.include_router(databases_router.router)
 app.include_router(studio_router.router)
 
 

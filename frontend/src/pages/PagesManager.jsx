@@ -13,12 +13,15 @@ import { csvCell } from '../utils/csv'
 import { downloadBlob } from '../utils/download'
 import AgentInterviewCard from '../components/AgentInterviewCard'
 import ArtifactStudio from '../components/artifacts/ArtifactStudio'
+import RowPropertiesPanel from '../components/database/RowPropertiesPanel'
+import NewDatabaseDialog from '../components/database/NewDatabaseDialog'
+const DatabaseView = lazy(() => import('../components/database/DatabaseView'))
 import {
   FileText, Globe, Table2, Type, Eye, Plus, Copy, Share2, Trash2,
   PenLine, Search, BarChart2, Lock, CheckCircle2, FileCode2,
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
-  MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks, Puzzle,
+  MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks, Puzzle, Database,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
@@ -222,6 +225,7 @@ function TypeIcon({ type, size = 15 }) {
   const props = { size, strokeWidth: 1.75 }
   if (type === 'html')        return <FileCode2 {...props} />
   if (type === 'artifact')    return <Puzzle {...props} />
+  if (type === 'database')    return <Database {...props} />
   if (type === 'csv' || type === 'spreadsheet') return <Table2 {...props} />
   if (type === 'text')        return <Type {...props} />
   if (type === 'markdown')    return <Hash {...props} />
@@ -1898,7 +1902,7 @@ async function uploadDocImage(file) {
 
 // The block document canvas: a Notion-style title over the editor, centred at
 // reading width unless the page is set to full width.
-function DocCanvas({ form, set, setContent, isMobile, stats }) {
+function DocCanvas({ form, set, setContent, isMobile, stats, belowTitle }) {
   const editorRef = useRef(null)
   const titleRef = useRef(null)
   useEffect(() => {
@@ -1924,6 +1928,7 @@ function DocCanvas({ form, set, setContent, isMobile, stats }) {
           onChange={e=>set('title', e.target.value.replace(/\n/g, ' '))}
           onKeyDown={e=>{ if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); const ed = editorRef.current; if (ed && !ed.isDestroyed) { ed.view.focus(); ed.commands.focus('start') } } }}
           style={{ display:'block', width:'100%', resize:'none', overflow:'hidden', border:'none', outline:'none', background:'transparent', color:'var(--text-1)', fontFamily:'var(--font-sans)', fontSize:isMobile?30:40, fontWeight:700, lineHeight:1.2, letterSpacing:'-0.02em', padding:'0 2px', margin:'0 0 14px' }} />
+        {belowTitle}
         <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:15, padding:'4px 2px' }}>Loading editor…</div>}>
           <BlockEditor value={form.content} onChange={setContent} uploadImage={uploadDocImage}
             onReady={ed => { editorRef.current = ed }} />
@@ -2222,6 +2227,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
     setShowTemplates(false)
   }
   const isArtifact = form.content_type === 'artifact'
+  // A database edits its own rows and schema; a row page shows its values above the content.
+  const isDatabase = form.content_type === 'database'
+  const rowPanel = currentId && !isDatabase ? <RowPropertiesPanel pageId={currentId} onOpenDatabase={p=>{ flushAndClose(); onOpenPage?.(p) }} /> : null
 
   const placeholders = {
     doc: '',
@@ -2324,8 +2332,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
         ) : (
         <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-            <select value={form.content_type} onChange={e=>changeType(e.target.value)}
+            <select value={form.content_type} onChange={e=>changeType(e.target.value)} disabled={isDatabase}
               style={{ ...inputStyle, width:'auto', fontSize:12, padding:'5px 8px', fontWeight:600 }}>
+              {isDatabase && <option value="database">🗃️ Database</option>}
               {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
             <div style={{ display:'flex', gap:6, fontSize:11, color:'var(--text-2)' }}>
@@ -2364,8 +2373,9 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             <div style={{ flex:'1 1 100%' }}>
               <label style={labelStyle} htmlFor="ft-doctype">Document type</label>
               <select id="ft-doctype" value={form.content_type}
-                onChange={e=>changeType(e.target.value)}
+                onChange={e=>changeType(e.target.value)} disabled={isDatabase}
                 style={{ ...inputStyle, width:'100%', fontWeight:600 }}>
+                {isDatabase && <option value="database">🗃️ Database</option>}
                 {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <div style={{ fontSize:11, color:'var(--text-2)', marginTop:4 }}>
@@ -2495,7 +2505,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
 
         {/* Edit / Preview / History tabs */}
         <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
-          {(isSpreadsheet || isArtifact ? ['edit','history'] : ['edit','preview','history']).map(t=>(
+          {(isDatabase ? ['edit'] : isSpreadsheet || isArtifact ? ['edit','history'] : ['edit','preview','history']).map(t=>(
             <button key={t} onClick={()=>setTab(t)} className="app-press"
               style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
               {t === 'history' ? '🕐 History' : t}
@@ -2507,7 +2517,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
               <Blocks size={13} /> {converting ? 'Converting…' : 'Convert to blocks'}
             </button>
           )}
-          {!showTemplates && tab !== 'history' && !isArtifact && (
+          {!showTemplates && tab !== 'history' && !isArtifact && !isDatabase && (
             <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:isMarkdown?0:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
           )}
         </div>
@@ -2518,10 +2528,11 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
         {!isMobile && tab !== 'history' && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
+              {isDatabase ? '🗃️ Database' : isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
             </span>
             <span>
-              {isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
+              {isDatabase ? 'Every row is a page. Click a cell to edit it, Open to write in the row. Views, filters and sorts save as you go.'
+                : isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
                 : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
                 : isArtifact ? 'A working mini-app in one HTML file — runs sandboxed, shared like a web page'
                 : isDoc ? 'Type / for blocks, select text to format, drag ⋮⋮ to reorder. Markdown shortcuts work: #, -, 1., [ ], >, ```'
@@ -2533,6 +2544,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
 
         {/* Content area */}
         <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+          {rowPanel && tab === 'edit' && !isDoc && <div style={{ padding:isMobile?'8px 14px 0':'10px 20px 0', flexShrink:0, maxHeight:'40%', overflowY:'auto' }}>{rowPanel}</div>}
           {tab === 'history' ? (
             <VersionHistoryPanel
               pageId={currentId}
@@ -2554,6 +2566,14 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
                 onSaved(restoredPage)
               }}
             />
+          ) : isDatabase ? (
+            <div style={{ flex:1, overflow:'auto', padding:isMobile?'8px 12px':'8px 20px' }}>
+              {currentId ? (
+                <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:14, padding:20 }}>Loading database…</div>}>
+                  <DatabaseView pageId={currentId} isMobile={isMobile} onOpenRow={row=>{ flushAndClose(); onOpenPage?.(row) }} />
+                </Suspense>
+              ) : <div style={{ color:'var(--text-2)', fontSize:13, padding:20 }}>Create databases with the New database button.</div>}
+            </div>
           ) : isArtifact ? (
             <ArtifactStudio
               content={form.content}
@@ -2567,7 +2587,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
               fileName={form.title || form.slug} />
           ) : isDoc && tab === 'edit' ? (
-            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} />
+            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} belowTitle={rowPanel} />
           ) : tab === 'edit' ? (
             <textarea
               ref={textareaRef}
@@ -2583,7 +2603,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             </div>
           )}
         </div>
-        {currentId && tab !== 'history' && <SubPagesList pageId={currentId} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} onAdd={onCreateChild && (id=>{ flushAndClose(); onCreateChild(id) })} />}
+        {currentId && tab !== 'history' && !isDatabase && <SubPagesList pageId={currentId} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} onAdd={onCreateChild && (id=>{ flushAndClose(); onCreateChild(id) })} />}
         </>)}
       </div>
     </div>
@@ -2889,6 +2909,7 @@ export default function PagesManager() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [drawerPage, setDrawerPage] = useState(null)
+  const [newDbOpen, setNewDbOpen] = useState(false)
   const [analyticsPage, setAnalyticsPage] = useState(null)
   const [sharePage, setSharePage] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -3044,6 +3065,7 @@ export default function PagesManager() {
   const unfiledCount = pages.filter(p=>!p.metadata?.folder).length
 
   const filtered = pages.filter(p=>{
+    if (p.metadata?.db_row) return false
     const expired = p.expires_at && msUntil(p.expires_at) <= 0
     const matchTab=filterTab==='all'||(filterTab==='published'&&p.is_published)||(filterTab==='drafts'&&!p.is_published)||(filterTab==='expired'&&expired)
     const f = p.metadata?.folder || ''
@@ -3093,6 +3115,9 @@ export default function PagesManager() {
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'artifact'})}>
             <Puzzle size={15} strokeWidth={2} /> New artifact
+          </button>
+          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setNewDbOpen(true)}>
+            <Database size={15} strokeWidth={2} /> New database
           </button>
           <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'doc'})}>
             <Plus size={15} strokeWidth={2.5} /> New Page
@@ -3233,6 +3258,7 @@ export default function PagesManager() {
       )}
 
       {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'doc')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
+      <NewDatabaseDialog open={newDbOpen} onClose={()=>setNewDbOpen(false)} onCreated={db=>{ loadPages(true, true); openEdit(db) }} />
       {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
       {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
       {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
