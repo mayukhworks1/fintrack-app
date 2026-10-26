@@ -6,6 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -362,7 +363,7 @@ app.add_middleware(
     # leaving it out made the browser's preflight fail for both.
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time-Ms", "Content-Disposition"],
+    expose_headers=["X-Request-ID", "X-Response-Time-Ms", "Content-Disposition", "ETag", "X-Has-More", "X-Next-Cursor"],
 )
 
 app.include_router(auth.router)
@@ -745,16 +746,22 @@ async def pg_reconnect(_: str = Depends(require_admin)):
 # ── Unified error envelope ───────────────────────────────────────────────────
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    error = {
+        "code":       exc.status_code,
+        "type":       "HTTPException",
+        "message":    str(detail) if detail else "Request failed",
+        "request_id": getattr(request.state, "request_id", None),
+    }
+    if isinstance(detail, dict):
+        # Structured details (e.g. a save conflict) travel as JSON so the
+        # client can read the code and the current record.
+        error["message"] = str(detail.get("message") or detail.get("code") or "Request failed")
+        error["detail"] = jsonable_encoder(detail)
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "error": {
-                "code":       exc.status_code,
-                "type":       "HTTPException",
-                "message":    str(exc.detail) if exc.detail else "Request failed",
-                "request_id": getattr(request.state, "request_id", None),
-            }
-        },
+        content={"error": error},
+        headers=getattr(exc, "headers", None),
     )
 
 
