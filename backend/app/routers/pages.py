@@ -39,6 +39,7 @@ from ..services import page_share
 from ..services import page_doc
 from ..services import artifact
 from ..services import page_tree
+from ..services import collab
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 from .ai import _ai_quota
@@ -1115,8 +1116,19 @@ async def update_page(
                 new_content if new_content is not None else row["content"],
             )
 
+        # A live editing room owns a block document's content: refused (409)
+        # while editors are connected, otherwise saved and closed first.
+        live_note = None
+        if new_content is not None or (body.content_type is not None and body.content_type != row["content_type"]):
+            try:
+                live_note = await collab.before_external_write(page_id)
+            except collab.Busy as exc:
+                raise HTTPException(409, str(exc))
+            if live_note:
+                row = await conn.fetchrow("SELECT * FROM published_pages WHERE id = $1", page_id)
+
         # Snapshot the current state as a version BEFORE applying this update
-        await _snapshot_version(conn, page_id, row, user_id, note=body.version_note)
+        await _snapshot_version(conn, page_id, row, user_id, note=body.version_note or live_note)
 
         # Build update fields
         updates: dict[str, Any] = {"updated_at": datetime.now(timezone.utc), "updated_by": user_id}
@@ -1495,6 +1507,10 @@ async def restore_page_version(
         )
         if not ver:
             raise HTTPException(404, "Version not found")
+
+        # Live editors are saved, then sent to re-sync onto the restored copy.
+        if await collab.before_external_write(page_id, force=True):
+            page = await conn.fetchrow("SELECT * FROM published_pages WHERE id = $1", page_id)
 
         # Snapshot the current state BEFORE overwriting
         last_num = await conn.fetchval(

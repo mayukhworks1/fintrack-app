@@ -7,6 +7,7 @@ import DragHandle from '@tiptap/extension-drag-handle-react'
 import { GripVertical, Plus, Image as ImageIcon, Undo2, Redo2 } from 'lucide-react'
 import { createExtensions, insertUploadedImage, IMAGE_TYPES } from './extensions'
 import { toDocJSON } from './schema'
+import { sameDoc } from './collab/presence'
 import { BubbleToolbar, TableToolbar, BlockMenu } from './toolbar'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import './blocks.css'
@@ -30,8 +31,10 @@ const TABLE_STYLE = { zIndex: 2400 }
  *   uploadImage(file) -> url    stores an image (uploads, paste, drop)
  *   onReady(editor)             the TipTap editor, e.g. to focus it from a title
  *   commands / extensions       extra "/" entries and extensions (later phases)
+ *   collaborative               the document comes from a Collaboration
+ *                               extension in `extensions`, not from `value`
  */
-export default function BlockEditor({ value, onChange, uploadImage, onReady, commands, extensions: extra, className = '', ariaLabel = 'Document' }) {
+export default function BlockEditor({ value, onChange, uploadImage, onReady, commands, extensions: extra, collaborative = false, className = '', ariaLabel = 'Document' }) {
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const lastRef = useRef(value)
@@ -47,13 +50,13 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
   const touch = useMediaQuery('(hover: none), (pointer: coarse), (max-width: 767px)')
 
   const extensions = useMemo(
-    () => createExtensions({ editable: true, uploadImage, commands, extra: extra || [] }),
+    () => createExtensions({ editable: true, uploadImage, commands, extra: extra || [], history: !collaborative }),
     [] // eslint-disable-line react-hooks/exhaustive-deps -- the schema is fixed for the editor's life
   )
 
   const editor = useEditor({
     extensions,
-    content: toDocJSON(value),
+    content: collaborative ? undefined : toDocJSON(value),
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -68,11 +71,19 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
 
   // A new value from outside (a template, a restored version, a conversion)
   // replaces the document; our own echoes are ignored.
+  const propRef = useRef(value)
   useEffect(() => {
+    const newProp = value !== propRef.current
+    propRef.current = value
     if (!editor || editor.isDestroyed || value === lastRef.current) return
+    // Live, the document is the shared one and a replacement is an edit that
+    // everyone receives. Only a value the parent actually changed counts —
+    // never the one the editor mounted with, which the shared copy has
+    // already superseded — and only when it changes something.
+    if (collaborative && (!newProp || sameDoc(value, editor.getJSON()))) return
     lastRef.current = value
     editor.commands.setContent(toDocJSON(value), { emitUpdate: false })
-  }, [value, editor])
+  }, [value, editor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // useEditor may hand over a short-lived instance that it destroys and

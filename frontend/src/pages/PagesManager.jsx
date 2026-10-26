@@ -29,7 +29,9 @@ import { parseDoc, serializeDoc, docWordCount, docTemplates, markdownToDoc, plai
 
 // The block editor and its read-only renderer carry the whole editor runtime,
 // so they load only when a block document is actually opened.
-const BlockEditor = lazy(() => import('../components/blocks/BlockEditor'))
+// CollabDoc wraps the editor: live co-editing when the server is reachable,
+// ordinary autosave otherwise.
+const CollabDoc = lazy(() => import('../components/blocks/collab/CollabDoc'))
 const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
 import PageTreeShell from '../components/pagetree/PageTreeShell'
 import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
@@ -1860,10 +1862,12 @@ function ExpiryField({ value, onChange, isMobile }) {
   )
 }
 
-// Everything an auto-save compares: a change to any of these is saved.
-function snapOf(f) {
+// Everything an auto-save compares: a change to any of these is saved. While a
+// live editing session owns a document's content (`liveContent`), the content
+// is left out: the server saves it.
+function snapOf(f, liveContent = false) {
   return JSON.stringify({
-    title:f.title||'', content_type:f.content_type||'markdown', content:f.content||'', slug:f.slug||'',
+    title:f.title||'', content_type:f.content_type||'markdown', content:liveContent ? null : (f.content||''), slug:f.slug||'',
     description:f.description||'', folder:(f.folder||'').trim(), protect_source:!!f.protect_source,
     expires_at:f.expires_at||'',
     sheet:f.content_type === 'csv' && f.sheet ? f.sheet : null,
@@ -1898,9 +1902,10 @@ async function uploadDocImage(file) {
 
 // The block document canvas: a Notion-style title over the editor, centred at
 // reading width unless the page is set to full width.
-function DocCanvas({ form, set, setContent, isMobile, stats }) {
+function DocCanvas({ form, set, setContent, isMobile, stats, pageId, onLiveMode, isContentSaved }) {
   const editorRef = useRef(null)
   const titleRef = useRef(null)
+  const [presenceSlot, setPresenceSlot] = useState(null)
   useEffect(() => {
     const t = titleRef.current
     if (!t) return
@@ -1911,6 +1916,7 @@ function DocCanvas({ form, set, setContent, isMobile, stats }) {
     <div className="ft-doc-scroll" style={{ flex:1, overflowY:'auto', overflowX:'hidden', background:'var(--card-bg)' }}>
       <div style={{ maxWidth: form.full_width ? 'none' : (isMobile ? 'none' : 720 + 192), margin:'0 auto', padding: isMobile ? '12px 16px 0' : '28px 96px 0', boxSizing:'border-box' }}>
         <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10, fontSize:12, color:'var(--text-2)', minHeight:24, marginBottom:isMobile?4:12 }}>
+          <span ref={setPresenceSlot} style={{ display:'inline-flex', marginRight:'auto', minWidth:0 }} />
           {stats?.label && <span aria-live="polite">{stats.label}</span>}
           {!isMobile && (
             <button type="button" onClick={()=>set('full_width', !form.full_width)} aria-pressed={!!form.full_width}
@@ -1925,8 +1931,9 @@ function DocCanvas({ form, set, setContent, isMobile, stats }) {
           onKeyDown={e=>{ if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); const ed = editorRef.current; if (ed && !ed.isDestroyed) { ed.view.focus(); ed.commands.focus('start') } } }}
           style={{ display:'block', width:'100%', resize:'none', overflow:'hidden', border:'none', outline:'none', background:'transparent', color:'var(--text-1)', fontFamily:'var(--font-sans)', fontSize:isMobile?30:40, fontWeight:700, lineHeight:1.2, letterSpacing:'-0.02em', padding:'0 2px', margin:'0 0 14px' }} />
         <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:15, padding:'4px 2px' }}>Loading editor…</div>}>
-          <BlockEditor value={form.content} onChange={setContent} uploadImage={uploadDocImage}
-            onReady={ed => { editorRef.current = ed }} />
+          <CollabDoc pageId={pageId} value={form.content} onChange={setContent} uploadImage={uploadDocImage}
+            onReady={ed => { editorRef.current = ed }} presenceSlot={presenceSlot}
+            onModeChange={onLiveMode} isContentSaved={isContentSaved} />
         </Suspense>
       </div>
     </div>
@@ -1992,6 +1999,36 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
   const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source, sheet:page?.metadata?.sheet, full_width:page?.metadata?.full_width }))
   const [converting, setConverting] = useState(false)
+  // Live co-editing (block documents): while 'live' or 'reconnecting' the
+  // server saves the content, so autosave sends everything but the content.
+  const [liveMode, setLiveMode] = useState('off')
+  const liveModeRef = useRef('off')
+  const liveContent = liveMode === 'live' || liveMode === 'reconnecting'
+  const formRef = useRef(form)
+  formRef.current = form
+  const [saveRetry, setSaveRetry] = useState(0)
+  // Content counts as saved when the last successful save carried exactly it.
+  const isContentSaved = useCallback(() => {
+    try { return JSON.parse(savedSnapRef.current).content === (formRef.current.content || '') } catch { return false }
+  }, [])
+  const onLiveMode = useCallback((next, info = {}) => {
+    const prev = liveModeRef.current
+    if (prev === next) return
+    liveModeRef.current = next
+    const wasManaged = prev === 'live' || prev === 'reconnecting'
+    const managed = next === 'live' || next === 'reconnecting'
+    if (managed !== wasManaged) {
+      // Keep the saved snapshot comparable: entering a session drops the
+      // content from it; leaving one cleanly marks what the server holds as
+      // saved, so only edits it has not seen go out through autosave.
+      try {
+        const snap = JSON.parse(savedSnapRef.current)
+        snap.content = !managed && (prev === 'live' || info.contentSynced) ? (formRef.current.content || '') : null
+        savedSnapRef.current = JSON.stringify(snap)
+      } catch { /* nothing saved yet */ }
+    }
+    setLiveMode(next)
+  }, [])
 
   const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
   const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
@@ -2060,13 +2097,13 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   const payloadOf = (f) => ({
     title:        f.title,
     content_type: f.content_type,
-    content:      f.content,
+    content:      liveContent ? undefined : f.content,
     slug:         f.slug || undefined,
     metadata:     metadataOf(f),
     expires_at:   f.expires_at || '',
   })
-  const savePayload = useMemo(() => payloadOf(form), [form]) // eslint-disable-line react-hooks/exhaustive-deps
-  const snapshot = useMemo(() => snapOf(form), [form])
+  const savePayload = useMemo(() => payloadOf(form), [form, liveContent]) // eslint-disable-line react-hooks/exhaustive-deps
+  const snapshot = useMemo(() => snapOf(form, liveContent), [form, liveContent])
   const debouncedSnap = useDebounce(snapshot, 1200)
 
   useEffect(() => {
@@ -2100,10 +2137,12 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
         createdRef.current = false   // allow retry
         createPromiseRef.current = null
         if (!cancelled) { setAutoSaveStatus('error'); setAutoSaveError(e?.message || 'Save failed') }
+        // 409: the page is open in a live session elsewhere; try again shortly.
+        if (e?.status === 409) setTimeout(() => setSaveRetry(n => n + 1), 4000)
       }
     })()
     return () => { cancelled = true }
-  }, [debouncedSnap]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSnap, saveRetry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restore a local backup on open if the server copy is empty/older
   useEffect(() => {
@@ -2138,7 +2177,7 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
       const payload = {
         title:                form.title,
         content_type:         form.content_type,
-        content:              form.content,
+        content:              liveContent ? undefined : form.content,
         slug:                 form.slug || undefined,
         is_password_protected:form.is_password_protected,
         password:             form.is_password_protected && form.password ? form.password : undefined,
@@ -2567,7 +2606,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
               fileName={form.title || form.slug} />
           ) : isDoc && tab === 'edit' ? (
-            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} />
+            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats}
+              pageId={page?.id && page.content == null ? null : currentId} onLiveMode={onLiveMode} isContentSaved={isContentSaved} />
           ) : tab === 'edit' ? (
             <textarea
               ref={textareaRef}
