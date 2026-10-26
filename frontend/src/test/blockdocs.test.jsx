@@ -25,6 +25,7 @@ vi.mock('../services/api', () => {
         preview: ok({ token: 't', expires_in: 900 }),
         versions: ok({ items: [] }),
         get: vi.fn(async (id) => ({ ...PAGES.find(p => p.id === id), content: '# Notes\n\n- [ ] call **Asha**\n- [x] send invoice\n\n> quoted' })),
+        context: vi.fn(async (id) => { const { api } = await import('../services/api'); return { page: await api.pages.get(id), breadcrumbs: [], children: [], row_context: null } }),
         create: vi.fn(async (body) => { calls.create.push(body); return { id: 'new1', ...body } }),
         update: vi.fn(async (id, body) => { calls.update.push([id, body]); return { ...PAGES.find(p => p.id === id), ...body } }),
         publicGet: vi.fn(async () => PUBLIC.page),
@@ -138,6 +139,13 @@ describe('embed allowlist', () => {
   })
 })
 
+
+// Editor actions other than writing and publishing live in the "…" menu.
+async function menuItem(name) {
+  fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+  fireEvent.click(await screen.findByRole(/menuitem/.test(name) ? 'menuitem' : 'menuitem', { name }))
+}
+
 describe('Convert to blocks', () => {
   it('saves the markdown as a version, then switches the page to a block document', async () => {
     const PagesManager = (await import('../pages/PagesManager')).default
@@ -145,7 +153,7 @@ describe('Convert to blocks', () => {
     fireEvent.click((await screen.findAllByRole('button', { name: /Edit/ }))[0])
     await waitFor(() => expect(document.querySelector('textarea')?.value).toContain('# Notes'))
 
-    fireEvent.click(screen.getByRole('button', { name: /Convert to blocks/ }))
+    await menuItem('Convert to blocks')
 
     await waitFor(() => expect(calls.update.length).toBe(1))
     const [id, body] = calls.update[0]
@@ -158,17 +166,19 @@ describe('Convert to blocks', () => {
     // The editor now shows the blocks, and the type picker says Document.
     await waitFor(() => expect(document.querySelector('.ft-blocks h1')?.textContent).toBe('Notes'))
     expect(document.querySelectorAll('.ft-blocks ul[data-type="taskList"] li').length).toBe(2)
-    expect(screen.getByDisplayValue('📝 Document')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Convert to blocks/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Document' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByRole('menuitem', { name: /Convert to blocks/ })).toBeNull()
   })
 
   it('new pages start as block documents', async () => {
     const PagesManager = (await import('../pages/PagesManager')).default
     render(<MemoryRouter><PagesManager /></MemoryRouter>)
-    fireEvent.click(await screen.findByRole('button', { name: /New Page/ }))
-    expect(await screen.findByDisplayValue('📝 Document')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /Markdown \(classic\)/ })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: /New page/ }))
     expect(await screen.findByLabelText('Page title')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Document' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menuitemradio', { name: /Markdown \(classic\)/ })).toBeInTheDocument()
     await waitFor(() => expect(document.querySelector('.ft-blocks .ProseMirror')).not.toBeNull())
   })
 })

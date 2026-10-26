@@ -53,7 +53,7 @@ beforeEach(() => {
 async function openNewPage() {
   const PagesManager = (await import('../pages/PagesManager')).default
   render(<MemoryRouter><PagesManager /></MemoryRouter>)
-  fireEvent.click(await screen.findByRole('button', { name: /New Page/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /New page/ }))
   // The editor is open once its title field is on screen.
   await screen.findAllByPlaceholderText('Page title…')
 }
@@ -61,12 +61,15 @@ async function openNewPage() {
 describe('Pages editor AI composer', () => {
   it('is hidden from a user without module.ai.use', async () => {
     await openNewPage()
-    expect(screen.queryByRole('button', { name: /Agent Studio/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    expect(screen.queryByRole('menuitem', { name: /Agent Studio/ })).toBeNull()
   })
 
   it('is offered once the permission is granted', async () => {
     auth.granted.add('module.ai.use')
     await openNewPage()
-    expect(screen.getByRole('button', { name: /Agent Studio/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Agent Studio/ }))
+    expect(screen.getByText('✨ Agent Studio')).toBeInTheDocument()
   })
 })

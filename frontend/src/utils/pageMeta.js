@@ -26,6 +26,7 @@ const ROUTES = [
   ['/report',       'Report',        'Generate a board pack or a delivery status briefing.'],
   ['/status',       'Status Board',  'Live delivery status across every active project.'],
   ['/admin',        'Admin',         'Users, sessions, permissions and sync health.'],
+  ['/pages/:id',    'Pages',         'Publish and share pages with clients.'],
   ['/pages',        'Pages',         'Publish and share pages with clients.'],
   ['/profile',      'Profile',       'Your account, appearance and session settings.'],
   ['/view/:token',  'Shared view',   'A view shared with you from FinTrack.'],

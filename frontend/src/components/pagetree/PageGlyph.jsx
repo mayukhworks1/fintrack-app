@@ -1,4 +1,4 @@
-import { FileText, Globe, Table2, Type } from 'lucide-react'
+import { FileText, Globe, Table2, Type, Puzzle, Database, Hash } from 'lucide-react'
 
 // A page's emoji when it has one, otherwise a small type icon.
 export function PageGlyph({ node, size = 14 }) {
@@ -6,6 +6,6 @@ export function PageGlyph({ node, size = 14 }) {
     return <span aria-hidden="true" style={{ width:size + 4, textAlign:'center', fontSize:size, lineHeight:1, flexShrink:0 }}>{node.icon}</span>
   }
   const t = node?.content_type
-  const Icon = t === 'html' ? Globe : t === 'csv' ? Table2 : t === 'text' ? Type : FileText
+  const Icon = t === 'html' ? Globe : t === 'csv' ? Table2 : t === 'text' ? Type : t === 'artifact' ? Puzzle : t === 'database' ? Database : t === 'markdown' ? Hash : FileText
   return <Icon aria-hidden="true" size={size} strokeWidth={1.8} style={{ width:size + 4, flexShrink:0, color:'var(--text-3)' }} />
 }

@@ -255,6 +255,19 @@ async function _doRequest(path, options = {}, retries = 2) {
       e.status     = res.status
       e.requestId  = err?.error?.request_id
       e.errorType  = err?.error?.type
+      // A structured refusal ({ code: 'conflict', current }) keeps its code.
+      const raw = err?.error?.detail ?? err?.detail
+      const detail = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null
+      if (detail?.code) e.code = detail.code
+      if (detail?.current) e.current = detail.current
+      // Older servers flattened such a refusal to its Python text,
+      // "{'code': 'conflict', 'message': '…', …}": recover the code and words.
+      const flat = /^\{'code': '(\w+)'/.exec(e.message)
+      if (flat) {
+        e.code = e.code || flat[1]
+        const said = /'message': (['"])(.*?)\1, '/.exec(e.message)
+        if (said) e.message = said[2]
+      }
       throw e
     }
 
@@ -284,6 +297,46 @@ async function _doRequest(path, options = {}, retries = 2) {
   } finally {
     clearTimeout(timer)
     if (externalSignal) externalSignal.removeEventListener?.('abort', onExternalAbort)
+  }
+}
+
+// ── Page reads and writes ─────────────────────────────────────────────────
+// A page write leaves every cached page read stale (lists, the page itself,
+// its context), whether it succeeded or not.
+function pageWrite(promise) {
+  return promise.then(
+    (r) => { clientCacheBust('/api/pages'); return r },
+    (e) => { clientCacheBust('/api/pages'); throw e },
+  )
+}
+
+// A GET that reports whether anything changed. With the ETag of the copy
+// held, the server answers 304 and nothing is parsed. Where the ETag header
+// is not readable (cross-origin without it exposed) the browser's own cache
+// still revalidates, and the caller compares what came back.
+async function conditionalGet(path, etag) {
+  const token = getAuthToken()
+  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+  if (etag) headers['If-None-Match'] = etag
+  const _hint = currentDeviceHint() || _deviceHint
+  if (_hint) headers['X-Client-Hint'] = _hint
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort('timeout'), TIMEOUT_MS)
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, { headers, signal: controller.signal })
+    if (res.status === 304) return { notModified: true, etag }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      const e = new Error(apiErrorMessage(err, res.status))
+      e.status = res.status
+      throw e
+    }
+    return { data: await res.json(), etag: res.headers.get('ETag') || null }
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('Request timed out — check your connection')
+    throw err
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -793,20 +846,23 @@ export const api = {
   },
 
   // Nested pages: the sidebar tree, trash and favourites (routers/page_tree.py).
+  // Every write drops the cached page reads, so the next open is fresh.
   pageTree: {
     tree:          ()          => request('/api/pages/tree', { fresh: true }),
+    // Reload only when it changed: a 304 answers { notModified: true }.
+    treeIfChanged: (etag)      => conditionalGet('/api/pages/tree', etag),
     recent:        ()          => request('/api/pages/recent', { fresh: true }),
     trash:         ()          => request('/api/pages/trash', { fresh: true }),
     favourites:    ()          => request('/api/pages/favourites', { fresh: true }),
     breadcrumbs:   (id)        => request(`/api/pages/${id}/breadcrumbs`, { fresh: true }),
     children:      (id)        => request(`/api/pages/${id}/children`, { fresh: true }),
-    move:          (id, data)  => request(`/api/pages/${id}/move`, { method: 'POST', body: JSON.stringify(data) }),
-    createChild:   (id, data)  => request(`/api/pages/${id}/children`, { method: 'POST', body: JSON.stringify(data) }),
-    appearance:    (id, data)  => request(`/api/pages/${id}/appearance`, { method: 'PUT', body: JSON.stringify(data) }),
-    trashPage:     (id)        => request(`/api/pages/${id}/trash`, { method: 'POST' }),
-    restore:       (id)        => request(`/api/pages/${id}/restore`, { method: 'POST' }),
-    deleteForever: (id)        => request(`/api/pages/${id}/forever`, { method: 'DELETE' }),
-    favourite:     (id, on)    => request(`/api/pages/${id}/favourite`, { method: on ? 'PUT' : 'DELETE' }),
+    move:          (id, data)  => pageWrite(request(`/api/pages/${id}/move`, { method: 'POST', body: JSON.stringify(data) })),
+    createChild:   (id, data)  => pageWrite(request(`/api/pages/${id}/children`, { method: 'POST', body: JSON.stringify(data) })),
+    appearance:    (id, data)  => pageWrite(request(`/api/pages/${id}/appearance`, { method: 'PUT', body: JSON.stringify(data) })),
+    trashPage:     (id)        => pageWrite(request(`/api/pages/${id}/trash`, { method: 'POST' })),
+    restore:       (id)        => pageWrite(request(`/api/pages/${id}/restore`, { method: 'POST' })),
+    deleteForever: (id)        => pageWrite(request(`/api/pages/${id}/forever`, { method: 'DELETE' })),
+    favourite:     (id, on)    => pageWrite(request(`/api/pages/${id}/favourite`, { method: on ? 'PUT' : 'DELETE' })),
   },
 
   // Databases: typed rows over the page tree (routers/databases.py).
@@ -828,12 +884,33 @@ export const api = {
   },
 
   pages: {
+    // The slim list (no database rows, list metadata only).
     list:          (opts={})    => request('/api/pages/', opts),
-    create:        (data)      => request('/api/pages/', { method: 'POST', body: JSON.stringify(data) }),
-    get:           (id)        => request(`/api/pages/${id}`),
-    update:        (id, data)  => request(`/api/pages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete:        (id)        => request(`/api/pages/${id}`, { method: 'DELETE' }),
-    publish:       (id, published) => request(`/api/pages/${id}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
+    // The same list, reloaded only when it changed: { notModified } or { data, etag }.
+    listIfChanged: (etag)      => conditionalGet('/api/pages/', etag),
+    // client_request_id makes a retried create return the page the first
+    // attempt made. Retries are the caller's (see components/pages/pageSaver).
+    create:        (data)      => pageWrite(request('/api/pages/', { method: 'POST', body: JSON.stringify(data) })),
+    // Always from the server: a cached copy reopened and then autosaved would
+    // write stale content back.
+    get:           (id)        => request(`/api/pages/${id}`, { fresh: true, timeout: 45_000 }),
+    // Everything the editor shows around a page in one request:
+    // { page, breadcrumbs, children, children_has_more, row_context, open_thread_count }.
+    context:       (id, childrenLimit = 50) => request(`/api/pages/${id}/context?children_limit=${childrenLimit}`, { fresh: true, timeout: 45_000 }),
+    // base_updated_at in data makes a stale save a 409 instead of an overwrite.
+    // opts.keepalive lets a save outlive the tab (sent while the page unloads).
+    update:        (id, data, opts = {}) => {
+      const body = JSON.stringify(data)
+      return pageWrite(request(`/api/pages/${id}`, {
+        method: 'PUT', body,
+        ...(opts.keepalive && body.length < 60_000 ? { keepalive: true } : {}),
+        // A large document takes longer than the default to upload.
+        ...(body.length > 1_000_000 ? { timeout: 60_000 } : {}),
+      }))
+    },
+    // Moves the page and its sub-pages to the trash (restorable).
+    delete:        (id)        => pageWrite(request(`/api/pages/${id}`, { method: 'DELETE' })),
+    publish:       (id, published) => pageWrite(request(`/api/pages/${id}/publish`, { method: 'POST', body: JSON.stringify({ published }) })),
     analytics:     (id, params) => request(`/api/pages/${id}/analytics?${new URLSearchParams(params || {})}`),
     insights:      (id)         => request(`/api/pages/${id}/insights`),
     deleteView:    (pageId, viewId) => request(`/api/pages/${pageId}/views/${viewId}`, { method: 'DELETE' }),
@@ -856,9 +933,9 @@ export const api = {
     uploadAsset:   (fileObj)    => { const fd = new FormData(); fd.append('file', fileObj); return request('/api/pages/upload', { method: 'POST', body: fd, headers: null }) },
     deleteAsset:   (path)       => request(`/api/pages/asset?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
     slugCheck:     (slug, excludeId) => request(`/api/pages/slug-check?slug=${encodeURIComponent(slug)}${excludeId ? `&exclude_id=${encodeURIComponent(excludeId)}` : ''}`),
-    versions:      (id)            => request(`/api/pages/${id}/versions`),
+    versions:      (id)            => request(`/api/pages/${id}/versions`, { fresh: true }),
     getVersion:    (id, verId)     => request(`/api/pages/${id}/versions/${verId}`),
-    restoreVersion:(id, verId)     => request(`/api/pages/${id}/versions/${verId}/restore`, { method: 'POST' }),
+    restoreVersion:(id, verId)     => pageWrite(request(`/api/pages/${id}/versions/${verId}/restore`, { method: 'POST' })),
     // Generation runs long enough that the default timeout would fire before
     // the model finishes, so it gets its own budget. retries=0 deliberately:
     // a slow generation is not a failed one, and retrying would run the model

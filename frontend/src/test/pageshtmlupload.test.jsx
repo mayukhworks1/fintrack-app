@@ -47,9 +47,10 @@ describe('Pages editor HTML file upload', () => {
   it('loads a .html file into a Web Page', async () => {
     const PagesManager = (await import('../pages/PagesManager')).default
     render(<MemoryRouter><PagesManager /></MemoryRouter>)
-    fireEvent.click(await screen.findByRole('button', { name: /New Page/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /New page/ }))
     await screen.findAllByPlaceholderText('Page title…')
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'html' } })
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Web page' }))
 
     const html = '<!doctype html><html><head><title>Logo Directions</title></head><body><b>the works</b></body></html>'
     const file = new File([html], 'logos.html', { type: 'text/html' })

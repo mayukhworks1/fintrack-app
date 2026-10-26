@@ -111,7 +111,7 @@ describe('PageTreePanel', () => {
     await mountPanel({ onCreated, onChanged })
     fireEvent.click(screen.getByRole('button', { name: 'Add a sub-page to Other' }))
     await waitFor(() => expect(onCreated).toHaveBeenCalled())
-    expect(calls).toContainEqual(['createChild', 'o', { title: 'Untitled' }])
+    expect(calls).toContainEqual(['createChild', 'o', expect.objectContaining({ title: 'Untitled', content_type: 'doc', client_request_id: expect.any(String) })])
     expect(onCreated.mock.calls[0][0]).toMatchObject({ id: 'new', parent_id: 'o' })
     expect(onChanged).toHaveBeenCalled()
   })

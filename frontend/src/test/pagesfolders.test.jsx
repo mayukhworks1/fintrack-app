@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-const { calls } = vi.hoisted(() => ({ calls: { create: [], update: [] } }))
+const { calls } = vi.hoisted(() => ({ calls: { create: [], update: [], delete: [] } }))
 
 const PAGES = [
   { id: 'a', slug: 'acme-proposal', title: 'Acme proposal', content_type: 'html', is_published: true, view_count: 3, metadata: { folder: 'Clients' } },
@@ -22,8 +22,10 @@ vi.mock('../services/api', () => {
         list: ok(PAGES),
         slugCheck: ok({ available: true, suggestions: [] }),
         preview: ok({ token: 't', expires_in: 900 }),
-        get: vi.fn(async (id) => ({ ...PAGES.find(p => p.id === id), content: '<p>x</p>' })),
-        create: vi.fn(async (body) => { calls.create.push(body); return { id: 'new', ...body, is_published: false } }),
+        get: vi.fn(async (id) => (id === 'copy1' ? { id: 'copy1', ...calls.create.at(-1), is_published: false } : { ...PAGES.find(p => p.id === id), content: '<p>x</p>' })),
+        context: vi.fn(async (id) => { const { api } = await import('../services/api'); return { page: await api.pages.get(id), breadcrumbs: [], children: [], row_context: null } }),
+        create: vi.fn(async (body) => { calls.create.push(body); return { id: 'copy1', ...body, is_published: false } }),
+        delete: vi.fn(async (id) => { calls.delete.push(id); return { ok: true, trashed: [id] } }),
         update: vi.fn(async (id, body) => { calls.update.push([id, body]); return { ...PAGES.find(p => p.id === id), ...body } }),
       },
     },
@@ -40,7 +42,7 @@ vi.mock('../context/ConfirmContext', () => ({
 }))
 
 beforeEach(() => {
-  calls.create = []; calls.update = []
+  calls.create = []; calls.update = []; calls.delete = []
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} })
   window.matchMedia = (q => ({
@@ -105,6 +107,7 @@ describe('Duplicate', () => {
     expect(body.metadata.folder).toBe('Clients')
     expect(body.slug).not.toBe('acme-proposal')
     expect(body).not.toHaveProperty('expires_at')
+    expect(body.client_request_id).toMatch(/.{8,}/)
     expect(await screen.findByDisplayValue('Acme proposal (Copy)')).toBeInTheDocument()
   })
 })
@@ -114,6 +117,7 @@ describe('Editor settings', () => {
     await mount()
     fireEvent.click(screen.getByRole('button', { name: 'Beta deck' }))
     await screen.findByDisplayValue('Beta deck')
+    fireEvent.click(screen.getByRole('button', { name: /Share/ }))
     fireEvent.change(screen.getByLabelText('Folder'), { target: { value: 'Prospects' } })
     fireEvent.change(screen.getByLabelText('Link expires (IST)'), { target: { value: '2030-01-15T18:00' } })
     fireEvent.click(screen.getByLabelText(/Protect code/))
@@ -142,7 +146,7 @@ describe('List layout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More actions for Beta deck' }))
     const menu = screen.getByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: 'Publish' })).toBeInTheDocument()
-    expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Move to trash' })).toBeInTheDocument()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
   })

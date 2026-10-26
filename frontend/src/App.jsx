@@ -221,11 +221,17 @@ export default function App() {
 
   useEffect(() => {
     if (status !== 'authed' || isAdmin) return
+    // Not where the session started in the page editor or a public page:
+    // those load a large editor of their own, and ~1.4 MB of other screens
+    // would compete with it. Nor on a connection that asks for less data.
+    if (/^\/(pages|p)(\/|$)/.test(location.pathname)) return
+    const conn = typeof navigator !== 'undefined' ? navigator.connection : null
+    if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) return
     const importers = (isWeb || isAll) ? WARM_IMPORTERS_WEB : WARM_IMPORTERS_MAIN
     return whenIdle(() => {
       for (const load of importers) load().catch(() => {})
     })
-  }, [status, isAdmin, isWeb, isAll])
+  }, [status, isAdmin, isWeb, isAll]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Warm the dashboard while a stored session is being verified: it is the
   // next thing shown, so it starts at the first idle moment.
@@ -383,7 +389,9 @@ export default function App() {
               <Route path="/report"       element={isViewer ? <ViewerGuard /> : <Report />} />
               <Route path="/status"       element={<StatusBoard />} />
               <Route path="/admin"        element={isViewer ? <ViewerGuard /> : <AdminDashboard embedded={true} />} />
-              <Route path="/pages"        element={<PagesManager />} />
+              {/* One route for the list and an open page (/pages/<id>), so moving
+                  between them keeps the tree and list mounted. */}
+              <Route path="/pages/*"      element={<PagesManager />} />
               <Route path="/studio"       element={isViewer ? <ViewerGuard /> : <Studio />} />
               <Route path="/profile"      element={<Profile />} />
               <Route path="*"             element={<NotFound />} />

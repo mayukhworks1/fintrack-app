@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, memo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useConfirm } from '../context/ConfirmContext'
 import { useAuth } from '../context/AuthContext'
 import { previewRenderUrl, PAGE_SANDBOX } from '../utils/pageHtml'
 import StreamingDraft from '../components/StreamingDraft'
-import { toIstInput, fromIstInput, formatIst, countdown, msUntil, expiryPreset } from '../utils/ist'
+import { formatIst, countdown, msUntil } from '../utils/ist'
 import { api, API_BASE_URL } from '../services/api'
 import { parseCSV, toCSV } from '../utils/sheet'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -12,7 +12,7 @@ import { escapeAttr, safeUrl } from '../utils/sanitize'
 import { csvCell } from '../utils/csv'
 import { downloadBlob } from '../utils/download'
 import AgentInterviewCard from '../components/AgentInterviewCard'
-import ArtifactStudio from '../components/artifacts/ArtifactStudio'
+const ArtifactStudio = lazy(() => import('../components/artifacts/ArtifactStudio'))
 import RowPropertiesPanel from '../components/database/RowPropertiesPanel'
 import NewDatabaseDialog from '../components/database/NewDatabaseDialog'
 const DatabaseView = lazy(() => import('../components/database/DatabaseView'))
@@ -22,11 +22,12 @@ import {
   Download, RefreshCw, X, Link2, ExternalLink,
   Layers, Folder, FolderInput, ShieldCheck, Timer,
   MoreHorizontal, EyeOff, Check, ArrowUpDown, Hash, Maximize2, Minimize2, Blocks, Puzzle, Database,
+  ArrowLeft, History, Sparkles, LayoutTemplate, Smile, AlertTriangle,
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import SkeletonList from '../components/SkeletonList'
 import SheetView from '../components/sheet/SheetView'
-import SheetEditor from '../components/sheet/SheetEditor'
+const SheetEditor = lazy(() => import('../components/sheet/SheetEditor'))
 import { tint } from '../utils/color'
 import { parseDoc, serializeDoc, docWordCount, docTemplates, markdownToDoc, plainTextToDoc, docToMarkdown } from '../components/blocks'
 
@@ -41,6 +42,14 @@ import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContex
 import CommentsToggle from '../components/comments/CommentsToggle'
 import { openCommentsPanel } from '../components/comments/commentsModel'
 import { useLocation, useNavigate } from 'react-router-dom'
+import IconPicker from '../components/pagetree/IconPicker'
+import TrashDialog from '../components/pagetree/TrashDialog'
+import SharePopover, { PublishChip } from '../components/pages/SharePopover'
+import QuickSwitcher from '../components/pages/QuickSwitcher'
+import PageHeading from '../components/pages/PageHeading'
+import { createPageSaver, newRequestId } from '../components/pages/pageSaver'
+import { friendlyError, errorKind } from '../components/pages/pageErrors'
+import { backupKey, writeBackup, clearBackup, moveBackup, dropLegacyBackup, backupToOffer, downloadPageCopy } from '../components/pages/pageBackup'
 
 // Asset URLs from the upload endpoint are backend-relative (/api/...). The
 // published viewer lives on a different origin, so embed the ABSOLUTE backend
@@ -400,7 +409,7 @@ function DetailGrid({ geo, cli, v, isMobile }) {
     ]:[]),
     {section:'Location (IP)',label:'Country',value:geo.country?`${flagEmoji(geo.country_code||geo.country)} ${geo.country}`:null},{section:'Location (IP)',label:'Country Code',value:geo.country_code},{section:'Location (IP)',label:'Region',value:geo.region},{section:'Location (IP)',label:'City',value:geo.city},{section:'Location (IP)',label:'ZIP',value:geo.zip},{section:'Location (IP)',label:'Latitude',value:geo.lat!=null?String(geo.lat):null},{section:'Location (IP)',label:'Longitude',value:geo.lon!=null?String(geo.lon):null},{section:'Location (IP)',label:'Timezone',value:geo.timezone},
     {section:'Device',label:'Platform',value:cli.platform},{section:'Device',label:'Touch Screen',value:cli.touch_support!=null?(cli.touch_support?'Yes':'No'):null},{section:'Device',label:'Screen',value:cli.screen_width?`${cli.screen_width}×${cli.screen_height}`:null},{section:'Device',label:'Viewport',value:cli.viewport_width?`${cli.viewport_width}×${cli.viewport_height}`:null},{section:'Device',label:'Pixel Ratio',value:cli.pixel_ratio!=null?`${cli.pixel_ratio}x`:null},{section:'Device',label:'Color Depth',value:cli.color_depth!=null?`${cli.color_depth}-bit`:null},{section:'Device',label:'Language',value:cli.language},{section:'Device',label:'All Languages',value:cli.languages?.join(', ')},{section:'Device',label:'Browser TZ',value:cli.timezone},{section:'Device',label:'Cookies',value:cli.cookie_enabled!=null?(cli.cookie_enabled?'Yes':'No'):null},{section:'Device',label:'User Agent',value:v.user_agent},
-    {section:'Visit',label:'Time',value:v.viewed_at?new Date(v.viewed_at).toLocaleString():null},{section:'Visit',label:'Page URL',value:cli.page_url},{section:'Visit',label:'Referer',value:v.referer},{section:'Visit',label:'UTM Source',value:cli.utm_source},{section:'Visit',label:'UTM Medium',value:cli.utm_medium},{section:'Visit',label:'UTM Campaign',value:cli.utm_campaign},
+    {section:'Visit',label:'Time',value:v.viewed_at?formatIst(v.viewed_at):null},{section:'Visit',label:'Page URL',value:cli.page_url},{section:'Visit',label:'Referer',value:v.referer},{section:'Visit',label:'UTM Source',value:cli.utm_source},{section:'Visit',label:'UTM Medium',value:cli.utm_medium},{section:'Visit',label:'UTM Campaign',value:cli.utm_campaign},
   ].filter(r=>r.value)
   const sections=[...new Set(rows.map(r=>r.section))]
   return (
@@ -626,7 +635,7 @@ function AnalyticsDrawer({ page, onClose }) {
                             <input type="checkbox" checked={sel} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} style={{ marginTop:2 }} />
                             <div>
                               <div style={{ fontSize:12, fontWeight:600 }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city||v.country}</>:v.viewer_ip||'—'}</div>
-                              <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+                              <div style={{ fontSize:11, color:'var(--text-2)', marginTop:2 }}>{new Date(v.viewed_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div>
                               <div style={{ fontSize:11, color:'var(--text-2)' }}>{cli.touch_support===true?'📱 ':cli.touch_support===false?'🖥️ ':''}{fmtBrowser(v.user_agent)}</div>
                             </div>
                           </div>
@@ -659,7 +668,7 @@ function AnalyticsDrawer({ page, onClose }) {
                             <td style={{ padding:'9px 12px' }} onClick={e=>e.stopPropagation()}>
                               <input type="checkbox" checked={sel} onChange={()=>setSelected(prev=>{ const n=new Set(prev); sel?n.delete(v.id):n.add(v.id); return n })} />
                             </td>
-                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>{new Date(v.viewed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }}>{new Date(v.viewed_at).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</td>
                             <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:11 }}>{v.viewer_ip||'—'}</td>
                             <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>{v.country?<>{flagEmoji(geo.country_code||v.country)} {v.city?`${v.city}, `:''}{geo.country_code||v.country}</>:'—'}</td>
                             <td style={{ padding:'9px 12px', maxWidth:130, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'var(--text-2)', fontSize:11 }} title={v.isp}>{v.isp||'—'}</td>
@@ -836,7 +845,7 @@ const TEMPLATES = {
     },
     {
       name: 'Meeting Notes', icon: '📋',
-      content: `# Meeting Notes\n\n**Date:** ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}\n**Time:** \n**Location / Link:** \n**Attendees:** \n\n---\n\n## Agenda\n\n1. \n2. \n3. \n\n## Discussion\n\n### Topic 1\n\n\n\n### Topic 2\n\n\n\n## Action Items\n\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n\n## Next Meeting\n\n**Date:** \n**Topics:** `,
+      content: `# Meeting Notes\n\n**Date:** ${new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',year:'numeric',month:'long',day:'numeric'})}\n**Time:** \n**Location / Link:** \n**Attendees:** \n\n---\n\n## Agenda\n\n1. \n2. \n3. \n\n## Discussion\n\n### Topic 1\n\n\n\n### Topic 2\n\n\n\n## Action Items\n\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n- [ ] Task — Owner — Due date\n\n## Next Meeting\n\n**Date:** \n**Topics:** `,
     },
     {
       name: 'Resume / CV', icon: '👤',
@@ -844,7 +853,7 @@ const TEMPLATES = {
     },
     {
       name: 'Invoice', icon: '🧾',
-      content: `# Invoice\n\n| | |\n|---|---|\n| **Invoice #** | INV-001 |\n| **Date** | ${new Date().toLocaleDateString()} |\n| **Due Date** | ${new Date(Date.now()+30*864e5).toLocaleDateString()} |\n| **Status** | 🟡 Pending |\n\n---\n\n## From\n\n**Your Name / Company**\nyour@email.com\nAddress Line 1\nCity, State, ZIP\n\n## Bill To\n\n**Client Name / Company**\nclient@email.com\nClient Address\n\n---\n\n## Services\n\n| Description | Qty | Rate | Amount |\n|---|---|---|---|\n| Service or product description | 1 | $1,000.00 | $1,000.00 |\n| Service or product description | 2 | $500.00 | $1,000.00 |\n\n---\n\n| | |\n|---|---|\n| **Subtotal** | $2,000.00 |\n| **Tax (0%)** | $0.00 |\n| **Total Due** | **$2,000.00** |\n\n---\n\n## Payment Details\n\n**Bank:** Bank Name\n**Account:** 0000 0000\n**Reference:** INV-001\n\n*Thank you for your business!*`,
+      content: `# Invoice\n\n| | |\n|---|---|\n| **Invoice #** | INV-001 |\n| **Date** | ${new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})} |\n| **Due Date** | ${new Date(Date.now()+30*864e5).toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})} |\n| **Status** | 🟡 Pending |\n\n---\n\n## From\n\n**Your Name / Company**\nyour@email.com\nAddress Line 1\nCity, State, ZIP\n\n## Bill To\n\n**Client Name / Company**\nclient@email.com\nClient Address\n\n---\n\n## Services\n\n| Description | Qty | Rate | Amount |\n|---|---|---|---|\n| Service or product description | 1 | $1,000.00 | $1,000.00 |\n| Service or product description | 2 | $500.00 | $1,000.00 |\n\n---\n\n| | |\n|---|---|\n| **Subtotal** | $2,000.00 |\n| **Tax (0%)** | $0.00 |\n| **Total Due** | **$2,000.00** |\n\n---\n\n## Payment Details\n\n**Bank:** Bank Name\n**Account:** 0000 0000\n**Reference:** INV-001\n\n*Thank you for your business!*`,
     },
     {
       name: 'Product Spec', icon: '📐',
@@ -868,7 +877,7 @@ const TEMPLATES = {
   csv: SHEET_TEMPLATES,
   text: [
     { name: 'Blank', icon: '📄', content: '' },
-    { name: 'Changelog', icon: '📝', content: `CHANGELOG\n=========\n\nv2.0.0 — ${new Date().toLocaleDateString()}\n  ADDED: New feature description\n  CHANGED: Updated behavior description  \n  FIXED: Bug fix description\n  REMOVED: Deprecated feature\n\nv1.1.0 — Previous Date\n  ADDED: Feature\n  FIXED: Bug\n\nv1.0.0 — Initial Release\n  ADDED: Initial version` },
+    { name: 'Changelog', icon: '📝', content: `CHANGELOG\n=========\n\nv2.0.0 — ${new Date().toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata'})}\n  ADDED: New feature description\n  CHANGED: Updated behavior description  \n  FIXED: Bug fix description\n  REMOVED: Deprecated feature\n\nv1.1.0 — Previous Date\n  ADDED: Feature\n  FIXED: Bug\n\nv1.0.0 — Initial Release\n  ADDED: Initial version` },
   ],
 }
 
@@ -1123,17 +1132,21 @@ function docStats(content, contentType) {
   if (contentType === 'csv') {
     const rows = parseCSV(content)
     const cols = rows.reduce((n, r) => Math.max(n, r.length), 0)
-    return { words:0, chars, readTime:'—', lines:rows.length, label:`${rows.length.toLocaleString()} rows × ${cols} columns` }
+    return { words:0, chars, readTime:'—', lines:rows.length, label:`${rows.length.toLocaleString('en-IN')} rows × ${cols} columns` }
   }
   if (contentType === 'doc') {
     const words = docWordCount(content)
     const mins = Math.max(1, Math.round(words / 200))
-    return { words, chars, lines:0, readTime:`${mins} min read`, label:`${words.toLocaleString()} words` }
+    return { words, chars, lines:0, readTime:`${mins} min read`, label:`${words.toLocaleString('en-IN')} words` }
   }
-  const words = content.trim().split(/\s+/).filter(Boolean).length
+  // A web page or artifact counts the words a visitor reads, not its markup.
+  const text = contentType === 'html' || contentType === 'artifact'
+    ? content.replace(/<(script|style|template|svg)[\s\S]*?<\/\1>/gi, ' ').replace(/<!--[\s\S]*?-->/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&[#a-z0-9]+;/gi, ' ')
+    : content
+  const words = text.trim().split(/\s+/).filter(Boolean).length
   const lines = content.split('\n').length
   const mins = Math.max(1, Math.round(words / 200))
-  return { words, chars, lines, readTime:`${mins} min read`, label:`${words.toLocaleString()} words` }
+  return { words, chars, lines, readTime:`${mins} min read`, label:`${words.toLocaleString('en-IN')} words` }
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,7 +1169,7 @@ function TemplatePicker({ contentType, onSelect }) {
 // ---------------------------------------------------------------------------
 // Version History Panel
 // ---------------------------------------------------------------------------
-function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRestore }) {
+function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRestore, beforeRestore }) {
   const confirm = useConfirm()
   const [versions, setVersions] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -1186,12 +1199,15 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
   const handleRestore = async (ver) => {
     if (!(await confirm({
       title: `Restore version ${ver.version_num}`,
-      message: `Restore to the version saved ${new Date(ver.saved_at).toLocaleString()}? Your current content is saved as a new version first, so nothing is lost.`,
+      message: `Restore the version saved ${formatIst(ver.saved_at)}? Your current content is saved as a new version first, so nothing is lost.`,
       confirmLabel: 'Restore',
       tone: 'default',
     }))) return
     setRestoring(ver.id)
     try {
+      // Anything still being saved lands first (and so is kept in History);
+      // nothing queued is written over the restored copy afterwards.
+      await beforeRestore?.()
       // The server restores the content but not the sheet's formatting, so a
       // spreadsheet's column formats are written back from the version too
       // (they are what its preview showed, and they match its columns).
@@ -1207,13 +1223,11 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
           const updated = await api.pages.update(pageId, { metadata }).catch(() => null)
           if (updated?.id) restored = updated
         }
-        setToast('✓ Restored! Reloading editor…')
-        setTimeout(() => { onRestore(restored, versionSheet); setToast('') }, 1500)
-        // Refresh version list
-        const fresh = await api.pages.versions(pageId)
-        setVersions(fresh.items || [])
+        onRestore(restored, versionSheet, ver)
+        return
       }
-    } catch { setToast('⚠ Restore failed') }
+      setToast('Restore failed')
+    } catch (e) { setToast(friendlyError(e)) }
     setRestoring(null)
   }
 
@@ -1225,14 +1239,14 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
     if (diff < 60) return 'just now'
     if (diff < 3600) return `${Math.floor(diff/60)}m ago`
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`
-    return d.toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+    return d.toLocaleString('en-IN', { timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' })
   }
 
   if (!pageId) return (
     <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:'var(--text-2)', fontSize:13 }}>
       <div style={{ fontSize:32 }}>🕐</div>
       <div style={{ fontWeight:600 }}>Save the page first to enable version history</div>
-      <div style={{ fontSize:12 }}>Every edit auto-saves to the cloud — versions are captured every 5 minutes</div>
+      <div style={{ fontSize:12 }}>Every edit saves automatically, and a version is kept at most every 5 minutes while you edit</div>
     </div>
   )
 
@@ -1253,7 +1267,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
         ) : !versions?.length ? (
           <div style={{ padding:'24px 16px', fontSize:13, color:'var(--text-2)', textAlign:'center' }}>
             <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
-            No versions yet. Versions are captured automatically every 5 minutes while editing.
+            No versions yet. While you edit, a version is kept at most every 5 minutes, and whenever someone else saves over your work.
           </div>
         ) : (
           <div>
@@ -1261,7 +1275,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
             <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--fin-pos-bg)' }}>
               <div style={{ fontSize:12, fontWeight:700, color:'var(--fin-positive)' }}>● Current version</div>
               <div style={{ fontSize:11, color:'var(--fin-positive)', marginTop:2 }}>
-                {currentContent ? `${currentContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words` : '—'}
+                {currentContent ? docStats(currentContent, currentContentType).label || '—' : '—'}
               </div>
             </div>
             {versions.map(ver => {
@@ -1280,7 +1294,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
                   </div>
                   <div style={{ fontSize:11, color:'var(--text-2)' }}>
                     {fmtTime(ver.saved_at)}
-                    {ver.word_count > 0 && ` · ${ver.word_count.toLocaleString()} words`}
+                    {ver.word_count > 0 && ` · ${ver.word_count.toLocaleString('en-IN')} words`}
                     {ver.note && <span style={{ color:'var(--chart-3)' }}> · {ver.note}</span>}
                   </div>
                   {ver.saved_by_name && <div style={{ fontSize:10, color:'var(--text-2)', marginTop:2 }}>by {ver.saved_by_name}</div>}
@@ -1308,7 +1322,7 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
           <div style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10, background:'var(--card-bg)', flexShrink:0 }}>
             <span style={{ fontSize:12, fontWeight:700 }}>Preview: v{previewVer.version_num}</span>
             <span style={{ fontSize:11, color:'var(--text-2)' }}>{previewVer.title}</span>
-            <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{new Date(previewVer.saved_at).toLocaleString()}</span>
+            <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:'auto' }}>{formatIst(previewVer.saved_at)}</span>
             <button onClick={()=>setPreviewVer(null)} style={{ fontSize:18, border:'none', background:'none', cursor:'pointer', color:'var(--text-2)', lineHeight:1 }}>×</button>
           </div>
           <div style={{ flex:1, overflow:'auto', background:previewVer.content_type === 'csv' ? 'var(--bg-base)' : previewVer.content_type === 'doc' ? 'var(--card-bg)' : '#fff', padding:'20px 24px' }}>
@@ -1324,12 +1338,12 @@ function VersionHistoryPanel({ pageId, currentContent, currentContentType, onRes
 // Page Drawer — Advanced editor
 // ---------------------------------------------------------------------------
 const CONTENT_TYPES = [
-  { value:'doc',         label:'📝 Document',    hint:'Block editor — type / for commands' },
-  { value:'markdown',    label:'#️⃣ Markdown (classic)', hint:'Rich text written as Markdown' },
-  { value:'html',        label:'🌐 Web Page',     hint:'HTML / CSS / JS' },
-  { value:'artifact',    label:'🧩 Artifact',     hint:'Interactive mini-app: calculator, form, dashboard' },
-  { value:'csv',         label:'📊 Spreadsheet',  hint:'Editable grid / table' },
-  { value:'text',        label:'📄 Plain Text',   hint:'Plain text / code' },
+  { value:'doc',         label:'Document',           hint:'Block editor — type / for commands' },
+  { value:'markdown',    label:'Markdown (classic)', hint:'Rich text written as Markdown' },
+  { value:'html',        label:'Web page',           hint:'HTML / CSS / JS' },
+  { value:'artifact',    label:'Artifact',           hint:'Interactive mini-app: calculator, form, dashboard' },
+  { value:'csv',         label:'Spreadsheet',        hint:'Editable grid / table' },
+  { value:'text',        label:'Plain text',         hint:'Plain text / code' },
 ]
 
 // Prompt-driven page generation.
@@ -1352,9 +1366,13 @@ const AI_EXAMPLES = {
   ],
 }
 
-function AiComposer({ contentType, content, onApply, isMobile }) {
+// Opened from the editor's menu (open/onOpenChange); closed, only a
+// runtime-error banner from the preview is shown.
+function AiComposer({ contentType, content, onApply, isMobile, open: openProp, onOpenChange }) {
   const confirm = useConfirm()
-  const [open, setOpen]               = useState(false)
+  const [openState, setOpenState]     = useState(false)
+  const open = openProp ?? openState
+  const setOpen = (v) => { const next = typeof v === 'function' ? v(open) : v; if (onOpenChange) onOpenChange(next); else setOpenState(next) }
   const [prompt, setPrompt]           = useState('')
   const [busy, setBusy]               = useState(false)
   const [elapsed, setElapsed]         = useState(0)
@@ -1611,29 +1629,17 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
   const run = () => runInterview()
 
   if (!open) {
+    // Self-healing error banner: visible even when the studio is closed.
+    if (!pageError) return null
     return (
       <div style={{ padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-        <button onClick={()=>setOpen(true)} style={{ ...btnGhost, fontSize:12, display:'inline-flex', alignItems:'center', gap:6 }}>
-          ✨ Agent Studio
-        </button>
-        {/* The strapline wraps to a second line on a phone, doubling the height
-            of a row that exists only to hold one button. */}
-        {!isMobile && (
-          <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:8 }}>
-            AI-powered page design with live streaming, interviews and section editing
-          </span>
-        )}
-
-        {/* Self-healing error banner — visible even when the studio is collapsed */}
-        {pageError && (
-          <div style={{ marginTop:4, padding:'6px 10px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
-            <span style={{ color:'var(--fin-negative)' }}>⚠ Runtime error: {pageError.message.slice(0, 80)}</span>
-            <button onClick={runFixError} disabled={busy}
-              style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', marginLeft:'auto', flexShrink:0 }}>
-              🔧 Auto-Fix
-            </button>
-          </div>
-        )}
+        <div style={{ padding:'6px 10px', background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:'var(--radius, 8px)', display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+          <span style={{ color:'var(--fin-negative)' }}>Runtime error: {pageError.message.slice(0, 80)}</span>
+          <button onClick={runFixError} disabled={busy}
+            style={{ ...btnPrimary, padding:'3px 10px', fontSize:11, background:'var(--danger-btn)', color:'var(--danger-fg)', marginLeft:'auto', flexShrink:0 }}>
+            Auto-fix
+          </button>
+        </div>
       </div>
     )
   }
@@ -1829,43 +1835,6 @@ function AiComposer({ contentType, content, onApply, isMobile }) {
 
 // Expiry is entered and shown in IST. A live countdown makes it obvious how
 // long the link has left without doing date arithmetic in your head.
-function ExpiryField({ value, onChange, isMobile }) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!value) return
-    setNow(Date.now())
-    const iv = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(iv)
-  }, [value])
-  const expired = !!value && msUntil(value, now) <= 0
-  return (
-    <div>
-      <label style={labelStyle} htmlFor="ft-expiry">Link expires (IST)</label>
-      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-        <input id="ft-expiry" type="datetime-local" value={toIstInput(value)}
-          onChange={e=>onChange(fromIstInput(e.target.value))}
-          style={{ ...inputStyle, width:isMobile?'100%':190, fontSize:12 }} />
-        <select value="" aria-label="Quick expiry"
-          onChange={e=>{ const v=e.target.value; if (v==='never') onChange(''); else if (v) onChange(expiryPreset(v)) }}
-          style={{ ...inputStyle, width:'auto', fontSize:12 }}>
-          <option value="">Quick…</option>
-          <option value="1h">In 1 hour</option>
-          <option value="eod">Tonight, 11:59 pm</option>
-          <option value="24h">In 24 hours</option>
-          <option value="7d">In 7 days</option>
-          <option value="30d">In 30 days</option>
-          <option value="never">Never expires</option>
-        </select>
-      </div>
-      {value && (
-        <div style={{ fontSize:11, marginTop:3, color:expired?'var(--fin-negative)':'var(--text-2)' }}>
-          {expired ? '⛔ Expired: the link no longer opens' : `⏳ ${formatIst(value)} · ${countdown(value, now)}`}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Everything an auto-save compares: a change to any of these is saved. While a
 // live editing session owns a document's content (`liveContent`), the content
 // is left out: the server saves it.
@@ -1877,6 +1846,28 @@ function snapOf(f, liveContent = false) {
     sheet:f.content_type === 'csv' && f.sheet ? f.sheet : null,
     full_width:f.content_type === 'doc' && !!f.full_width,
   })
+}
+
+// The editor's form, from a page as the API returns it (or a blank one).
+function formOf(page, initialType, initialTitle = '') {
+  const type = page?.content_type || initialType || 'doc'
+  return {
+    title:                page?.title ?? initialTitle ?? '',
+    content_type:         type,
+    content:              page?.content ?? (!page && type === 'csv' ? BLANK_SHEET.content : ''),
+    slug:                 page?.slug || '',
+    is_password_protected:!!page?.is_password_protected,
+    password:             '',
+    description:          page?.metadata?.description || '',
+    folder:               page?.metadata?.folder || '',
+    protect_source:       !!page?.metadata?.protect_source,
+    expires_at:           page?.expires_at || '',
+    sheet:                page?.metadata?.sheet,
+    full_width:           !!page?.metadata?.full_width,
+    // Edit counter: bumped by every change the author makes, so "is there
+    // anything unsaved" never has to serialise the document on a keystroke.
+    _v:                   0,
+  }
 }
 
 // Content carried across a type switch. Markdown and plain text become a
@@ -1904,32 +1895,43 @@ async function uploadDocImage(file) {
   return absUrl(res.url)
 }
 
-// The block document canvas: a Notion-style title over the editor, centred at
-// reading width unless the page is set to full width.
-function DocCanvas({ form, set, setContent, isMobile, stats, belowTitle, pageId, onLiveMode, isContentSaved }) {
+// Nothing in it worth keeping: no text, and no block but empty paragraphs.
+function isBlankContent(content, type) {
+  if (!content || !content.trim()) return true
+  if (type === 'doc') {
+    const d = parseDoc(content)
+    if (!d) return false
+    return (d.content || []).every(n => n.type === 'paragraph' && !(n.content || []).length)
+  }
+  return false
+}
+
+// The block document canvas: cover, icon and a Notion-style title over the
+// editor, centred at reading width unless the page is set to full width.
+function DocCanvas({ form, set, setContent, isMobile, stats, belowTitle, pageId, onLiveMode, isContentSaved, heading, titleRef: outerTitleRef }) {
   const editorRef = useRef(null)
-  const titleRef = useRef(null)
+  const innerTitleRef = useRef(null)
+  const titleRef = outerTitleRef || innerTitleRef
   const [presenceSlot, setPresenceSlot] = useState(null)
+  // Measured in the next frame: reading scrollHeight right after a keystroke
+  // forces a layout of the whole document.
   useEffect(() => {
     const t = titleRef.current
     if (!t) return
-    t.style.height = 'auto'
-    t.style.height = `${t.scrollHeight}px`
-  }, [form.title, form.full_width, isMobile])
+    const raf = requestAnimationFrame(() => {
+      t.style.height = 'auto'
+      t.style.height = `${t.scrollHeight}px`
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [form.title, form.full_width, isMobile]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="ft-doc-scroll" style={{ flex:1, overflowY:'auto', overflowX:'hidden', background:'var(--card-bg)' }}>
-      <div style={{ maxWidth: form.full_width ? 'none' : (isMobile ? 'none' : 720 + 192), margin:'0 auto', padding: isMobile ? '12px 16px 0' : '28px 96px 0', boxSizing:'border-box' }}>
-        <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10, fontSize:12, color:'var(--text-2)', minHeight:24, marginBottom:isMobile?4:12 }}>
+      <div style={{ maxWidth: form.full_width ? 'none' : (isMobile ? 'none' : 720 + 192), margin:'0 auto', padding: isMobile ? '12px 16px 0' : '24px 96px 0', boxSizing:'border-box' }}>
+        <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10, fontSize:12, color:'var(--text-2)', minHeight:22, marginBottom:isMobile?4:8 }}>
           <span ref={setPresenceSlot} style={{ display:'inline-flex', marginRight:'auto', minWidth:0 }} />
           {stats?.label && <span aria-live="polite">{stats.label}</span>}
-          {!isMobile && (
-            <button type="button" onClick={()=>set('full_width', !form.full_width)} aria-pressed={!!form.full_width}
-              style={{ ...btnGhost, fontSize:12, padding:'3px 8px', display:'inline-flex', alignItems:'center', gap:5 }}
-              title={form.full_width ? 'Use reading width' : 'Use the full width of the screen'}>
-              {form.full_width ? <Minimize2 size={13} /> : <Maximize2 size={13} />} {form.full_width ? 'Reading width' : 'Full width'}
-            </button>
-          )}
         </div>
+        {heading}
         <textarea ref={titleRef} rows={1} aria-label="Page title" placeholder="Page title…" value={form.title}
           onChange={e=>set('title', e.target.value.replace(/\n/g, ' '))}
           onKeyDown={e=>{ if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); const ed = editorRef.current; if (ed && !ed.isDestroyed) { ed.view.focus(); ed.commands.focus('start') } } }}
@@ -1945,64 +1947,158 @@ function DocCanvas({ form, set, setContent, isMobile, stats, belowTitle, pageId,
   )
 }
 
-function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenPage, onCreateChild }) {
+// One menu item: a row with an icon, optionally checked.
+function MenuItem({ icon: Icon, label, onClick, checked, danger, disabled }) {
+  return (
+    <button type="button" role={checked == null ? 'menuitem' : 'menuitemradio'} aria-checked={checked == null ? undefined : !!checked}
+      onClick={onClick} disabled={disabled}
+      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', minHeight:34, padding:'7px 12px', border:'none', background:'transparent', textAlign:'left', fontSize:13, fontWeight:500, cursor:disabled?'default':'pointer', borderRadius:7, color:danger?'var(--fin-negative)':'var(--text-1)', opacity:disabled?0.5:1 }}
+      onMouseEnter={e=>{ e.currentTarget.style.background = danger ? 'var(--fin-neg-bg)' : 'var(--bg-base)' }}
+      onMouseLeave={e=>{ e.currentTarget.style.background = 'transparent' }}>
+      {Icon ? <Icon size={14} strokeWidth={1.9} style={{ flexShrink:0, opacity:0.8 }} /> : <span style={{ width:14 }} />}
+      <span style={{ flex:1 }}>{label}</span>
+      {checked && <Check size={13} style={{ color:'var(--accent)' }} />}
+    </button>
+  )
+}
+
+// The editor's "…" menu: everything that is not writing or publishing.
+function EditorMenu({ children, label = 'More page options' }) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState(null)
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) })
+    const down = (e) => { if (!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) setOpen(false) }
+    const key = (e) => { if (e.key === 'Escape') { setOpen(false); btnRef.current?.focus() } }
+    document.addEventListener('mousedown', down)
+    document.addEventListener('keydown', key)
+    return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key) }
+  }, [open])
+  const close = () => setOpen(false)
+  return (
+    <>
+      <button ref={btnRef} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} title="More"
+        onClick={()=>setOpen(o=>!o)}
+        style={{ ...btnGhost, padding:'6px 8px', display:'inline-flex', alignItems:'center', color:'var(--text-2)', background:open?'var(--card-bg)':'transparent' }}>
+        <MoreHorizontal size={16} />
+      </button>
+      {open && createPortal(
+        <div ref={menuRef} role="menu" aria-label="Page options" className="app-menu app-pop" onClick={e => { if (e.target.closest('button')) close() }}
+          style={{ position:'fixed', top:pos?.top ?? 60, right:pos?.right ?? 12, width:240, maxHeight:'calc(100dvh - 80px)', overflowY:'auto', zIndex:3000, border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 12px 32px rgba(0,0,0,0.16)', padding:5 }}>
+          {typeof children === 'function' ? children(close) : children}
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
+const MenuLabel = ({ children }) => (
+  <div style={{ padding:'8px 12px 3px', fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--text-3)' }}>{children}</div>
+)
+const MenuSep = () => <div style={{ height:1, background:'var(--border)', margin:'4px 6px' }} />
+
+function SaveIndicator({ state, dirty, isMobile }) {
+  const s = state?.state
+  let text = ''
+  let color = 'var(--text-3)'
+  if (s === 'saving') text = 'Saving…'
+  else if (s === 'retrying' || s === 'waiting') { text = isMobile ? 'Retrying…' : 'Not saved · retrying'; color = 'var(--fin-warning)' }
+  else if (s === 'error' || s === 'conflict' || s === 'trashed') { text = 'Not saved'; color = 'var(--fin-negative)' }
+  else if (dirty) text = isMobile ? '' : 'Unsaved changes'
+  else if (s === 'saved') { text = 'Saved'; color = 'var(--fin-positive)' }
+  if (!text) return null
+  return <span role="status" aria-live="polite" style={{ fontSize:12, color, whiteSpace:'nowrap', flexShrink:0 }}>{text}</span>
+}
+
+function Banner({ tone = 'warn', children, actions }) {
+  const c = tone === 'error' ? { bg:'var(--fin-neg-bg)', bd:'var(--fin-neg-border)', fg:'var(--fin-negative)' }
+    : tone === 'ok' ? { bg:'var(--fin-pos-bg)', bd:'var(--fin-pos-border)', fg:'var(--fin-positive)' }
+    : { bg:'var(--fin-warn-bg)', bd:'var(--fin-warn-border)', fg:'var(--fin-warning)' }
+  return (
+    <div role={tone === 'ok' ? 'status' : 'alert'} style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'8px 16px', background:c.bg, borderBottom:`1px solid ${c.bd}`, color:c.fg, fontSize:12.5, fontWeight:500, flexShrink:0 }}>
+      <span style={{ flex:'1 1 220px', minWidth:0 }}>{children}</span>
+      {actions && <span style={{ display:'inline-flex', gap:6, flexWrap:'wrap' }}>{actions}</span>}
+    </div>
+  )
+}
+const bannerBtn = { border:'1px solid currentColor', borderRadius:8, padding:'4px 10px', fontSize:12, fontWeight:600, cursor:'pointer', background:'transparent', color:'inherit', textDecoration:'none', display:'inline-flex', alignItems:'center', gap:5 }
+
+/**
+ * The page editor, in the main column beside the tree.
+ *
+ * page/ctx come from GET /api/pages/{id}/context (page is null for a new
+ * page). Saving is continuous (pageSaver): onSaved reports every write so
+ * the list and tree follow, onCreated reports the first one of a new page.
+ */
+function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClose, onSaved, onCreated, onOpenPage, onCreateChild, onTrash, onToast, editorApi, returnLabel }) {
   const confirm = useConfirm()
   const { hasPerm } = useAuth()
   const isMobile = useIsMobile()
   const textareaRef = useRef(null)
-  // currentId tracks the DB row: starts from the passed page, but auto-save can
-  // create a draft on the server for a brand-new page, after which this holds
-  // the new id so every later save PATCHes instead of creating duplicates.
+  const titleRef = useRef(null)
+  const shareBtnRef = useRef(null)
+  const mountedRef = useRef(true)
+
+  // The save queue outlives this component: a save started as the editor
+  // closes still finishes. It holds the page id once the page exists.
+  const saverRef = useRef(null)
+  if (!saverRef.current) {
+    saverRef.current = createPageSaver({
+      id: page?.id || null,
+      baseUpdatedAt: page?.updated_at || null,
+      create: (data) => api.pages.create(data),
+      update: (id, data) => api.pages.update(id, data),
+    })
+  }
+  const saver = saverRef.current
   const [currentId, setCurrentId] = useState(page?.id || null)
-  const isEdit = !!currentId
-  const [form, setForm] = useState({
-    title:                page?.title || '',
-    content_type:         page?.content_type || initialType || 'markdown',
-    content:              page?.content || (!page && initialType === 'csv' ? BLANK_SHEET.content : ''),
-    slug:                 page?.slug || '',
-    is_password_protected:page?.is_password_protected || false,
-    password:             '',
-    description:          page?.metadata?.description || '',
-    folder:               page?.metadata?.folder || '',
-    protect_source:       !!page?.metadata?.protect_source,
-    expires_at:           page?.expires_at || '',
-    sheet:                page?.metadata?.sheet,
-    full_width:           !!page?.metadata?.full_width,
-  })
+  const [form, setForm] = useState(() => formOf(page, initialType, initialTitle))
+  const [appearance, setAppearance] = useState({ icon: page?.icon || '', cover: page?.cover || '' })
+  const [isPublished, setIsPublished] = useState(!!page?.is_published)
+  const [hasUnpublished, setHasUnpublished] = useState(!!page?.has_unpublished_changes)
   // Metadata keys this editor does not manage (set by other features) ride
   // along unchanged on every save instead of being dropped.
   const baseMetaRef = useRef(page?.metadata || {})
+  // The link follows the title until the page is first published or the
+  // link is edited by hand.
+  const [slugManual, setSlugManual] = useState(!!(page?.published_at || page?.is_published || page?.metadata?.slug_manual))
   const metadataOf = (f) => ({
     ...baseMetaRef.current,
     description: f.description,
     folder: (f.folder || '').trim() || undefined,
     protect_source: f.protect_source || undefined,
+    slug_manual: slugManual && !page?.published_at && !isPublished ? true : (baseMetaRef.current.slug_manual || undefined),
     // Sheet formatting belongs to spreadsheets; other types keep whatever
     // metadata.sheet they already carry.
     ...(f.content_type === 'csv' ? { sheet: f.sheet || undefined } : {}),
     ...(f.content_type === 'doc' ? { full_width: f.full_width || undefined } : {}),
   })
-  const [slugManual, setSlugManual] = useState(!!page?.slug)
   const [tab, setTab] = useState('edit')
-  // Mobile only: slug, description, password and document type live behind this
-  // rather than above the editor. Open by default for a page that has no title
-  // yet, since a brand-new page needs them before anything else makes sense.
-  const [showSettings, setShowSettings] = useState(!page?.id)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
-  const [autoSaveStatus, setAutoSaveStatus] = useState('') // '', 'saving', 'saved', 'error', 'offline'
-  const [autoSaveError, setAutoSaveError] = useState('')
-  // Desktop opens the gallery for a blank page; a phone does not, because the
-  // row costs 60px above the editor. The "Use template" button in the tab row
-  // is how it is reached there.
-  const [showTemplates, setShowTemplates] = useState(!page?.content && !isMobile)
-  const [slugStatus, setSlugStatus] = useState(null) // null | { available, suggestions }
-  const charLimit = 5_000_000  // effectively unlimited; lets docs embed images/files
-  const autoSaveKey = `pages_draft_${page?.id || 'new'}`
-  const createdRef = useRef(false)   // guards against double-create races
-  const createPromiseRef = useRef(null) // holds in-flight create promise so handleSave can await it
-  const savedSnapRef = useRef(snapOf({ ...page, description:page?.metadata?.description, folder:page?.metadata?.folder, protect_source:page?.metadata?.protect_source, sheet:page?.metadata?.sheet, full_width:page?.metadata?.full_width }))
+  const [saveState, setSaveState] = useState(null)   // { state, failures, error }
+  const [conflict, setConflict] = useState(null)
+  const [conflictBusy, setConflictBusy] = useState(false)
+  const [notice, setNotice] = useState(null)          // { kind: 'published' | 'restored', text }
+  const [shareOpen, setShareOpen] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const publishingRef = useRef(false)
+  const [studioOpen, setStudioOpen] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [slugStatus, setSlugStatus] = useState(null)
+  const [docEpoch, setDocEpoch] = useState(0)          // remounts the doc editor after a reload
+  const charLimit = 5_000_000
+  const savedSnapRef = useRef(snapOf(formOf(page, initialType, initialTitle)))
+  // The edit counter (form._v) the server is known to hold.
+  const [savedV, setSavedVState] = useState(0)
+  const savedVRef = useRef(0)
+  const setSavedV = useCallback((v) => { if (v >= savedVRef.current) { savedVRef.current = v; setSavedVState(v) } }, [])
+  const scheduledVRef = useRef(-1)
   const [converting, setConverting] = useState(false)
   // Live co-editing (block documents): while 'live' or 'reconnecting' the
   // server saves the content, so autosave sends everything but the content.
@@ -2011,8 +2107,8 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
   const liveContent = liveMode === 'live' || liveMode === 'reconnecting'
   const formRef = useRef(form)
   formRef.current = form
-  const [saveRetry, setSaveRetry] = useState(0)
-  // Content counts as saved when the last successful save carried exactly it.
+  const backupKeyOf = () => backupKey(saver.id, saver.requestId)
+
   const isContentSaved = useCallback(() => {
     try { return JSON.parse(savedSnapRef.current).content === (formRef.current.content || '') } catch { return false }
   }, [])
@@ -2035,215 +2131,354 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
     setLiveMode(next)
   }, [])
 
-  const set = useCallback((k, v) => setForm(f => ({ ...f, [k]: v })), [])
-  const setContent = useCallback((v) => setForm(f => ({ ...f, content: v })), [])
-  const setSheet = useCallback((v) => setForm(f => ({ ...f, sheet: v })), [])
+  // Every author edit goes through edit(), which bumps the counter.
+  const edit = useCallback((fn) => setForm(f => ({ ...fn(f), _v: (f._v || 0) + 1 })), [])
+  const set = useCallback((k, v) => edit(f => ({ ...f, [k]: v })), [edit])
+  const setContent = useCallback((v) => edit(f => ({ ...f, content: v })), [edit])
+  const setSheet = useCallback((v) => edit(f => ({ ...f, sheet: v })), [edit])
   const changeType = (type) => {
-    setForm(f => {
+    edit(f => {
       const content = convertContent(f.content, f.content_type, type)
       return { ...f, content_type: type, content, ...(type === 'csv' && !content.trim() ? { content: BLANK_SHEET.content } : {}) }
     })
-    setShowTemplates(!page?.content && !isMobile)
+    setTab('edit')
   }
 
-  // Debounced content for expensive child components (AttachmentsBar runs regex on every
-  // render — pass a 400ms-debounced version so it only re-scans after typing pauses).
   const debouncedContent = useDebounce(form.content, 400)
 
-  // ── Hydrate from the full record on edit ──────────────────────────────────
-  // openEdit opens the drawer instantly with the lightweight list row (which has
-  // NO `content`), then fetches the full page. Re-seed the form once the full
-  // record (with content) arrives, so editing an existing page shows its data.
-  const hydratedIdRef = useRef(null)
-  useEffect(() => {
-    if (!page?.id) return
-    if (hydratedIdRef.current === page.id) return
-    if (page.content == null) return   // wait for the full record
-    hydratedIdRef.current = page.id
-    const next = {
-      title:                page.title || '',
-      content_type:         page.content_type || 'markdown',
-      content:              page.content || '',
-      slug:                 page.slug || '',
-      is_password_protected:page.is_password_protected || false,
-      password:             '',
-      description:          page?.metadata?.description || '',
-      folder:               page?.metadata?.folder || '',
-      protect_source:       !!page?.metadata?.protect_source,
-      expires_at:           page.expires_at || '',
-      sheet:                page?.metadata?.sheet,
-      full_width:           !!page?.metadata?.full_width,
-    }
-    baseMetaRef.current = page.metadata || {}
-    setForm(next)
-    setShowTemplates(false)
+  // ── Reseed from a server copy (open, "load theirs", restore) ─────────────
+  const hydrate = useCallback((p) => {
+    const next = { ...formOf(p), _v: (formRef.current._v || 0) + 1 }
+    baseMetaRef.current = p.metadata || {}
     savedSnapRef.current = snapOf(next)
-  }, [page?.id, page?.content])
+    setSavedV(next._v)
+    setForm(next)
+    setAppearance({ icon: p.icon || '', cover: p.cover || '' })
+    setIsPublished(!!p.is_published)
+    setHasUnpublished(!!p.has_unpublished_changes)
+  }, [setSavedV])
 
-  // Auto-slug
-  useEffect(() => { if (!slugManual && form.title) set('slug', slugify(form.title)) }, [form.title, slugManual])
+  // The link follows the title. On open, a link that no longer matches the
+  // title (an "untitled" link from a page renamed elsewhere) catches up.
+  const titleSeenRef = useRef(null)
+  useEffect(() => {
+    if (slugManual) return
+    const want = form.title.trim() ? slugify(form.title) : ''
+    if (!want) return
+    if (titleSeenRef.current === null) {
+      titleSeenRef.current = form.title
+      if (form.slug && (form.slug === want || form.slug.startsWith(`${want}-`))) return
+    }
+    if (form.slug !== want) set('slug', want)
+  }, [form.title, slugManual]) // eslint-disable-line react-hooks/exhaustive-deps
+  const editSlug = (v) => { setSlugManual(true); set('slug', v) }
 
-  // ── Duplicate-slug detection ──────────────────────────────────────────────
-  // Check availability as the slug changes; warn + suggest alternatives if taken.
   const debouncedSlug = useDebounce(form.slug, 500)
   useEffect(() => {
-    if (!debouncedSlug) { setSlugStatus(null); return }
+    if (!debouncedSlug || !shareOpen) { if (!debouncedSlug) setSlugStatus(null); return }
     let cancelled = false
     api.pages.slugCheck(debouncedSlug, currentId || undefined)
       .then(r => { if (!cancelled) setSlugStatus(r) })
       .catch(() => { if (!cancelled) setSlugStatus(null) })
     return () => { cancelled = true }
-  }, [debouncedSlug, currentId])
+  }, [debouncedSlug, currentId, shareOpen])
 
-  // ── DB-backed auto-save ───────────────────────────────────────────────────
-  // Debounce the whole savable payload (~1.2s). First change on a new page
-  // creates an unpublished draft; thereafter we PATCH. localStorage is kept as
-  // an offline backup so nothing is lost if the network drops.
-  const payloadOf = (f) => ({
+  // ── Saving ────────────────────────────────────────────────────────────────
+  const payloadOf = (f, live = liveContent) => ({
     title:        f.title,
     content_type: f.content_type,
-    content:      liveContent ? undefined : f.content,
+    content:      live ? undefined : f.content,
     slug:         f.slug || undefined,
     metadata:     metadataOf(f),
     expires_at:   f.expires_at || '',
   })
-  const savePayload = useMemo(() => payloadOf(form), [form, liveContent]) // eslint-disable-line react-hooks/exhaustive-deps
-  const snapshot = useMemo(() => snapOf(form, liveContent), [form, liveContent])
-  const debouncedSnap = useDebounce(snapshot, 1200)
+  const dirty = (form._v || 0) !== savedV && !!form.title.trim()
 
-  useEffect(() => {
-    if (debouncedSnap === savedSnapRef.current) return   // nothing changed
-    if (!form.title.trim()) return                        // need a title to persist
-    let cancelled = false
-    ;(async () => {
-      setAutoSaveStatus('saving')
-      // Always write a local backup first (instant, survives crashes)
-      try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...savePayload, ts:Date.now() })) } catch {}
-      try {
-        let saved
-        if (currentId) {
-          saved = await api.pages.update(currentId, savePayload)
-        } else if (!createdRef.current) {
-          createdRef.current = true
-          createPromiseRef.current = api.pages.create(savePayload)
-          saved = await createPromiseRef.current
-          createPromiseRef.current = null
-          if (saved?.id && !cancelled) setCurrentId(saved.id)
-        } else {
-          return  // a create is already in flight; wait for next tick
+  // Wire the queue's callbacks to this render (the queue itself is stable).
+  saver.listen({
+    onStatus: (s) => { if (mountedRef.current) setSaveState(s) },
+    onConflict: (e) => { if (mountedRef.current) setConflict(e) },
+    onSaved: (saved, job) => {
+      if (!saved) return
+      const wasNew = !currentId && saved.id
+      if (job?.snap) {
+        let snap = job.snap
+        // The server may adjust the link (taken, or tidied): adopt its version.
+        if (saved.slug && job.payload?.slug && saved.slug !== job.payload.slug) {
+          try { const s = JSON.parse(snap); s.slug = saved.slug; snap = JSON.stringify(s) } catch { /* keep */ }
+          if (mountedRef.current) setForm(f => (f.slug === job.payload.slug ? { ...f, slug: saved.slug } : f))
         }
-        if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
-        if (cancelled) return
-        savedSnapRef.current = debouncedSnap
-        setAutoSaveError('')
-        setAutoSaveStatus('saved')
-        setTimeout(() => setAutoSaveStatus(s => s === 'saved' ? '' : s), 2500)
-      } catch (e) {
-        createdRef.current = false   // allow retry
-        createPromiseRef.current = null
-        if (!cancelled) { setAutoSaveStatus('error'); setAutoSaveError(e?.message || 'Save failed') }
-        // 409: the page is open in a live session elsewhere; try again shortly.
-        if (e?.status === 409) setTimeout(() => setSaveRetry(n => n + 1), 4000)
+        savedSnapRef.current = snap
+        if (job.v != null) {
+          if (mountedRef.current) setSavedV(job.v)
+          if (job.v === (formRef.current._v || 0)) clearBackup(backupKeyOf())
+        }
       }
-    })()
-    return () => { cancelled = true }
-  }, [debouncedSnap, saveRetry]) // eslint-disable-line react-hooks/exhaustive-deps
+      if (wasNew) {
+        moveBackup(backupKey(null, saver.requestId), backupKey(saved.id))
+        if (mountedRef.current) setCurrentId(saved.id)
+        onCreated?.(saved)
+      }
+      if (typeof saved.has_unpublished_changes === 'boolean' && mountedRef.current) setHasUnpublished(saved.has_unpublished_changes)
+      else if (saved.is_published && mountedRef.current) setHasUnpublished(true)
+      onSaved?.(saved)
+    },
+  })
 
-  // Restore a local backup on open if the server copy is empty/older
-  useEffect(() => {
-    if (page?.content) return
-    try {
-      const d = localStorage.getItem(autoSaveKey)
-      if (!d) return
-      const parsed = JSON.parse(d)
-      if (parsed.content && parsed.ts > Date.now() - 7 * 24 * 3600 * 1000) {
-        // Effect body cannot await; the promise form keeps the same guard.
-        confirm({
-          title: 'Restore unsaved draft',
-          message: 'An unsaved draft from your last session was found. Restore it?',
-          confirmLabel: 'Restore draft',
-          cancelLabel: 'Discard',
-          tone: 'default',
-        }).then(ok => {
-          if (!ok) return
-          set('content', parsed.content)
-          if (parsed.metadata?.sheet) set('sheet', parsed.metadata.sheet)
-          if (parsed.title && !form.title) set('title', parsed.title)
-        })
-      }
-    } catch {}
-  }, [])
-
-  const handleSave = async (publish = false) => {
-    if (!form.title.trim()) { setError('Title is required'); return }
-    if (form.content.length > charLimit) { setError(`Content exceeds ${charLimit.toLocaleString()} characters`); return }
-    setSaving(true); setError('')
-    try {
-      const payload = {
-        title:                form.title,
-        content_type:         form.content_type,
-        content:              liveContent ? undefined : form.content,
-        slug:                 form.slug || undefined,
-        is_password_protected:form.is_password_protected,
-        password:             form.is_password_protected && form.password ? form.password : undefined,
-        metadata:             metadataOf(form),
-        expires_at:           form.expires_at || '',
-      }
-      // If auto-save is mid-create, await that promise and use its ID instead of creating a duplicate
-      let resolvedId = currentId
-      if (!resolvedId && createPromiseRef.current) {
-        try { const r = await createPromiseRef.current; if (r?.id) { resolvedId = r.id; setCurrentId(r.id) } } catch {}
-      }
-      let saved = resolvedId
-        ? await api.pages.update(resolvedId, payload)
-        : await api.pages.create(payload)
-      if (saved?.detail || saved?.error) throw new Error(saved.detail || saved.error)
-      if (saved?.id) setCurrentId(saved.id)
-      // Publishing copies the working copy to the public version, so it runs
-      // on Update too, not only the first time a page goes live.
-      if (publish && saved?.id) saved = await api.pages.publish(saved.id, true)
-      localStorage.removeItem(autoSaveKey)
-      onSaved(saved)
-    } catch (e) { setError(e?.message || 'Failed to save.') }
-    finally { setSaving(false) }
+  // Queue a save of form f if it holds anything the server does not. The
+  // document is serialised here, once per pause in typing, not per keystroke.
+  const queueSave = (f) => {
+    const v = f._v || 0
+    if (v === savedVRef.current) return
+    if (v === scheduledVRef.current && saver.busy) return   // already on its way
+    if (!f.title.trim() || saver.blocked) return              // a page needs a title to be kept
+    const live = liveModeRef.current === 'live' || liveModeRef.current === 'reconnecting'
+    const snap = snapOf(f, live)
+    if (snap === savedSnapRef.current) { setSavedV(v); return } // changed and changed back
+    const payload = payloadOf(f, live)
+    writeBackup(backupKeyOf(), payload)
+    scheduledVRef.current = v
+    saver.schedule({ payload, snap, v, useBase: !live })
   }
 
-  // Closing the drawer should never lose work: if there are unsaved changes,
-  // fire a save (fire-and-forget, also backed by localStorage) before closing.
-  const flushAndClose = () => {
-    if (snapshot !== savedSnapRef.current && form.title.trim()) {
-      const payload = savePayload
-      try { localStorage.setItem(autoSaveKey, JSON.stringify({ ...payload, ts:Date.now() })) } catch {}
-      // Guard against creating a duplicate when an auto-save create is already
-      // in flight (createdRef) but currentId hasn't been set yet.
-      if (currentId) {
-        api.pages.update(currentId, payload).catch(()=>{})
-      } else if (!createdRef.current) {
-        createdRef.current = true
-        api.pages.create(payload).catch(()=>{})
+  const debouncedForm = useDebounce(form, 1200)
+  useEffect(() => { queueSave(debouncedForm) }, [debouncedForm, liveContent]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Send whatever has not gone out yet, without waiting for the debounce.
+  const saveNow = useCallback(() => {
+    queueSave(formRef.current)
+    return saver.flush()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Offer this device's copy when it is newer than the server's.
+  useEffect(() => {
+    dropLegacyBackup()
+    if (!page?.id) return
+    let live = true
+    backupToOffer(page).then(b => {
+    if (!b || !live) return
+    confirm({
+      title: 'Restore unsaved changes',
+      message: `This device has changes to “${page.title || 'Untitled'}” from ${formatIst(new Date(b.ts).toISOString())} that were not saved. Restore them?`,
+      confirmLabel: 'Restore changes',
+      cancelLabel: 'Discard',
+      tone: 'default',
+    }).then(ok => {
+      if (!ok) { clearBackup(backupKey(page.id)); return }
+      edit(f => ({
+        ...f,
+        ...(b.title != null ? { title: b.title } : {}),
+        ...(b.content != null ? { content: b.content } : {}),
+        ...(b.metadata?.sheet ? { sheet: b.metadata.sheet } : {}),
+      }))
+      setDocEpoch(n => n + 1)
+    })
+    })
+    return () => { live = false }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Leaving with work unsaved: save it (the queue keeps going after this
+  // editor is gone), and warn before the tab itself is closed.
+  useEffect(() => {
+    mountedRef.current = true
+    const onBeforeUnload = (e) => {
+      const f = formRef.current
+      const unsaved = (f._v || 0) !== savedVRef.current && f.title.trim()
+      if (!unsaved && !saver.busy) return
+      if (unsaved && saver.id && !saver.blocked) {
+        const live = liveModeRef.current === 'live' || liveModeRef.current === 'reconnecting'
+        const payload = payloadOf(f, live)
+        writeBackup(backupKeyOf(), payload)
+        api.pages.update(saver.id, { ...payload, ...(saver.base && !live ? { base_updated_at: saver.base } : {}) }, { keepalive: true }).catch(() => {})
+      }
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      mountedRef.current = false
+      saveNow()
+      saver.detach()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ctrl/Cmd+S saves now rather than opening the browser's Save dialog.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        saveNow()
       }
     }
-    onClose()
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [saveNow])
+
+  // The tree renames the open page through the editor, so the two never race.
+  useEffect(() => {
+    if (!editorApi) return
+    editorApi.current = { get id() { return saver.id }, setTitle: (t) => set('title', t) }
+    return () => { if (editorApi.current?.setTitle) editorApi.current = null }
+  }, [editorApi, set, saver])
+
+  // ── Conflicts ─────────────────────────────────────────────────────────────
+  const keepMine = async () => {
+    setConflictBusy(true)
+    try {
+      const fresh = await api.pages.get(saver.id)
+      saver.resolveConflict('mine', fresh?.updated_at)
+      setConflict(null)
+    } catch (e) { setError(friendlyError(e)) } finally { setConflictBusy(false) }
+  }
+  const loadTheirs = async () => {
+    if (!(await confirm({
+      title: 'Load the latest version',
+      message: 'Your edits since the last save are replaced by the version on the server. You can download them first from this banner.',
+      confirmLabel: 'Load latest', tone: 'danger',
+    }))) return
+    setConflictBusy(true)
+    try {
+      const fresh = await api.pages.get(saver.id)
+      saver.resolveConflict('theirs', fresh?.updated_at)
+      hydrate(fresh)
+      clearBackup(backupKeyOf())
+      setDocEpoch(n => n + 1)
+      setConflict(null)
+    } catch (e) { setError(friendlyError(e)) } finally { setConflictBusy(false) }
+  }
+  const restoreFromTrash = async () => {
+    try {
+      await api.pageTree.restore(saver.id)
+      saver.resolveConflict('mine', null)
+      onToast?.('Restored from the trash')
+    } catch (e) { setError(friendlyError(e)) }
+  }
+  const downloadCopy = () => downloadPageCopy(formRef.current)
+
+  // ── Publishing ────────────────────────────────────────────────────────────
+  const publish = async () => {
+    if (publishingRef.current) return
+    if (!form.title.trim()) { setError('Add a title before publishing.'); titleRef.current?.focus?.(); return }
+    if (form.content.length > charLimit) { setError(friendlyError({ status: 413 })); return }
+    publishingRef.current = true
+    setPublishing(true); setError('')
+    try {
+      const ok = await saveNow()
+      if (!ok || !saver.id) throw (saver.lastError || new Error('Could not save the page before publishing.'))
+      const res = await api.pages.publish(saver.id, true)
+      if (res?.updated_at) saver.setBase(res.updated_at)
+      setIsPublished(true)
+      setHasUnpublished(false)
+      setSlugManual(true)
+      setShareOpen(false)
+      setNotice({ kind: 'published', slug: res?.slug || form.slug })
+      onSaved?.(res)
+    } catch (e) {
+      setError(friendlyError(e, 'publish'))
+    } finally {
+      publishingRef.current = false
+      setPublishing(false)
+    }
+  }
+  const unpublish = async () => {
+    if (publishingRef.current || !saver.id) return
+    publishingRef.current = true
+    setPublishing(true); setError('')
+    try {
+      const res = await api.pages.publish(saver.id, false)
+      if (res?.updated_at) saver.setBase(res.updated_at)
+      setIsPublished(false)
+      setHasUnpublished(false)
+      setNotice(null)
+      onSaved?.(res)
+      onToast?.('Unpublished. The link no longer opens.')
+    } catch (e) { setError(friendlyError(e, 'publish')) }
+    finally { publishingRef.current = false; setPublishing(false) }
+  }
+  const savePassword = async () => {
+    const ok = await saveNow()
+    if (!ok || !saver.id) throw new Error('Give the page a title so it is saved, then set a password.')
+    const res = await api.pages.update(saver.id, {
+      is_password_protected: form.is_password_protected,
+      ...(form.is_password_protected && form.password ? { password: form.password } : {}),
+      ...(saver.base ? { base_updated_at: saver.base } : {}),
+    })
+    if (res?.updated_at) saver.setBase(res.updated_at)
+    set('password', '')
+    onSaved?.(res)
+  }
+  const setLook = async (patch) => {
+    if (!saver.id) return
+    const prev = appearance
+    setAppearance(a => ({ ...a, ...patch }))
+    try {
+      const res = await api.pageTree.appearance(saver.id, patch)
+      onSaved?.({ id: saver.id, ...(res || {}), ...patch })
+    } catch (e) { setAppearance(prev); onToast?.(friendlyError(e), false) }
   }
 
-  // On a phone, opening Settings replaces the editor rather than pushing it
-  // down. Sharing the screen left the textarea 66px tall — a form and an editor
-  // cannot both fit a phone viewport, so only one is on screen at a time.
-  const mobileSettingsMode = isMobile && showSettings
+  // ── Closing ───────────────────────────────────────────────────────────────
+  // A database row opened, left untitled and empty, is not kept.
+  const rowCtx = ctx?.row_context
+  const discardIfEmptyRow = async () => {
+    const id = saver.id
+    const row = rowCtx?.row
+    const db = rowCtx?.database
+    if (!id || !row || !db) return false
+    const f = formRef.current
+    if ((f.title || '').trim() && f.title.trim() !== 'Untitled') return false
+    if (!isBlankContent(f.content, f.content_type)) return false
+    const age = Date.now() - (Date.parse(row.created_at || '') || 0)
+    if (!(age < 30 * 60 * 1000)) return false
+    try {
+      const now = await api.databases.rowContext(id)
+      if (JSON.stringify(now?.row?.props || {}) !== JSON.stringify(row.props || {})) return false
+      await api.databases.deleteRows(db.id, [id])
+      return true
+    } catch { return false }
+  }
+  const closingRef = useRef(false)
+  const close = async () => {
+    if (closingRef.current) return
+    closingRef.current = true
+    try {
+      const discarded = rowCtx ? await discardIfEmptyRow() : false
+      if (!discarded) saveNow()
+      onClose?.({ discarded, returnTo: rowCtx?.database ? `/pages/${rowCtx.database.id}` : null })
+    } finally { closingRef.current = false }
+  }
+  const openOther = (p, opts) => { saveNow(); onOpenPage?.(p, opts) }
 
-  const stats = useMemo(() => docStats(form.content, form.content_type), [form.content, form.content_type])
+  // ── Restoring a version ───────────────────────────────────────────────────
+  const onRestore = (restoredPage, versionSheet, ver) => {
+    const restoredCsv = (restoredPage.content_type || form.content_type) === 'csv'
+    const p = { ...restoredPage, metadata: { ...(restoredPage.metadata || baseMetaRef.current), ...(restoredCsv ? { sheet: versionSheet } : {}) } }
+    hydrate({ ...p, is_published: isPublished, has_unpublished_changes: isPublished || restoredPage.has_unpublished_changes })
+    if (restoredPage.updated_at) saver.setBase(restoredPage.updated_at)
+    clearBackup(backupKeyOf())
+    setDocEpoch(n => n + 1)
+    setTab('edit')
+    setNotice({ kind: 'restored', text: `Restored v${ver?.version_num ?? ''}`.trim() })
+    onSaved?.(restoredPage)
+  }
+
+  // Counted after typing pauses, not on every keystroke.
+  const stats = useMemo(() => docStats(debouncedContent, form.content_type), [debouncedContent, form.content_type])
   const shareUrl = form.slug ? `${window.location.origin}/p/${form.slug}` : ''
   const isSpreadsheet = form.content_type === 'csv'
   const isHtml = form.content_type === 'html'
   const isMarkdown = form.content_type === 'markdown'
   const isDoc = form.content_type === 'doc'
-  // The page generator writes Markdown; a block document hands it Markdown
-  // and turns the result back into blocks.
-  const aiContent = useMemo(() => (isDoc ? convertContent(form.content, 'doc', 'markdown') : form.content), [isDoc, form.content])
+  const isArtifact = form.content_type === 'artifact'
+  const isDatabase = form.content_type === 'database'
+  // Agent Studio reads Markdown; a document is converted only while it is open.
+  const aiContent = useMemo(() => (!studioOpen ? '' : isDoc ? convertContent(debouncedContent, 'doc', 'markdown') : debouncedContent), [studioOpen, isDoc, debouncedContent])
+  const canStudio = (isHtml || isMarkdown || isDoc) && hasPerm('module.ai.use')
+  const canPreview = isMarkdown || isHtml || form.content_type === 'text'
+  const canTemplates = !isArtifact && !isDatabase && !!(TEMPLATES[form.content_type] || isDoc)
+  const nothingToPublish = isPublished && !hasUnpublished && !dirty
 
-  // Markdown page -> block document. The current Markdown is kept as a named
-  // version first (the same request writes it), so the switch can be undone
-  // from History.
   const convertToBlocks = async () => {
     if (!(await confirm({
       title: 'Convert to blocks',
@@ -2252,25 +2487,28 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
       tone: 'default',
     }))) return
     const next = { ...form, content_type: 'doc', content: serializeDoc(markdownToDoc(form.content)) }
-    if (currentId) {
+    if (saver.id) {
       setConverting(true); setError('')
       try {
-        const saved = await api.pages.update(currentId, { ...payloadOf(next), version_note: 'Before converting to blocks' })
+        await saver.flush()
+        const saved = await api.pages.update(saver.id, { ...payloadOf(next, false), version_note: 'Before converting to blocks', ...(saver.base ? { base_updated_at: saver.base } : {}) })
         if (!saved || saved.detail || saved.error) throw new Error(saved?.detail || saved?.error?.message || saved?.error || 'Conversion failed')
+        if (saved.updated_at) saver.setBase(saved.updated_at)
         savedSnapRef.current = snapOf(next)
+        setSavedV(next._v || 0)
       } catch (e) {
-        setError(e?.message || 'Conversion failed')
+        setError(friendlyError(e))
         return
       } finally { setConverting(false) }
+      setForm(next)
+    } else {
+      edit(() => next)
     }
-    setForm(next)
     setTab('edit')
     setShowTemplates(false)
   }
-  const isArtifact = form.content_type === 'artifact'
-  // A database edits its own rows and schema; a row page shows its values above the content.
-  const isDatabase = form.content_type === 'database'
-  const rowPanel = currentId && !isDatabase ? <RowPropertiesPanel pageId={currentId} onOpenDatabase={p=>{ flushAndClose(); onOpenPage?.(p) }} /> : null
+
+  const rowPanel = currentId && !isDatabase && rowCtx ? <RowPropertiesPanel pageId={currentId} onOpenDatabase={p=>openOther(p)} /> : null
 
   const placeholders = {
     doc: '',
@@ -2279,399 +2517,263 @@ function PageDrawer({ page, onClose, onSaved, initialType, folders = [], onOpenP
     text: 'Start typing your plain text content…',
   }
 
-  // height pinned to the dynamic viewport for the same reason as the panel:
-  // inset:0 alone is measured against the large viewport on iOS while the
-  // address bar is expanded, which pushes the top of the panel out of reach.
-  const drawerBase = { position:'fixed', inset:0, height:'100dvh', display:'flex', justifyContent:'flex-end' }
-  const drawerStyle = fullscreen
-    ? { ...drawerBase, zIndex:2000, background:'rgba(0,0,0,0.6)' }
-    : { ...drawerBase, zIndex:1000, background:'rgba(0,0,0,0.45)' }
+  const s = saveState?.state
+  const failing = (s === 'retrying' && (saveState?.failures || 0) >= 3) || s === 'error'
+  const heading = (
+    <PageHeading icon={appearance.icon} cover={appearance.cover} title={form.title} canEdit={!!currentId}
+      onChange={setLook} isMobile={isMobile} />
+  )
 
-  const panelStyle = {
-    width: fullscreen ? '100vw' : isMobile ? '100vw' : '94vw',
-    maxWidth: fullscreen ? '100vw' : 1200,
-    // 100dvh, not 100%: on iOS the address bar expands and contracts, and a
-    // fixed inset:0 panel measured against the large viewport gets its top
-    // pushed off screen — which is what hid the document-type row.
-    height: '100dvh',
-    maxHeight: '100dvh',
-    // The notch and home indicator overlay the viewport. Without these the
-    // first header row sits under the status bar and cannot be tapped. The
-    // rest of the app already does this; this drawer was the exception.
-    paddingTop: 'env(safe-area-inset-top, 0px)',
-    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-    boxSizing: 'border-box',
-    background: 'var(--bg-base)',
-    overflowY: 'hidden',
-    boxShadow: '-4px 0 32px rgba(0,0,0,0.2)',
-    display: 'flex',
-    flexDirection: 'column',
-  }
+  const typeMenu = (
+    <>
+      <MenuLabel>Page type</MenuLabel>
+      {isDatabase
+        ? <MenuItem icon={Database} label="Database" checked disabled />
+        : CONTENT_TYPES.map(t => (
+          <MenuItem key={t.value} icon={TYPE_ICONS[t.value]} label={t.label} checked={form.content_type === t.value}
+            onClick={() => changeType(t.value)} />
+        ))}
+    </>
+  )
+  const menu = (
+    <EditorMenu>
+      {isMobile && <MenuItem icon={Share2} label="Share and settings…" onClick={() => setShareOpen(true)} />}
+      {canStudio && <MenuItem icon={Sparkles} label={studioOpen ? 'Hide Agent Studio' : 'Agent Studio'} onClick={() => setStudioOpen(o => !o)} />}
+      {canTemplates && <MenuItem icon={LayoutTemplate} label={showTemplates ? 'Hide templates' : 'Templates'} onClick={() => setShowTemplates(o => !o)} />}
+      {canPreview && <MenuItem icon={Eye} label={tab === 'preview' ? 'Back to editing' : 'Preview'} onClick={() => setTab(t => t === 'preview' ? 'edit' : 'preview')} />}
+      {!isDatabase && <MenuItem icon={History} label={tab === 'history' ? 'Back to editing' : 'Version history'} onClick={() => setTab(t => t === 'history' ? 'edit' : 'history')} />}
+      {isMarkdown && <MenuItem icon={Blocks} label={converting ? 'Converting…' : 'Convert to blocks'} onClick={convertToBlocks} disabled={converting} />}
+      {isDoc && !isMobile && <MenuItem icon={form.full_width ? Minimize2 : Maximize2} label={form.full_width ? 'Reading width' : 'Full width'} onClick={() => set('full_width', !form.full_width)} />}
+      {!isMobile && <MenuItem icon={fullscreen ? Minimize2 : Maximize2} label={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={() => setFullscreen(f => !f)} />}
+      {currentId && <MenuItem icon={ExternalLink} label="Open in new tab" onClick={() => window.open(`/pages/${currentId}`, '_blank', 'noopener')} />}
+      {!isDatabase && typeMenu}
+      {currentId && onTrash && (<><MenuSep /><MenuItem icon={Trash2} label="Move to trash" danger onClick={() => { saver.cancelPending(); onTrash({ id: currentId, title: form.title }) }} /></>)}
+    </EditorMenu>
+  )
 
-  return (
-    <Overlay>
-    <div style={drawerStyle} onClick={flushAndClose}>
-      <div style={panelStyle} onClick={e=>e.stopPropagation()}>
+  const publishBtn = (
+    <button type="button" onClick={publish} disabled={publishing || nothingToPublish}
+      title={nothingToPublish ? 'Everything is published' : isPublished ? 'Publish your latest changes' : 'Publish this page to its link'}
+      style={{ ...btnPrimary, padding:isMobile ? '7px 12px' : '7px 14px', flexShrink:0, whiteSpace:'nowrap', opacity:nothingToPublish ? 0.55 : 1 }}>
+      {publishing ? 'Publishing…' : isPublished ? 'Update' : 'Publish'}
+    </button>
+  )
 
-        {/* Header.
-            Mobile gets a purpose-built layout rather than relying on flex-wrap.
-            In the single-row version the type <select> sits at width:auto beside
-            the stats text and four buttons; on a 390px screen it collapses to a
-            few pixels wide and cannot be tapped, which is why the document type
-            could not be changed on a phone. Here it gets a labelled row of its
-            own and the actions get theirs. */}
-        {isMobile ? (
-          <>
-            {/* One bar, not four. The old header stacked a type row, three
-                full-width buttons and a stats line — and below it came the meta
-                fields, an AI row, an upload row, tabs and a description banner,
-                so on a 390x700 phone roughly 500px of chrome sat above a
-                sliver of editor. Everything that is not "who am I and how do I
-                publish" now lives behind Settings. */}
-            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 10px 8px 4px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-              <button onClick={flushAndClose} aria-label="Close editor" disabled={saving}
-                style={{ ...btnGhost, padding:'4px 10px', fontSize:20, lineHeight:1.1, flexShrink:0 }}>×</button>
-              {isDoc && !mobileSettingsMode ? (
-                <span style={{ flex:1, minWidth:0, fontSize:14, fontWeight:600, color:'var(--text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'4px 2px' }}>
-                  {form.title || 'Untitled'}
-                </span>
-              ) : (
-              <input
-                aria-label="Page title"
-                placeholder="Page title…"
-                value={form.title}
-                onChange={e=>set('title',e.target.value)}
-                style={{ flex:1, minWidth:0, fontSize:16, fontWeight:700, border:'none', outline:'none', background:'transparent', color:'var(--text-1)', padding:'4px 2px' }} />
-              )}
-              {currentId && <CommentsToggle pageId={currentId} compact />}
-              <button onClick={()=>handleSave(true)} disabled={saving}
-                style={{ ...btnPrimary, padding:'8px 13px', flexShrink:0, whiteSpace:'nowrap' }}>
-                {saving ? '…' : isEdit && page?.is_published ? 'Update' : 'Publish'}
-              </button>
-            </div>
+  const shell = fullscreen
+    ? { position:'fixed', inset:0, height:'100dvh', zIndex:2000, paddingTop:'env(safe-area-inset-top, 0px)', boxSizing:'border-box' }
+    : { position:'relative', height:'100%' }
 
-            {/* The status line doubles as the disclosure, so it costs one row
-                rather than two. Auto-save is what makes this safe: the state it
-                reports is the reason an explicit Draft button no longer needs
-                to be on screen at all times. */}
-            <button
-              onClick={()=>setShowSettings(s=>!s)}
-              aria-expanded={showSettings}
-              style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'6px 12px', border:'none', borderBottom:'1px solid var(--border)', background:'var(--card-bg)', color:'var(--text-2)', fontSize:11, cursor:'pointer', textAlign:'left', flexShrink:0 }}>
-              <span style={{ flex:1, minWidth:0, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                /p/{form.slug || '…'}
-              </span>
-              {autoSaveStatus === 'saved'  && <span style={{ color:'var(--fin-positive)', flexShrink:0 }}>✓ Saved</span>}
-              {autoSaveStatus === 'saving' && <span style={{ flexShrink:0 }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error'  && <span style={{ color:'var(--fin-negative)', flexShrink:0 }} title={autoSaveError}>⚠ Not saved</span>}
-              <span style={{ flexShrink:0, fontWeight:700, color:'var(--accent)' }}>
-                Settings {showSettings ? '▲' : '▼'}
-              </span>
-            </button>
-            {error && <div style={{ padding:'6px 12px', fontSize:12, color:'var(--fin-negative)', flexShrink:0 }}>{error}</div>}
-          </>
-        ) : (
-        <div style={{ padding:isMobile?'10px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, flexShrink:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-            <select value={form.content_type} onChange={e=>changeType(e.target.value)} disabled={isDatabase}
-              style={{ ...inputStyle, width:'auto', fontSize:12, padding:'5px 8px', fontWeight:600 }}>
-              {isDatabase && <option value="database">🗃️ Database</option>}
-              {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <div style={{ display:'flex', gap:6, fontSize:11, color:'var(--text-2)' }}>
-              {stats.label && <span>{stats.label}</span>}
-              {stats.readTime !== '—' && <span>· {stats.readTime}</span>}
-              {form.content.length > charLimit * 0.8 && (
-                <span style={{ color:form.content.length>charLimit?'var(--fin-negative)':'var(--fin-warning)', fontWeight:600 }}>
-                  {form.content.length.toLocaleString()} / {charLimit.toLocaleString()} chars
-                </span>
-              )}
-              {autoSaveStatus === 'saved' && <span style={{ color:'var(--fin-positive)' }}>✓ Saved to cloud</span>}
-              {autoSaveStatus === 'saving' && <span style={{ color:'var(--text-3)' }}>☁ Saving…</span>}
-              {autoSaveStatus === 'error' && <span style={{ color:'var(--fin-negative)' }} title={autoSaveError}>⚠ Save failed — {autoSaveError || 'kept local backup'}</span>}
-            </div>
-          </div>
-          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-            {error && <span style={{ color:'var(--fin-negative)', fontSize:12 }}>{error}</span>}
-            {currentId && <CommentsToggle pageId={currentId} />}
-            <button onClick={()=>setFullscreen(f=>!f)} style={{ ...btnGhost, fontSize:14, padding:'5px 10px' }} title={fullscreen?'Exit fullscreen':'Fullscreen'}>{fullscreen?'⊡':'⊞'}</button>
-            <button onClick={flushAndClose} style={btnGhost} disabled={saving}>Close</button>
-            <button onClick={()=>handleSave(false)} style={btnSecondary} disabled={saving}>{saving?'Saving…':'Save Draft'}</button>
-            <button onClick={()=>handleSave(true)} style={btnPrimary} disabled={saving}>
-              {saving?'Publishing…':isEdit&&page?.is_published?'Update':'Publish'}
-            </button>
-          </div>
+  const body = (
+    <div className="ft-page-editor" data-fullscreen={fullscreen || undefined}
+      style={{ ...shell, display:'flex', flexDirection:'column', minHeight:0, background:'var(--bg-base)' }}>
+
+      {/* Top bar: where the page is, whether it is saved and live, and the
+          actions. Nothing about publishing settings sits above the editor. */}
+      <div style={{ display:'flex', alignItems:'center', gap:isMobile ? 4 : 8, padding:isMobile ? '6px 8px 6px 4px' : '8px 14px 8px 10px', borderBottom:'1px solid var(--border)', flexShrink:0, minHeight:48, boxSizing:'border-box', background:'var(--bg-base)' }}>
+        <button type="button" onClick={close} aria-label={returnLabel ? `Back to ${returnLabel}` : 'Close editor'} title={returnLabel ? `Back to ${returnLabel}` : 'Close'}
+          style={{ ...btnGhost, padding:'6px 8px', display:'inline-flex', alignItems:'center', gap:4, flexShrink:0 }}>
+          <ArrowLeft size={16} />{!isMobile && <span data-docked-hide style={{ fontSize:12.5 }}>{returnLabel || 'Pages'}</span>}
+        </button>
+        <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center' }}>
+          {isMobile
+            ? <span style={{ fontSize:14, fontWeight:600, color:'var(--text-2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', padding:'0 4px' }}>{form.title || 'Untitled'}</span>
+            : <PageBreadcrumbs pageId={currentId} crumbs={ctx?.breadcrumbs} title={form.title} onOpen={p => openOther(p)} inline />}
         </div>
+        <SaveIndicator state={saveState} dirty={dirty} isMobile={isMobile} />
+        {currentId && !isMobile && <span data-docked-hide style={{ display:'inline-flex' }}><PublishChip isPublished={isPublished} hasUnpublished={hasUnpublished || (isPublished && dirty)} /></span>}
+        {currentId && <CommentsToggle pageId={currentId} compact={isMobile} />}
+        {!isMobile && (
+          <button ref={shareBtnRef} type="button" onClick={() => setShareOpen(o => !o)} aria-expanded={shareOpen} aria-haspopup="dialog"
+            style={{ ...btnSecondary, padding:'7px 12px', display:'inline-flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <Share2 size={14} /> Share
+          </button>
         )}
+        {publishBtn}
+        {menu}
+      </div>
 
-        {currentId && <PageBreadcrumbs pageId={currentId} title={form.title} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} />}
-
-        {/* Meta fields. On a phone the whole block is behind Settings and gets
-            its own scroll, so opening it can never push the editor off screen. */}
-        {(!isMobile || showSettings) && (
-        <div style={{ padding:isMobile?'12px 14px':'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', gap:isMobile?14:10, flexWrap:'wrap', alignContent:'flex-start', flexShrink:0, flex:mobileSettingsMode?'1 1 auto':'0 0 auto', minHeight:0, overflowY:isMobile?'auto':undefined, background:isMobile?'var(--card-bg)':undefined }}>
-          {isMobile ? (
-            <div style={{ flex:'1 1 100%' }}>
-              <label style={labelStyle} htmlFor="ft-doctype">Document type</label>
-              <select id="ft-doctype" value={form.content_type}
-                onChange={e=>changeType(e.target.value)} disabled={isDatabase}
-                style={{ ...inputStyle, width:'100%', fontWeight:600 }}>
-                {isDatabase && <option value="database">🗃️ Database</option>}
-                {CONTENT_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <div style={{ fontSize:11, color:'var(--text-2)', marginTop:4 }}>
-                {CONTENT_TYPES.find(t=>t.value===form.content_type)?.hint}
-              </div>
-            </div>
-          ) : isDoc && tab === 'edit' ? null : (
-            <div style={{ flex:'3 1 200px' }}>
-              <input style={{ ...inputStyle, fontSize:16, fontWeight:700, border:'none', borderBottom:'2px solid var(--border)', borderRadius:0, padding:'6px 0', background:'transparent' }}
-                placeholder="Page title…"
-                value={form.title} onChange={e=>set('title',e.target.value)} />
-            </div>
-          )}
-          <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
-            <label style={labelStyle}>Slug (URL)</label>
-            <div style={{ position:'relative' }}>
-              <input style={{ ...inputStyle, fontFamily:'monospace', fontSize:12, paddingLeft:38 }}
-                placeholder="my-page-url"
-                value={form.slug}
-                onChange={e=>{setSlugManual(true);set('slug',e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/--+/g,'-'))}}
-              />
-              <span style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)', fontSize:11, color:'var(--text-2)', pointerEvents:'none' }}>/p/</span>
-            </div>
-            {shareUrl&&<div style={{ fontSize:10, color:'var(--accent)', marginTop:2, fontFamily:'monospace', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{shareUrl}</div>}
-            {slugStatus && !slugStatus.available && (
-              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-warning)' }}>
-                ⚠ This URL is already taken{slugStatus.suggestions?.length ? ' — try:' : '.'}
-                {slugStatus.suggestions?.length > 0 && (
-                  <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:3 }}>
-                    {slugStatus.suggestions.map(s=>(
-                      <button key={s} type="button" onClick={()=>{ setSlugManual(true); set('slug', s) }}
-                        style={{ fontSize:11, fontFamily:'monospace', border:'1px solid var(--border)', borderRadius:5, padding:'2px 6px', background:'var(--bg-base)', color:'var(--accent)', cursor:'pointer' }}>{s}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            {slugStatus && slugStatus.available && form.slug && (
-              <div style={{ marginTop:4, fontSize:11, color:'var(--fin-positive)' }}>✓ URL is available</div>
-            )}
-          </div>
-          <div style={{ flex:isMobile?'1 1 100%':'2 1 150px' }}>
-            <label style={labelStyle}>Description (for SEO)</label>
-            <input style={inputStyle} placeholder="Short description" value={form.description} onChange={e=>set('description',e.target.value)} />
-          </div>
-          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto', display:'flex', alignItems:isMobile?'center':'flex-end', gap:8, flexWrap:'wrap' }}>
-            <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' }}>
-              <input type="checkbox" checked={form.is_password_protected} onChange={e=>set('is_password_protected',e.target.checked)} />
-              🔒 Password
-            </label>
-            {form.is_password_protected&&(
-              <input style={{ ...inputStyle, width:isMobile?'100%':110, fontSize:12 }} type="password" placeholder="Set password" value={form.password} onChange={e=>set('password',e.target.value)} />
-            )}
-          </div>
-          <div style={{ flex:isMobile?'1 1 100%':'1 1 160px' }}>
-            <label style={labelStyle} htmlFor="ft-folder">Folder</label>
-            <input id="ft-folder" list="ft-folders" style={inputStyle} placeholder="e.g. Clients" value={form.folder}
-              onChange={e=>set('folder',e.target.value.slice(0,80))} />
-            <datalist id="ft-folders">{folders.map(f=><option key={f} value={f} />)}</datalist>
-          </div>
-          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto' }}>
-            <ExpiryField value={form.expires_at} onChange={v=>set('expires_at',v)} isMobile={isMobile} />
-          </div>
-          <div style={{ flex:isMobile?'1 1 100%':'0 0 auto', display:'flex', alignItems:isMobile?'center':'flex-end' }}>
-            <label title="Visitors cannot right-click, save the page, or open its source with keyboard shortcuts, and the code is not sent outside the page itself."
-              style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap', paddingBottom:isMobile?0:6 }}>
-              <input type="checkbox" checked={form.protect_source} onChange={e=>set('protect_source',e.target.checked)} />
-              🛡 Protect code
-            </label>
-          </div>
-          {isMobile && (stats.label || stats.readTime !== '—') && (
-            <div style={{ flex:'1 1 100%', fontSize:11, color:'var(--text-2)' }}>
-              {stats.label}{stats.readTime !== '—' ? ` · ${stats.readTime}` : ''}
-            </div>
-          )}
-          {isMobile && (
-            <div style={{ flex:'1 1 100%', display:'flex', gap:8, alignItems:'center', borderTop:'1px solid var(--border)', paddingTop:12 }}>
-              <button onClick={()=>handleSave(false)} disabled={saving} style={{ ...btnSecondary, flex:1 }}>
-                {saving ? 'Saving…' : 'Save as draft'}
-              </button>
-              <button onClick={()=>setShowSettings(false)} style={{ ...btnGhost, flex:1 }}>Done</button>
-            </div>
-          )}
+      {/* What needs the author's attention, one line each. */}
+      {conflict && (
+        <Banner tone="error" actions={<>
+          <button type="button" style={bannerBtn} disabled={conflictBusy} onClick={keepMine}>Keep my version</button>
+          <button type="button" style={bannerBtn} disabled={conflictBusy} onClick={loadTheirs}>Load latest</button>
+          <button type="button" style={bannerBtn} onClick={downloadCopy}><Download size={12} /> Download my copy</button>
+        </>}>
+          {friendlyError(conflict)} Your text is still here.
+        </Banner>
+      )}
+      {s === 'trashed' && (
+        <Banner tone="error" actions={<button type="button" style={bannerBtn} onClick={restoreFromTrash}>Restore page</button>}>
+          {friendlyError(saveState.error)}
+        </Banner>
+      )}
+      {failing && !conflict && (
+        <Banner tone={s === 'error' ? 'error' : 'warn'} actions={<>
+          {s === 'retrying' && <button type="button" style={bannerBtn} onClick={() => saver.retryNow()}>Retry now</button>}
+          <button type="button" style={bannerBtn} onClick={downloadCopy}><Download size={12} /> Download a copy</button>
+        </>}>
+          {friendlyError(saveState?.error)}
+        </Banner>
+      )}
+      {error && (
+        <Banner tone="error" actions={<button type="button" style={bannerBtn} onClick={() => setError('')}>Dismiss</button>}>{error}</Banner>
+      )}
+      {notice?.kind === 'published' && (
+        <Banner tone="ok" actions={<>
+          <CopyLinkButton page={{ slug: notice.slug, is_published: true }} onCopied={() => onToast?.('Link copied')} />
+          <a href={`/p/${notice.slug}`} target="_blank" rel="noopener noreferrer" style={bannerBtn}><ExternalLink size={12} /> View</a>
+          <button type="button" aria-label="Dismiss" style={{ ...bannerBtn, border:'none' }} onClick={() => setNotice(null)}><X size={13} /></button>
+        </>}>
+          Published · <span style={{ fontFamily:'monospace' }}>/p/{notice.slug}</span>
+        </Banner>
+      )}
+      {notice?.kind === 'restored' && (
+        <Banner tone="ok" actions={<button type="button" aria-label="Dismiss" style={{ ...bannerBtn, border:'none' }} onClick={() => setNotice(null)}><X size={13} /></button>}>
+          {notice.text}. {isPublished ? 'Update to publish it.' : ''}
+        </Banner>
+      )}
+      {tab !== 'edit' && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12.5, color:'var(--text-2)', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          {tab === 'history' ? <History size={13} /> : <Eye size={13} />}
+          <span style={{ fontWeight:600 }}>{tab === 'history' ? 'Version history' : 'Preview'}</span>
+          <button type="button" onClick={() => setTab('edit')} style={{ ...btnGhost, marginLeft:'auto', fontSize:12, padding:'3px 10px', color:'var(--accent)' }}>Back to editing</button>
         </div>
-        )}
+      )}
 
-        {!mobileSettingsMode && (<>
-        {/* AI composer — Web Page and Document only. Spreadsheet and Plain
-            Text are structured formats the generator has no useful contract for.
-            The server refuses page generation without module.ai.use, as it does
-            the AI Assistant, so the composer is hidden from whoever lacks it. */}
-        {(isHtml || isMarkdown || isDoc) && tab === 'edit' && hasPerm('module.ai.use') && (
-          <AiComposer
-            contentType={isDoc ? 'markdown' : form.content_type}
-            content={aiContent}
-            isMobile={isMobile}
-            onApply={c=>{ setContent(isDoc ? convertContent(c, 'markdown', 'doc') : c); setShowTemplates(false) }}
+      {/* Agent Studio, opened from the menu. The server refuses page
+          generation without module.ai.use, so it is offered only with it. */}
+      {canStudio && tab === 'edit' && (
+        <AiComposer
+          open={studioOpen}
+          onOpenChange={setStudioOpen}
+          contentType={isDoc ? 'markdown' : form.content_type}
+          content={aiContent}
+          isMobile={isMobile}
+          onApply={c=>{ setContent(isDoc ? convertContent(c, 'markdown', 'doc') : c); setShowTemplates(false); setDocEpoch(n => n + 1) }}
+        />
+      )}
+      {showTemplates && tab === 'edit' && canTemplates && (
+        <TemplatePicker contentType={form.content_type} onSelect={t=>{
+          edit(f => ({ ...f, content:t.content, ...(f.content_type === 'csv' ? { sheet:t.sheet } : {}) }))
+          setShowTemplates(false)
+          setDocEpoch(n => n + 1)
+        }} />
+      )}
+
+      {/* Title row for everything but block documents (which carry their own). */}
+      {!isDoc && tab === 'edit' && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:isMobile ? '8px 12px' : '10px 20px', borderBottom:'1px solid var(--border)', flexShrink:0, background:'var(--card-bg)' }}>
+          {currentId && !isDatabase && (
+            <PageHeadingIcon icon={appearance.icon} title={form.title} onPick={icon => setLook({ icon })} />
+          )}
+          {isDatabase && appearance.icon && <span aria-hidden="true" style={{ fontSize:20 }}>{appearance.icon}</span>}
+          <input ref={titleRef} aria-label="Page title" placeholder="Page title…" value={form.title}
+            onChange={e=>set('title', e.target.value)}
+            onKeyDown={e=>{ if (e.key === 'Enter') { e.preventDefault(); textareaRef.current?.focus() } }}
+            style={{ flex:1, minWidth:0, fontSize:isMobile ? 18 : 20, fontWeight:700, border:'none', outline:'none', background:'transparent', color:'var(--text-1)', padding:'2px 0' }} />
+          {stats.label && !isMobile && <span style={{ fontSize:11.5, color:'var(--text-3)', whiteSpace:'nowrap' }}>{stats.label}{stats.readTime !== '—' ? ` · ${stats.readTime}` : ''}</span>}
+        </div>
+      )}
+
+      {isMarkdown && tab === 'edit' && (
+        <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} isMobile={isMobile} />
+      )}
+      {isHtml && tab === 'edit' && (
+        <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
+          <ImportHtmlButton value={form.content} onChange={c=>{ setContent(c); setShowTemplates(false) }}
+            onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? '📄 Upload HTML' : '📄 Upload HTML file'} />
+          <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
+        </div>
+      )}
+      {(isMarkdown || isHtml) && tab === 'edit' && (
+        <AttachmentsBar content={debouncedContent} onChange={setContent} />
+      )}
+
+      {/* Content area */}
+      <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', minHeight:0 }}>
+        {rowPanel && tab === 'edit' && !isDoc && <div style={{ padding:isMobile?'8px 14px 0':'10px 20px 0', flexShrink:0, maxHeight:'40%', overflowY:'auto' }}>{rowPanel}</div>}
+        {tab === 'history' ? (
+          <VersionHistoryPanel
+            pageId={currentId}
+            currentContent={form.content}
+            currentContentType={form.content_type}
+            beforeRestore={() => saveNow()}
+            onRestore={onRestore}
           />
-        )}
-
-        {/* Templates bar */}
-        {showTemplates && tab !== 'history' && !isArtifact && (
-          <TemplatePicker contentType={form.content_type} onSelect={t=>{
-            setForm(f => ({ ...f, content:t.content, ...(f.content_type === 'csv' ? { sheet:t.sheet } : {}) }))
-            setShowTemplates(false)
-          }} />
-        )}
-
-        {/* Toolbar for markdown */}
-        {isMarkdown && tab === 'edit' && (
-          <MarkdownToolbar textareaRef={textareaRef} value={form.content} onChange={setContent} isMobile={isMobile} />
-        )}
-        {isHtml && tab === 'edit' && (
-          <div style={{ display:'flex', gap:1, padding:'6px 8px', background:'var(--card-bg)', borderBottom:'1px solid var(--border)', alignItems:'center', flexShrink:0 }}>
-            <ImportHtmlButton value={form.content} onChange={c=>{ setContent(c); setShowTemplates(false) }}
-              onTitle={t=>{ if (!form.title.trim() && t) set('title', t) }} label={isMobile ? '📄 Upload HTML' : '📄 Upload HTML file'} />
-            <AssetButton textareaRef={textareaRef} value={form.content} onChange={setContent} format={formatAssetHtml} label={isMobile ? '📎 Insert image' : '📎 Insert image / file'} />
-            {/* The explanation is worth a line on a desktop toolbar and worth a
-                row of a phone screen — which it is not. */}
-            {!isMobile && <span style={{ fontSize:11, color:'var(--text-2)', marginLeft:6 }}>Uploads to secure cloud storage and inserts an &lt;img&gt;/&lt;a&gt; tag at the cursor</span>}
+        ) : isDatabase ? (
+          <div style={{ flex:1, overflow:'auto', padding:isMobile?'8px 12px':'8px 20px' }}>
+            {currentId ? (
+              <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:14, padding:20 }}>Loading database…</div>}>
+                <DatabaseView pageId={currentId} isMobile={isMobile}
+                  onOpenRow={row=>openOther(row, { returnTo: `/pages/${currentId}`, returnLabel: form.title || 'database' })} />
+              </Suspense>
+            ) : <div style={{ color:'var(--text-2)', fontSize:13, padding:20 }}>Create databases with the New database button.</div>}
           </div>
-        )}
-        {(isMarkdown || isHtml) && tab === 'edit' && (
-          <AttachmentsBar content={debouncedContent} onChange={setContent} />
-        )}
-
-
-        {/* Edit / Preview / History tabs */}
-        <div style={{ display:'flex', borderBottom:'1px solid var(--border)', padding:`0 ${isMobile?'14px':'20px'}`, flexShrink:0 }}>
-          {(isDatabase ? ['edit'] : isSpreadsheet || isArtifact ? ['edit','history'] : ['edit','preview','history']).map(t=>(
-            <button key={t} onClick={()=>setTab(t)} className="app-press"
-              style={{ padding:'8px 14px', border:'none', background:'none', cursor:'pointer', fontSize:13, fontWeight:600, color:tab===t?'var(--accent)':'var(--text-2)', borderBottom:tab===t?'2px solid var(--accent)':'2px solid transparent', textTransform:'capitalize', marginBottom:-1 }}>
-              {t === 'history' ? '🕐 History' : t}
-            </button>
-          ))}
-          {isMarkdown && tab !== 'history' && (
-            <button onClick={convertToBlocks} disabled={converting} title="Turn this Markdown page into a block document. The current version is kept in History."
-              style={{ marginLeft:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px', display:'inline-flex', alignItems:'center', gap:5, color:'var(--accent)' }}>
-              <Blocks size={13} /> {converting ? 'Converting…' : 'Convert to blocks'}
-            </button>
-          )}
-          {!showTemplates && tab !== 'history' && !isArtifact && !isDatabase && (
-            <button onClick={()=>setShowTemplates(true)} style={{ marginLeft:isMarkdown?0:'auto', alignSelf:'center', ...btnGhost, fontSize:11, padding:'4px 8px' }}>Use template</button>
-          )}
-        </div>
-
-        {/* Editor-type banner. Desktop only: it is pure explanation, and the
-            document type it names is one tap away under Settings on a phone,
-            where the same two sentences cost a visible slice of the editor. */}
-        {!isMobile && tab !== 'history' && (
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 16px', fontSize:12, color:'var(--text-2)', background:'var(--bg-base)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-            <span style={{ fontWeight:700, color:'var(--text-1)' }}>
-              {isDatabase ? '🗃️ Database' : isSpreadsheet ? '📊 Spreadsheet' : isHtml ? '🌐 Web Page (HTML)' : isArtifact ? '🧩 Artifact' : isDoc ? '📝 Document' : isMarkdown ? '#️⃣ Markdown (classic)' : '📄 Plain Text'}
-            </span>
-            <span>
-              {isDatabase ? 'Every row is a page. Click a cell to edit it, Open to write in the row. Views, filters and sorts save as you go.'
-                : isSpreadsheet ? 'Type to fill a cell, = for a formula such as =SUM(B2:B9). Right-click a cell for rows, columns and sorting.'
-                : isHtml ? 'Write raw HTML/CSS/JS — renders as a full web page'
-                : isArtifact ? 'A working mini-app in one HTML file — runs sandboxed, shared like a web page'
-                : isDoc ? 'Type / for blocks, select text to format, drag ⋮⋮ to reorder. Markdown shortcuts work: #, -, 1., [ ], >, ```'
-                : isMarkdown ? 'Rich document — use the toolbar for headings, bold, tables, images'
-                : 'Plain text / code'}
-            </span>
-          </div>
-        )}
-
-        {/* Content area */}
-        <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-          {rowPanel && tab === 'edit' && !isDoc && <div style={{ padding:isMobile?'8px 14px 0':'10px 20px 0', flexShrink:0, maxHeight:'40%', overflowY:'auto' }}>{rowPanel}</div>}
-          {tab === 'history' ? (
-            <VersionHistoryPanel
-              pageId={currentId}
-              currentContent={form.content}
-              currentContentType={form.content_type}
-              onRestore={(restoredPage, versionSheet) => {
-                const restoredCsv = (restoredPage.content_type || form.content_type) === 'csv'
-                setForm(f => ({
-                  ...f,
-                  title:        restoredPage.title || f.title,
-                  content:      restoredPage.content ?? f.content,
-                  content_type: restoredPage.content_type || f.content_type,
-                  ...(restoredCsv ? { sheet: versionSheet } : {}),
-                }))
-                // The server still holds the current formatting; comparing with
-                // it makes the next auto-save write the version's.
-                savedSnapRef.current = snapOf({ ...form, title:restoredPage.title||'', content_type:restoredPage.content_type||'markdown', content:restoredPage.content||'', slug:restoredPage.slug||form.slug||'', sheet:restoredPage.metadata?.sheet, full_width:restoredPage.metadata?.full_width })
-                setTab('edit')
-                onSaved(restoredPage)
-              }}
-            />
-          ) : isDatabase ? (
-            <div style={{ flex:1, overflow:'auto', padding:isMobile?'8px 12px':'8px 20px' }}>
-              {currentId ? (
-                <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:14, padding:20 }}>Loading database…</div>}>
-                  <DatabaseView pageId={currentId} isMobile={isMobile} onOpenRow={row=>{ flushAndClose(); onOpenPage?.(row) }} />
-                </Suspense>
-              ) : <div style={{ color:'var(--text-2)', fontSize:13, padding:20 }}>Create databases with the New database button.</div>}
-            </div>
-          ) : isArtifact ? (
-            <ArtifactStudio
-              content={form.content}
-              onChange={setContent}
-              onTitle={t=>setForm(f => f.title.trim() ? f : { ...f, title:t })}
-              pageId={currentId}
-              canUseAi={hasPerm('module.ai.use')}
-              isMobile={isMobile}
-            />
-          ) : isSpreadsheet ? (
+        ) : isArtifact ? (
+          <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:14, padding:20 }}>Loading artifact editor…</div>}>
+          <ArtifactStudio
+            content={form.content}
+            onChange={setContent}
+            onTitle={t=>edit(f => f.title.trim() ? f : { ...f, title:t })}
+            pageId={currentId}
+            canUseAi={hasPerm('module.ai.use')}
+            isMobile={isMobile}
+          />
+          </Suspense>
+        ) : isSpreadsheet ? (
+          <Suspense fallback={<div style={{ color:'var(--text-3)', fontSize:14, padding:20 }}>Loading spreadsheet…</div>}>
             <SheetEditor value={form.content} onChange={setContent} meta={form.sheet} onMetaChange={setSheet}
               fileName={form.title || form.slug} />
-          ) : isDoc && tab === 'edit' ? (
-            <DocCanvas form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} belowTitle={rowPanel}
-              pageId={page?.id && page.content == null ? null : currentId} onLiveMode={onLiveMode} isContentSaved={isContentSaved} />
-          ) : tab === 'edit' ? (
-            <textarea
-              ref={textareaRef}
-              style={{ flex:1, width:'100%', padding:isMobile?'14px':'20px 24px', fontFamily:isMarkdown?'-apple-system,sans-serif':'ui-monospace,monospace', fontSize:isMarkdown?15:13, lineHeight:isMarkdown?1.8:1.65, background:'var(--bg-base)', color:'var(--text-1)', border:'none', outline:'none', resize:'none', boxSizing:'border-box', overflowY:'auto' }}
-              placeholder={placeholders[form.content_type]}
-              value={form.content}
-              onChange={e=>setContent(e.target.value)}
-              spellCheck={isMarkdown}
-            />
-          ) : (
-            <div style={{ flex:1, overflow:'auto', background:isDoc ? 'var(--card-bg)' : '#fff', borderTop:'1px solid var(--border)' }}>
-              <ContentPreview contentType={form.content_type} content={form.content} />
-            </div>
-          )}
-        </div>
-        {currentId && tab !== 'history' && !isDatabase && <SubPagesList pageId={currentId} onOpen={p=>{ flushAndClose(); onOpenPage?.(p) }} onAdd={onCreateChild && (id=>{ flushAndClose(); onCreateChild(id) })} />}
-        </>)}
+          </Suspense>
+        ) : isDoc && tab === 'edit' ? (
+          <DocCanvas key={docEpoch} form={form} set={set} setContent={setContent} isMobile={isMobile} stats={stats} belowTitle={rowPanel}
+            pageId={currentId} onLiveMode={onLiveMode} isContentSaved={isContentSaved} heading={heading} titleRef={titleRef} />
+        ) : tab === 'edit' ? (
+          <textarea
+            ref={textareaRef}
+            aria-label="Page content"
+            style={{ flex:1, width:'100%', padding:isMobile?'14px':'20px 24px', fontFamily:isMarkdown?'-apple-system,sans-serif':'ui-monospace,monospace', fontSize:isMarkdown?15:13, lineHeight:isMarkdown?1.8:1.65, background:'var(--bg-base)', color:'var(--text-1)', border:'none', outline:'none', resize:'none', boxSizing:'border-box', overflowY:'auto' }}
+            placeholder={placeholders[form.content_type]}
+            value={form.content}
+            onChange={e=>setContent(e.target.value)}
+            spellCheck={isMarkdown}
+          />
+        ) : (
+          <div style={{ flex:1, overflow:'auto', background:isDoc ? 'var(--card-bg)' : '#fff', borderTop:'1px solid var(--border)' }}>
+            <ContentPreview contentType={form.content_type} content={form.content} />
+          </div>
+        )}
       </div>
+      {currentId && tab === 'edit' && !isDatabase && !isSpreadsheet && (
+        <SubPagesList pageId={currentId} initial={ctx?.children} onOpen={p=>openOther(p)}
+          onAdd={!isArtifact && onCreateChild ? (id=>{ saveNow(); onCreateChild(id) }) : undefined} />
+      )}
+
+      <SharePopover open={shareOpen} anchorRef={shareBtnRef} onClose={() => setShareOpen(false)} isMobile={isMobile}
+        form={form} set={set} onSlugEdit={editSlug} slugStatus={slugStatus} folders={folders} shareUrl={shareUrl}
+        isPublished={isPublished} hasUnpublished={hasUnpublished || (isPublished && dirty)} canPublish={!!form.title.trim()}
+        busy={publishing} onPublish={publish} onUnpublish={unpublish} onSavePassword={savePassword}
+        onCopied={() => onToast?.('Link copied')} />
     </div>
-    </Overlay>
+  )
+  return fullscreen ? <Overlay>{body}</Overlay> : body
+}
+
+// The icon button beside a title row (types without the document canvas).
+function PageHeadingIcon({ icon, title, onPick }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" aria-label={icon ? 'Change icon' : 'Add icon'} title={icon ? 'Change icon' : 'Add icon'} onClick={() => setOpen(true)}
+        style={{ all:'unset', cursor:'pointer', width:30, height:30, display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:8, fontSize:20, color:'var(--text-3)', flexShrink:0 }}>
+        {icon || <Smile size={16} />}
+      </button>
+      <IconPicker open={open} title={title} current={icon} onPick={e => { setOpen(false); onPick(e) }} onClose={() => setOpen(false)} />
+    </>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Confirm dialog
-// ---------------------------------------------------------------------------
-function ConfirmDialog({ message, onConfirm, onCancel }) {
-  return (
-    <Overlay>
-    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onCancel}>
-      <div style={{ background:'var(--bg-base)', borderRadius:'10px', padding:28, maxWidth:380, width:'100%', boxShadow:'var(--shadow-popover)' }} onClick={e=>e.stopPropagation()}>
-        <div style={{ fontSize:15, fontWeight:700, marginBottom:8 }}>Confirm</div>
-        <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:22 }}>{message}</div>
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-          <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={onConfirm} style={{ ...btnPrimary, background:'var(--danger-btn)', color:'var(--danger-fg)' }}>Delete</button>
-        </div>
-      </div>
-    </div>
-    </Overlay>
-  )
-}
+const TYPE_ICONS = { doc: FileText, markdown: Hash, html: FileCode2, artifact: Puzzle, csv: Table2, text: Type }
 
 // ---------------------------------------------------------------------------
 // Page Card (mobile)
@@ -2743,6 +2845,8 @@ function FolderModal({ page, folders, onClose, onSave }) {
   )
 }
 
+const DATE_IST = new Intl.DateTimeFormat('en-IN', { timeZone:'Asia/Kolkata', day:'numeric', month:'short', year:'numeric' })
+
 // "just now", "12m ago", "3h ago", "yesterday", "5d ago", then a date.
 function relTime(iso) {
   if (!iso) return '—'
@@ -2756,7 +2860,7 @@ function relTime(iso) {
   const d = Math.round(h / 24)
   if (d === 1) return 'yesterday'
   if (d < 7) return `${d}d ago`
-  return new Date(iso).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })
+  return DATE_IST.format(new Date(iso))
 }
 
 // The less frequent actions for a page, behind one "⋯" button so each row
@@ -2817,7 +2921,7 @@ function RowMenu({ page, onPublish, onShare, onAnalytics, onDelete, onClone, onM
           {item(Copy, cloning===page.id ? 'Duplicating…' : 'Duplicate as draft', run(onClone), { disabled: cloning===page.id })}
           {item(FolderInput, 'Move to folder…', run(onMove))}
           <div style={{ height:1, background:'var(--border)', margin:'4px 6px' }} />
-          {item(Trash2, 'Delete', run(onDelete), { danger:true })}
+          {item(Trash2, 'Move to trash', run(onDelete), { danger:true })}
         </div>,
         document.body,
       )}
@@ -2844,6 +2948,7 @@ function CopyLinkButton({ page, onCopied, compact }) {
 function StatusPill({ page }) {
   const expired = page.expires_at && msUntil(page.expires_at) <= 0
   const s = expired ? { label:'Expired', bg:'var(--fin-neg-bg)', fg:'var(--fin-negative)', dot:'var(--fin-negative)' }
+    : page.is_published && page.has_unpublished_changes ? { label:'Live · unpublished changes', bg:'var(--fin-warn-bg)', fg:'var(--fin-warning)', dot:'var(--fin-warning)' }
     : page.is_published ? { label:'Live', bg:'var(--fin-pos-bg)', fg:'var(--fin-positive)', dot:'var(--fin-positive)' }
     : { label:'Draft', bg:'var(--bg-base)', fg:'var(--text-2)', dot:'var(--text-3)' }
   return (
@@ -2853,7 +2958,7 @@ function StatusPill({ page }) {
   )
 }
 
-function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, openingId, cloning }) {
+const PageRow = memo(function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, openingId, cloning }) {
   const [hover, setHover] = useState(false)
   const cell = { padding:'14px 16px', verticalAlign:'middle' }
   return (
@@ -2884,7 +2989,7 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
           <Eye size={13} strokeWidth={2} style={{ color:'var(--text-3)' }} /> {(page.view_count??0).toLocaleString('en-IN')}
         </button>
       </td>
-      <td style={{ ...cell, whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12.5 }} title={page.updated_at ? new Date(page.updated_at).toLocaleString('en-IN') : ''}>
+      <td style={{ ...cell, whiteSpace:'nowrap', color:'var(--text-2)', fontSize:12.5 }} title={page.updated_at ? formatIst(page.updated_at) : ''}>
         {relTime(page.updated_at || page.created_at)}
       </td>
       <td style={{ ...cell, whiteSpace:'nowrap', textAlign:'right' }}>
@@ -2902,12 +3007,12 @@ function PageRow({ page, idx, total, onEdit, onPublish, onShare, onAnalytics, on
       </td>
     </tr>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Mobile card
 // ---------------------------------------------------------------------------
-function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, cloning }) {
+const PageCard = memo(function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onClone, onMove, onFolder, onCopied, cloning }) {
   return (
     <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:14, padding:14, display:'flex', flexDirection:'column', gap:10 }}>
       <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
@@ -2940,107 +3045,308 @@ function PageCard({ page, onEdit, onPublish, onShare, onAnalytics, onDelete, onC
       </div>
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Main PagesManager
 // ---------------------------------------------------------------------------
+// /pages lists pages; /pages/<id> opens one in the main column beside the
+// tree (deep links, refresh and Back all work); /pages/new?type=… starts a new
+// one, which takes its id in the address bar on its first save.
+
+// What the list shows, reduced to the fields that change it. Comparing these
+// is how a poll that brought back the same list is told apart from one that
+// did not, when the ETag itself cannot be read.
+function listSignature(list) {
+  return list.map(p => [p.id, p.updated_at, p.title, p.is_published, p.has_unpublished_changes, p.view_count, p.metadata?.folder, p.expires_at, p.slug].join('|')).join('\n')
+}
+
+// A list row from a full page: the list never carries content.
+function listRow(p) {
+  if (!p) return p
+  const { content, ...rest } = p
+  return rest
+}
+
+const POLL_MS = 60_000
+const LIST_PAGE = 100
+
+// A callback whose identity never changes but always runs the latest code,
+// so memoised rows are not re-rendered by a parent render.
+function useStableCallback(fn) {
+  const ref = useRef(fn)
+  ref.current = fn
+  return useCallback((...args) => ref.current(...args), [])
+}
+const EDITOR_CSS = `
+@media (min-width: 768px) {
+  body:has(.cmt-dock) .ft-page-editor { padding-right: min(380px, 100vw); box-sizing: border-box; }
+  body:has(.cmt-dock) .ft-page-editor [data-docked-hide] { display: none !important; }
+}
+`
+
+function parseRoute(pathname) {
+  const m = /^\/pages\/([^/]+)\/?$/.exec(pathname || '')
+  if (!m) return { id: null, isNew: false }
+  const seg = decodeURIComponent(m[1])
+  return seg === 'new' ? { id: null, isNew: true } : { id: seg, isNew: false }
+}
+
 export default function PagesManager() {
   const isMobile = useIsMobile()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [pages, setPages] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [drawerPage, setDrawerPage] = useState(null)
+  const [error, setError] = useState(null)
+  const [listVersion, setListVersion] = useState(0)
+  const [treePatch, setTreePatch] = useState(null)
   const [newDbOpen, setNewDbOpen] = useState(false)
   const [analyticsPage, setAnalyticsPage] = useState(null)
   const [sharePage, setSharePage] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [toast, setToast] = useState({ msg:'', ok:true })
+  const [toast, setToast] = useState({ msg:'', ok:true, action:null })
   const [search, setSearch] = useState('')
   const [filterTab, setFilterTab] = useState('all')
   // '' = every folder, UNFILED = pages with no folder, otherwise a folder name.
   const [folderFilter, setFolderFilter] = useState('')
   const [movePage, setMovePage] = useState(null)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [trashOpen, setTrashOpen] = useState(false)
+  const [trashCount, setTrashCount] = useState(null)
   const [sortBy, setSortBy] = useState(() => { try { return localStorage.getItem('pages_sort') || 'updated' } catch { return 'updated' } })
   useEffect(() => { try { localStorage.setItem('pages_sort', sortBy) } catch {} }, [sortBy])
   const searchRef = useRef(null)
-  // "/" jumps to search, as on most list screens.
+  const editorApi = useRef(null)
+  const route = parseRoute(location.pathname)
+  const editing = route.isNew || !!route.id
+
+  const toastTimer = useRef(null)
+  const showToast = useCallback((msg, ok = true, action = null) => {
+    clearTimeout(toastTimer.current)
+    setToast({ msg, ok, action })
+    toastTimer.current = setTimeout(() => setToast({ msg:'', ok:true, action:null }), action ? 7000 : 3500)
+  }, [])
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+
+  // ── The list ──────────────────────────────────────────────────────────────
+  // Track IDs the user explicitly trashed so background refreshes can't restore them.
+  const deletedIdsRef = useRef(new Set())
+  const etagRef = useRef(null)
+  const sigRef = useRef(null)
+  const loadPages = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(null) }
+    try {
+      let list
+      if (api.pages.listIfChanged) {
+        const r = await api.pages.listIfChanged(silent ? etagRef.current : null)
+        if (r?.notModified) return
+        etagRef.current = r?.etag || null
+        list = r?.data
+      } else {
+        list = await api.pages.list({ fresh: true })
+      }
+      if (list?.detail) throw new Error(list.detail)
+      const rows = (Array.isArray(list) ? list : []).filter(p => !deletedIdsRef.current.has(p.id))
+      const sig = listSignature(rows)
+      if (sig === sigRef.current) return
+      sigRef.current = sig
+      setPages(rows)
+      setListVersion(v => v + 1)
+      setError(null)
+    } catch (e) {
+      if (!silent) setError(e)
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }, [])
+
+  // Initial load, then keep the list current: on focus and every minute
+  // while the tab is visible. An unchanged list costs a 304 and no render.
+  useEffect(() => {
+    loadPages(false)
+    let last = Date.now()
+    const tick = () => {
+      if (document.hidden || Date.now() - last < 15_000) return
+      last = Date.now()
+      loadPages(true)
+    }
+    window.addEventListener('focus', tick)
+    const iv = setInterval(tick, POLL_MS)
+    return () => { window.removeEventListener('focus', tick); clearInterval(iv) }
+  }, [loadPages])
+
+  // A write somewhere changed the list: reload it now (not on the next poll).
+  const refreshList = useCallback(() => { etagRef.current = null; sigRef.current = null; loadPages(true) }, [loadPages])
+
+  // Nothing listed: is it because everything is in the trash?
+  useEffect(() => {
+    if (loading || error || pages.length || !api.pageTree?.trash) { setTrashCount(null); return }
+    let live = true
+    api.pageTree.trash().then(t => { if (live) setTrashCount(Array.isArray(t) ? t.length : 0) }).catch(() => {})
+    return () => { live = false }
+  }, [loading, error, pages.length, listVersion])
+
+  // Every save from the editor updates the list and the tree at once.
+  const handleSaved = useCallback((saved) => {
+    if (!saved?.id) return
+    const row = listRow(saved)
+    setPages(prev => {
+      const idx = prev.findIndex(p => p.id === row.id)
+      if (idx < 0) return row.title !== undefined ? [row, ...prev] : prev
+      const n = [...prev]
+      n[idx] = { ...prev[idx], ...row }
+      return n
+    })
+    setTreePatch({ ...row, _seq: Date.now() })
+  }, [])
+
+  // ── Opening pages ─────────────────────────────────────────────────────────
+  // The open page: loaded with one request for the page and everything around
+  // it. A new page keeps its editor when it takes an id (adoptedRef).
+  const [session, setSession] = useState(null) // { key, id, page, ctx, status, error, initialType, initialTitle }
+  const adoptedRef = useRef(null)
+  const sessionRef = useRef(null)
+  sessionRef.current = session
+  const loadedReloadRef = useRef(0)
+  const [reloadKey, setReloadKey] = useState(0)
+  useEffect(() => {
+    if (route.isNew) {
+      const q = new URLSearchParams(location.search)
+      setSession(s => (s?.isNew && s.navKey === location.key) ? s : {
+        key: `new-${location.key}`, navKey: location.key, isNew: true, id: null, page: null, ctx: null, status: 'ready',
+        initialType: q.get('type') || 'doc', initialTitle: q.get('title') || '',
+      })
+      return
+    }
+    if (!route.id) { setSession(null); return }
+    if (adoptedRef.current === route.id) {
+      adoptedRef.current = null
+      setSession(s => (s ? { ...s, id: route.id, isNew: false } : s))
+      return
+    }
+    const cur = sessionRef.current
+    if (cur?.id === route.id && cur.status === 'ready' && loadedReloadRef.current === reloadKey) return
+    loadedReloadRef.current = reloadKey
+    let live = true
+    setSession({ key: `${route.id}-${reloadKey}`, id: route.id, status: 'loading' })
+    // The editor opens only on the full record. Without it there is nothing
+    // to edit: an editor seeded from a list row (no content) would save that
+    // emptiness over the real page.
+    api.pages.context(route.id)
+      .then(c => {
+        if (!live) return
+        const page = c?.page || c
+        if (!page?.id || page.content === undefined) throw Object.assign(new Error('Page not found'), { status: 404 })
+        setSession({ key: `${route.id}-${reloadKey}`, id: route.id, page, ctx: c?.page ? c : null, status: 'ready' })
+      })
+      .catch(e => { if (live) setSession({ key: `${route.id}-err`, id: route.id, status: 'error', error: e }) })
+    return () => { live = false }
+  }, [route.id, route.isNew, location.key, reloadKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openPage = useCallback((page, opts = {}) => {
+    if (!page?.id) return
+    if (page.id === route.id) return
+    navigate(`/pages/${page.id}`, { state: { returnTo: opts.returnTo || null, returnLabel: opts.returnLabel || null } })
+  }, [navigate, route.id])
+  const newPage = useCallback((type = 'doc', title = '') => {
+    const q = new URLSearchParams({ type })
+    if (title) q.set('title', title)
+    navigate(`/pages/new?${q}`)
+  }, [navigate])
+  const closeEditor = useCallback((info = {}) => {
+    const to = info.returnTo || location.state?.returnTo || '/pages'
+    navigate(to)
+    if (info.discarded) { refreshList(); showToast('Empty row discarded') }
+  }, [navigate, location.state, refreshList, showToast])
+  const onEditorCreated = useCallback((saved) => {
+    adoptedRef.current = saved.id
+    navigate(`/pages/${saved.id}`, { replace: true, state: location.state })
+  }, [navigate, location.state])
+
+  // /pages?page=<id>&comments=1&thread=<id> (older notification links): the
+  // page's own address, with its comments panel on the thread.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search)
+    const id = q.get('page')
+    if (!id || route.isNew) return
+    if (q.get('comments')) openCommentsPanel(id, q.get('thread'))
+    navigate(`/pages/${id}`, { replace: true })
+  }, [location.search]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keyboard ──────────────────────────────────────────────────────────────
+  // Ctrl/Cmd+K (or P): go to a page. Ctrl/Cmd+Alt+N: new page. "/" on the
+  // list: search. Ctrl/Cmd+\ (the tree) is handled by PageTreeShell. A link
+  // shortcut in the editor (Ctrl/Cmd+K with text selected) is left alone.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
       const t = e.target
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
-      e.preventDefault(); searchRef.current?.focus()
+      const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K' || e.key === 'p' || e.key === 'P')) {
+        if (t?.isContentEditable && (e.key === 'k' || e.key === 'K')) {
+          const sel = window.getSelection?.()
+          if (sel && !sel.isCollapsed) return
+        }
+        e.preventDefault()
+        setSwitcherOpen(o => !o)
+        return
+      }
+      if (mod && e.altKey && (e.code === 'KeyN' || e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        newPage('doc')
+        return
+      }
+      if (e.key === '/' && !mod && !e.altKey && !typing && !editing) {
+        e.preventDefault(); searchRef.current?.focus()
+      }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [])
+  }, [newPage, editing])
+
+  // ── List actions ──────────────────────────────────────────────────────────
   const [cloning, setCloning] = useState(null)
-
-  const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast({msg:'',ok:true}),3500) }
-
-  // Track IDs the user explicitly deleted so background refreshes can't restore them.
-  const deletedIdsRef = useRef(new Set())
-
-  const loadPages = useCallback(async (silent=false, forceFresh=false) => {
-    if (!silent) setLoading(true)
-    setError('')
-    try {
-      // Only bypass cache on explicit user actions (initial load / manual refresh).
-      // Background polls skip fresh:true to avoid hammering the server.
-      const data = await api.pages.list(forceFresh ? { fresh:true } : {})
-      if (data?.detail) throw new Error(data.detail)
-      const list = Array.isArray(data) ? data : []
-      // Filter out pages the user already deleted (prevent respawn from background polls)
-      setPages(list.filter(p => !deletedIdsRef.current.has(p.id)))
-    } catch (e) { if (!silent) setError(e?.message||'Failed to load') }
-    finally { if (!silent) setLoading(false) }
-  }, [])
-
-  // Initial load + keep the list live without manual refresh.
-  useEffect(()=>{
-    loadPages(false, true)  // initial: force fresh
-    const onFocus = () => loadPages(true, false)  // focus: silent, no fresh
-    window.addEventListener('focus', onFocus)
-    const iv = setInterval(() => loadPages(true, false), 60000)  // poll every 60s, no fresh
-    return () => { window.removeEventListener('focus', onFocus); clearInterval(iv) }
-  }, [loadPages])
-
-  const handleSaved = (saved) => {
-    setPages(prev=>{ const idx=prev.findIndex(p=>p.id===saved.id); if(idx>=0){const n=[...prev];n[idx]=saved;return n} return [saved,...prev] })
-    setDrawerPage(null); showToast('Page saved')
-  }
-
-  const handlePublishToggle = async (page) => {
+  const handlePublishToggle = useStableCallback(async (page) => {
     try {
       const updated = await api.pages.publish(page.id, !page.is_published)
       if (updated?.detail) throw new Error(updated.detail)
-      setPages(prev=>prev.map(p=>p.id===updated.id?updated:p))
-      showToast(updated.is_published?'✓ Published — link is now live':'Unpublished')
-    } catch (e) { showToast(e?.message||'Failed',false) }
-  }
+      handleSaved(updated)
+      showToast(updated.is_published ? 'Published. The link is live.' : 'Unpublished. The link no longer opens.')
+    } catch (e) { showToast(friendlyError(e, 'publish'), false) }
+  })
 
-  const handleDelete = async () => {
-    if (!confirmDelete) return
-    const id = confirmDelete.id
-    setConfirmDelete(null)  // close dialog immediately to prevent double-click
-    // Optimistically remove from UI and mark as deleted so background polls don't restore it
+  // Trash is undoable, so it is not asked about first.
+  const restorePage = async (id, title) => {
+    try {
+      await api.pageTree.restore(id)
+      deletedIdsRef.current.delete(id)
+      refreshList()
+      showToast(`Restored “${title || 'Untitled'}”`)
+    } catch (e) { showToast(friendlyError(e), false) }
+  }
+  const trashPage = useStableCallback(async (page) => {
+    if (!page?.id) return
+    const { id, title } = page
+    if (route.id === id) closeEditor()
     setPages(prev => prev.filter(p => p.id !== id))
     deletedIdsRef.current.add(id)
     try {
-      await api.pages.delete(id)
-      showToast('Deleted')
-      // Clean up tombstone after 60s — server is authoritative by then
+      const res = await api.pages.delete(id)
+      const more = Math.max(0, (res?.trashed?.length || 1) - 1)
       setTimeout(() => deletedIdsRef.current.delete(id), 60_000)
+      setTreePatch({ id, _removed: true, _seq: Date.now() })
+      refreshList()
+      showToast(`Moved “${title || 'Untitled'}”${more ? ` and ${more} sub-page${more === 1 ? '' : 's'}` : ''} to the trash`, true,
+        { label: 'Undo', run: () => restorePage(id, title) })
     } catch (e) {
-      // Restore the page if delete failed
       deletedIdsRef.current.delete(id)
-      showToast(e?.message || 'Delete failed', false)
-      loadPages(true)  // re-sync from server
+      showToast(friendlyError(e), false)
+      refreshList()
     }
-  }
+  })
 
-  const handleClone = async (page) => {
+  const handleClone = useStableCallback(async (page) => {
+    if (cloning) return
     setCloning(page.id)
     try {
       const full = await api.pages.get(page.id)
@@ -3050,53 +3356,51 @@ export default function PagesManager() {
       const created = await api.pages.create({
         title:`${full.title} (Copy)`, content_type:full.content_type, content:full.content,
         slug:slugify(`${full.title}-copy-${Date.now().toString(36)}`), metadata:full.metadata||{},
+        client_request_id: newRequestId(),
       })
       if (created?.detail||created?.error) throw new Error(created.detail||created.error)
-      setPages(prev=>[created,...prev])
-      setDrawerPage(created)
+      setPages(prev=>[listRow(created), ...prev])
+      refreshList()
+      openPage(created)
       showToast('Duplicated as a draft. The original is unchanged.')
-    } catch (e) { showToast(e?.message||'Clone failed',false) }
+    } catch (e) { showToast(friendlyError(e), false) }
     finally { setCloning(null) }
-  }
+  })
 
   const handleMove = async (page, folder) => {
     try {
       const updated = await api.pages.update(page.id, { metadata:{ ...(page.metadata||{}), folder: folder || undefined } })
       if (updated?.detail||updated?.error) throw new Error(updated.detail||updated.error)
-      setPages(prev=>prev.map(p=>p.id===updated.id?{ ...p, ...updated }:p))
+      setPages(prev=>prev.map(p=>p.id===updated.id?{ ...p, ...listRow(updated) }:p))
       setMovePage(null)
       showToast(folder ? `Moved to ${folder}` : 'Removed from folder')
-    } catch (e) { showToast(e?.message||'Move failed', false) }
+    } catch (e) { showToast(friendlyError(e), false) }
   }
 
-  const [openingId, setOpeningId] = useState(null)
-  const openEdit = async (page) => {
-    // Fetch the FULL record (list rows have no `content`) BEFORE opening, so the
-    // drawer is populated from the start — no empty-then-fill race that could
-    // clobber edits or show a blank editor.
-    setOpeningId(page.id)
+  // Sub-pages, from the tree panel or the editor: made on the server under
+  // their parent as documents, then opened. One at a time.
+  const creatingChildRef = useRef(false)
+  const handleCreateChild = async (parentId) => {
+    if (creatingChildRef.current) return
+    creatingChildRef.current = true
     try {
-      const full = await api.pages.get(page.id)
-      setDrawerPage(full && full.id ? full : page)
-    } catch {
-      setDrawerPage(page)
-    } finally {
-      setOpeningId(null)
-    }
+      const created = await api.pageTree.createChild(parentId, { title:'Untitled', content_type:'doc', client_request_id: newRequestId() })
+      handleTreeCreated(created)
+    } catch (e) { showToast(friendlyError(e), false) }
+    finally { creatingChildRef.current = false }
   }
-
-  // /pages?page=<id>&comments=1&thread=<id> (from a notification): open that
-  // page, with its comments panel on the thread.
-  const location = useLocation()
-  const navigate = useNavigate()
-  useEffect(() => {
-    const q = new URLSearchParams(location.search)
-    const id = q.get('page')
-    if (!id) return
-    if (q.get('comments')) openCommentsPanel(id, q.get('thread'))
-    if (drawerPage?.id !== id) openEdit({ id })
-    navigate('/pages', { replace:true })
-  }, [location.search]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleTreeCreated = (created) => {
+    if (!created?.id) return
+    setPages(prev=>[listRow(created), ...prev.filter(p=>p.id!==created.id)])
+    refreshList()
+    openPage(created)
+  }
+  // Renaming the open page from the tree goes through its editor.
+  const handleTreeRename = (id, title) => {
+    if (editorApi.current?.id === id) { editorApi.current.setTitle(title); return true }
+    setPages(prev => prev.map(p => p.id === id ? { ...p, title } : p))
+    return false
+  }
 
   const folderCounts = useMemo(() => {
     const m = new Map()
@@ -3106,16 +3410,10 @@ export default function PagesManager() {
   const folders = useMemo(() => folderCounts.map(([f])=>f), [folderCounts])
   const unfiledCount = pages.filter(p=>!p.metadata?.folder).length
 
-  const filtered = pages.filter(p=>{
-    if (p.metadata?.db_row) return false
-    const expired = p.expires_at && msUntil(p.expires_at) <= 0
-    const matchTab=filterTab==='all'||(filterTab==='published'&&p.is_published)||(filterTab==='drafts'&&!p.is_published)||(filterTab==='expired'&&expired)
-    const f = p.metadata?.folder || ''
-    const matchFolder = !folderFilter || (folderFilter===UNFILED ? !f : f===folderFilter)
-    const q=search.trim().toLowerCase()
-    const hay = [p.title, p.slug, p.metadata?.description, f].filter(Boolean).join(' ').toLowerCase()
-    return matchTab&&matchFolder&&(!q||q.split(/\s+/).every(w=>hay.includes(w)))
-  })
+  const deferredSearch = useDeferredValue(search)
+  const [shown, setShown] = useState(LIST_PAGE)
+  useEffect(() => { setShown(LIST_PAGE) }, [deferredSearch, filterTab, folderFilter, sortBy])
+  const filtered = useMemo(() => {
   const ts = (v) => (v ? new Date(v).getTime() : 0) || 0
   const SORTS = {
     updated: (a,b) => ts(b.updated_at||b.created_at) - ts(a.updated_at||a.created_at),
@@ -3123,71 +3421,118 @@ export default function PagesManager() {
     views:   (a,b) => (b.view_count||0) - (a.view_count||0),
     title:   (a,b) => (a.title||'').localeCompare(b.title||'', 'en', { sensitivity:'base', numeric:true }),
   }
-  filtered.sort(SORTS[sortBy] || SORTS.updated)
+  const q = deferredSearch.trim().toLowerCase()
+  const now = Date.now()
+  return pages.filter(p=>{
+    if (p.metadata?.db_row) return false
+    const expired = p.expires_at && msUntil(p.expires_at, now) <= 0
+    const matchTab=filterTab==='all'||(filterTab==='published'&&p.is_published)||(filterTab==='drafts'&&!p.is_published)||(filterTab==='expired'&&expired)
+    const f = p.metadata?.folder || ''
+    const matchFolder = !folderFilter || (folderFilter===UNFILED ? !f : f===folderFilter)
+    if (!q) return matchTab&&matchFolder
+    const hay = [p.title, p.slug, p.metadata?.description, f].filter(Boolean).join(' ').toLowerCase()
+    return matchTab&&matchFolder&&q.split(/\s+/).every(w=>hay.includes(w))
+  }).sort(SORTS[sortBy] || SORTS.updated)
+  }, [pages, deferredSearch, filterTab, folderFilter, sortBy])
+  const visible = filtered.length > shown ? filtered.slice(0, shown) : filtered
   const anyFilter = search || filterTab!=='all' || folderFilter
   const clearFilters = () => { setSearch(''); setFilterTab('all'); setFolderFilter('') }
 
   const totalViews = pages.reduce((s,p)=>s+(p.view_count||0),0)
+  const onCopied = useStableCallback(() => showToast('Link copied'))
+  const returnLabel = location.state?.returnLabel || (session?.ctx?.row_context?.database ? (session.ctx.row_context.database.title || 'database') : null)
 
-  // Sub-pages, from the tree panel or the editor: made on the server under
-  // their parent, then opened like any new page.
-  const handleCreateChild = async (parentId) => {
-    try {
-      const created = await api.pageTree.createChild(parentId, { title:'Untitled' })
-      handleTreeCreated(created)
-    } catch (e) { showToast(e?.message||'Could not add a sub-page', false) }
+  // ── The open page ─────────────────────────────────────────────────────────
+  let editorView = null
+  if (editing) {
+    if (!session || session.status === 'loading') {
+      editorView = (
+        <div style={{ padding:isMobile?16:'28px 32px' }} aria-busy="true">
+          <SkeletonList rows={4} label="Opening page" />
+        </div>
+      )
+    } else if (session.status === 'error') {
+      editorView = (
+        <div style={{ padding:isMobile?16:'48px 32px', display:'flex', justifyContent:'center' }}>
+          <ErrorCard title="This page could not be opened" message={friendlyError(session.error, 'load')}
+            onRetry={errorKind(session.error) === 'not_found' || errorKind(session.error) === 'forbidden' ? null : () => setReloadKey(k => k + 1)}
+            onBack={() => navigate('/pages')} />
+        </div>
+      )
+    } else {
+      editorView = (
+        <PageEditor key={session.key} page={session.page || null} ctx={session.ctx}
+          initialType={session.initialType} initialTitle={session.initialTitle}
+          folders={folders} onClose={closeEditor} onSaved={handleSaved} onCreated={onEditorCreated}
+          onOpenPage={openPage} onCreateChild={handleCreateChild} onTrash={trashPage}
+          onToast={showToast} editorApi={editorApi} returnLabel={returnLabel} />
+      )
+    }
   }
-  const handleTreeCreated = (created) => {
-    if (!created?.id) return
-    setPages(prev=>[created, ...prev.filter(p=>p.id!==created.id)])
-    setDrawerPage(created)
-  }
+
+  const switcherPages = useMemo(() => pages.filter(p => !p.metadata?.db_row), [pages])
 
   return (
-    <PageTreeShell isMobile={isMobile} refreshKey={pages} currentId={drawerPage?.id}
-      onOpen={openEdit} onNewPage={()=>setDrawerPage({content_type:'markdown'})}
-      onCreated={handleTreeCreated} onChanged={()=>loadPages(true, true)} onToast={showToast}>
+    <PageTreeShell isMobile={isMobile} refreshKey={listVersion} patch={treePatch} currentId={route.id} fill={editing}
+      onOpen={openPage} onNewPage={()=>newPage('doc')} onRename={handleTreeRename}
+      onCreated={handleTreeCreated} onChanged={refreshList} onToast={showToast} onDuplicate={handleClone}
+      onTrashed={(ids) => { if (route.id && ids.includes(route.id)) closeEditor() }}>
+    <style>{EDITOR_CSS}</style>
+    {editing ? editorView : (
     <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1480, margin:'0 auto' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, gap:12, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:isMobile?16:24, gap:12, flexWrap:'wrap' }}>
         <div>
           <h1 style={{ margin:0, fontSize:isMobile?20:26, fontWeight:800, color:'var(--text-1)', letterSpacing:'-0.02em' }}>Pages</h1>
           {!isMobile&&<p style={{ margin:'5px 0 0', fontSize:13, color:'var(--text-2)', lineHeight:1.5 }}>Create docs, spreadsheets & web pages — share publicly with full analytics on every view.</p>}
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'artifact'})}>
+          {!isMobile && (
+            <button type="button" onClick={()=>setSwitcherOpen(true)} title="Go to a page (Ctrl+K)"
+              style={{ ...btnGhost, padding:'9px 12px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6, border:'1px solid var(--border)' }}>
+              <Search size={14} /> Go to page <kbd style={{ fontSize:10, color:'var(--text-3)', border:'1px solid var(--border)', borderRadius:4, padding:'0 4px', fontFamily:'inherit' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
+            </button>
+          )}
+          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>newPage('artifact')}>
             <Puzzle size={15} strokeWidth={2} /> New artifact
           </button>
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setNewDbOpen(true)}>
             <Database size={15} strokeWidth={2} /> New database
           </button>
-          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>setDrawerPage({content_type:'doc'})}>
-            <Plus size={15} strokeWidth={2.5} /> New Page
+          <button style={{ ...btnPrimary, padding:'9px 18px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>newPage('doc')}
+            title={`New page (${IS_MAC ? '⌘⌥N' : 'Ctrl+Alt+N'})`}>
+            <Plus size={15} strokeWidth={2.5} /> New page
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      {pages.length>0&&(
-        <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:10, marginBottom:22 }}>
+      {/* Stats: a compact line on a phone, so the pages come first. */}
+      {pages.length>0 && !error && (isMobile ? (
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-2)', marginBottom:12 }}>
+          <span><b style={{ color:'var(--text-1)' }}>{pages.length.toLocaleString('en-IN')}</b> pages</span>
+          <span><b style={{ color:'var(--fin-positive)' }}>{pages.filter(p=>p.is_published).length.toLocaleString('en-IN')}</b> live</span>
+          <span><b style={{ color:'var(--text-1)' }}>{totalViews.toLocaleString('en-IN')}</b> views</span>
+        </div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:22 }}>
           {[
-            { label:'Total Pages', value:pages.length, Icon:Layers, accent:'var(--accent)' },
-            { label:'Live', value:pages.filter(p=>p.is_published).length, Icon:CheckCircle2, accent:'var(--fin-positive)' },
-            { label:'Drafts', value:pages.filter(p=>!p.is_published).length, Icon:PenLine, accent:'var(--fin-warning)' },
-            { label:'Total Views', value:totalViews.toLocaleString(), Icon:BarChart2, accent:'var(--accent)' },
+            { label:'Total Pages', value:pages.length.toLocaleString('en-IN'), Icon:Layers, accent:'var(--accent)' },
+            { label:'Live', value:pages.filter(p=>p.is_published).length.toLocaleString('en-IN'), Icon:CheckCircle2, accent:'var(--fin-positive)' },
+            { label:'Drafts', value:pages.filter(p=>!p.is_published).length.toLocaleString('en-IN'), Icon:PenLine, accent:'var(--fin-warning)' },
+            { label:'Total Views', value:totalViews.toLocaleString('en-IN'), Icon:BarChart2, accent:'var(--accent)' },
           ].map(({ label, value, Icon, accent })=>(
-            <div key={label} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:isMobile?'12px 14px':'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
+            <div key={label} style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:12, padding:'14px 18px', display:'flex', alignItems:'center', gap:12 }}>
               <div style={{ width:34, height:34, borderRadius:9, background:`${tint(accent, 0.08)}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:accent }}>
                 <Icon size={16} strokeWidth={2} />
               </div>
               <div>
-                <div style={{ fontSize:isMobile?18:20, fontWeight:700, color:'var(--text-1)', lineHeight:1 }}>{value}</div>
+                <div style={{ fontSize:20, fontWeight:700, color:'var(--text-1)', lineHeight:1 }}>{value}</div>
                 <div style={{ fontSize:10, color:'var(--text-3)', marginTop:3, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.07em' }}>{label}</div>
               </div>
             </div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* Search + filter */}
       {pages.length>0&&(
@@ -3232,8 +3577,6 @@ export default function PagesManager() {
         </div>
       )}
 
-      {error&&<div style={{ background:'var(--fin-neg-bg)', border:'1px solid var(--fin-neg-border)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'var(--fin-negative)', marginBottom:16 }}>{error}</div>}
-
       {loading ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {Array.from({length:3}).map((_,i)=>(
@@ -3247,20 +3590,37 @@ export default function PagesManager() {
             </div>
           ))}
         </div>
+      ) : error && !pages.length ? (
+        <ErrorCard title="Pages could not be loaded" message={friendlyError(error, 'load')} onRetry={() => loadPages(false)} />
       ) : !pages.length ? (
         <div style={{ textAlign:'center', padding:'60px 24px', border:'1px dashed var(--border)', borderRadius:16, color:'var(--text-2)' }}>
           <div style={{ width:48, height:48, borderRadius:12, background:'var(--card-bg)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', color:'var(--text-3)' }}>
-            <FileText size={22} strokeWidth={1.5} />
+            {trashCount ? <Trash2 size={22} strokeWidth={1.5} /> : <FileText size={22} strokeWidth={1.5} />}
           </div>
-          <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
-          <div style={{ fontSize:13, marginBottom:20, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, spreadsheets, or full web pages — share with anyone via a public link.</div>
-          <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
-            {[{Icon:FileText,label:'Document',type:'doc'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web Page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
-              <button key={b.label} onClick={()=>setDrawerPage({content_type:b.type})} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
-                <b.Icon size={13} strokeWidth={1.75} /> {b.label}
-              </button>
-            ))}
-          </div>
+          {trashCount ? (
+            <>
+              <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>Everything is in the trash</div>
+              <div style={{ fontSize:13, lineHeight:1.6, maxWidth:380, margin:'0 auto 20px', color:'var(--text-2)' }}>
+                {trashCount === 1 ? 'One page is' : `${trashCount.toLocaleString('en-IN')} pages are`} in the trash. Restore {trashCount === 1 ? 'it' : 'them'}, or start something new.
+              </div>
+              <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
+                <button type="button" onClick={()=>setTrashOpen(true)} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}><Trash2 size={13} /> Open trash</button>
+                <button type="button" onClick={()=>newPage('doc')} style={{ ...btnPrimary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}><Plus size={13} /> New page</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize:15, fontWeight:600, marginBottom:6, color:'var(--text-1)' }}>No pages yet</div>
+              <div style={{ fontSize:13, lineHeight:1.6, maxWidth:360, margin:'0 auto 20px', color:'var(--text-2)' }}>Create documents, databases, spreadsheets or full web pages, and share them with anyone via a public link.</div>
+              <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap' }}>
+                {[{Icon:FileText,label:'Document',type:'doc'},{Icon:Database,label:'Database',type:'database'},{Icon:Table2,label:'Spreadsheet',type:'csv'},{Icon:Globe,label:'Web page',type:'html'},{Icon:Puzzle,label:'Artifact',type:'artifact'}].map(b=>(
+                  <button key={b.label} onClick={()=>b.type === 'database' ? setNewDbOpen(true) : newPage(b.type)} style={{ ...btnSecondary, fontSize:12, borderRadius:8, padding:'8px 14px', display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <b.Icon size={13} strokeWidth={1.75} /> {b.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ) : !filtered.length ? (
         <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--text-2)' }}>
@@ -3273,7 +3633,7 @@ export default function PagesManager() {
         </div>
       ) : isMobile ? (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {filtered.map(page=><PageCard key={page.id} page={page} onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete} onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={()=>showToast('Link copied')} cloning={cloning} />)}
+          {visible.map(page=><PageCard key={page.id} page={page} onEdit={openPage} onPublish={handlePublishToggle} onShare={setSharePage} onAnalytics={setAnalyticsPage} onDelete={trashPage} onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={onCopied} cloning={cloning} />)}
         </div>
       ) : (
         <div style={{ border:'1px solid var(--border)', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 8px rgba(0,0,0,0.06)' }}>
@@ -3288,31 +3648,64 @@ export default function PagesManager() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((page,idx)=>(
-                <PageRow key={page.id} page={page} idx={idx} total={filtered.length}
-                  onEdit={openEdit} onPublish={handlePublishToggle} onShare={setSharePage}
-                  onAnalytics={setAnalyticsPage} onDelete={setConfirmDelete}
-                  onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={()=>showToast('Link copied')} openingId={openingId} cloning={cloning} />
+              {visible.map((page,idx)=>(
+                <PageRow key={page.id} page={page} idx={idx} total={visible.length}
+                  onEdit={openPage} onPublish={handlePublishToggle} onShare={setSharePage}
+                  onAnalytics={setAnalyticsPage} onDelete={trashPage}
+                  onClone={handleClone} onMove={setMovePage} onFolder={setFolderFilter} onCopied={onCopied} cloning={cloning} />
               ))}
             </tbody>
           </table>
         </div>
       )}
-
-      {drawerPage!==null&&<PageDrawer key={drawerPage?.id||drawerPage?.content_type||'new'} page={drawerPage?.id?drawerPage:null} initialType={drawerPage?.id?undefined:(drawerPage?.content_type||'doc')} onClose={()=>setDrawerPage(null)} onSaved={handleSaved} folders={folders} onOpenPage={openEdit} onCreateChild={handleCreateChild} />}
-      <NewDatabaseDialog open={newDbOpen} onClose={()=>setNewDbOpen(false)} onCreated={db=>{ loadPages(true, true); openEdit(db) }} />
-      {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
-      {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
-      {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
-      {confirmDelete&&<ConfirmDialog message={`Delete "${confirmDelete.title}"? All view history will be removed. This cannot be undone.`} onConfirm={handleDelete} onCancel={()=>setConfirmDelete(null)} />}
-
-      {toast.msg&&(
-        <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:toast.ok?'var(--tooltip-bg)':'var(--danger-btn)', color:'var(--tooltip-fg)', padding:'11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:'calc(100vw - 48px)' }}>
-          {toast.msg}
+      {!loading && filtered.length > visible.length && (
+        <div style={{ display:'flex', justifyContent:'center', marginTop:14 }}>
+          <button type="button" onClick={() => setShown(n => n + LIST_PAGE * 2)} style={{ ...btnSecondary, fontSize:12.5 }}>
+            Show more ({(filtered.length - visible.length).toLocaleString('en-IN')} more)
+          </button>
         </div>
       )}
     </div>
+    )}
+
+      <NewDatabaseDialog open={newDbOpen} onClose={()=>setNewDbOpen(false)} onCreated={db=>{ refreshList(); openPage(db) }} />
+      {movePage&&<FolderModal page={movePage} folders={folders} onClose={()=>setMovePage(null)} onSave={handleMove} />}
+      {analyticsPage&&<AnalyticsDrawer page={analyticsPage} onClose={()=>setAnalyticsPage(null)} />}
+      {sharePage&&<ShareModal page={sharePage} onClose={()=>setSharePage(null)} onCopy={()=>showToast('Link copied!')} />}
+      <QuickSwitcher open={switcherOpen} pages={switcherPages} onOpen={p => openPage(p)} onCreate={t => newPage('doc', t)} onClose={() => setSwitcherOpen(false)} />
+      <TrashDialog open={trashOpen} onClose={() => setTrashOpen(false)} onChanged={(msg) => { refreshList(); if (msg) showToast(msg) }} />
+
+      {toast.msg&&(
+        <div role="status" aria-live="polite" style={{ position:'fixed', bottom:isMobile ? 'calc(76px + env(safe-area-inset-bottom, 0px))' : 24, right:isMobile ? 16 : 24, left:isMobile ? 16 : 'auto', zIndex:9999, background:toast.ok?'var(--tooltip-bg)':'var(--danger-btn)', color:'var(--tooltip-fg)', padding:'11px 16px 11px 20px', borderRadius:'10px', fontSize:13, fontWeight:500, boxShadow:'0 4px 20px rgba(0,0,0,0.3)', maxWidth:isMobile ? 'none' : 'calc(100vw - 48px)', display:'flex', alignItems:'center', gap:14 }}>
+          <span style={{ flex:1, minWidth:0 }}>{toast.msg}</span>
+          {toast.action && (
+            <button type="button" onClick={() => { const a = toast.action; setToast({ msg:'', ok:true, action:null }); a.run() }}
+              style={{ all:'unset', cursor:'pointer', fontWeight:700, color:'inherit', textDecoration:'underline', textUnderlineOffset:3 }}>
+              {toast.action.label}
+            </button>
+          )}
+        </div>
+      )}
     </PageTreeShell>
+  )
+}
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')
+
+// A failure with a way forward, instead of an empty list.
+function ErrorCard({ title, message, onRetry, onBack }) {
+  return (
+    <div role="alert" style={{ maxWidth:440, margin:'24px auto', textAlign:'center', padding:'28px 24px', border:'1px solid var(--fin-neg-border)', background:'var(--card-bg)', borderRadius:16 }}>
+      <div style={{ width:44, height:44, borderRadius:12, background:'var(--fin-neg-bg)', color:'var(--fin-negative)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 14px' }}>
+        <AlertTriangle size={20} />
+      </div>
+      <div style={{ fontSize:15, fontWeight:700, color:'var(--text-1)', marginBottom:6 }}>{title}</div>
+      <div style={{ fontSize:13, color:'var(--text-2)', lineHeight:1.6, marginBottom:18 }}>{message}</div>
+      <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
+        {onBack && <button type="button" onClick={onBack} style={{ ...btnSecondary, fontSize:12.5 }}>Back to pages</button>}
+        {onRetry && <button type="button" onClick={onRetry} style={{ ...btnPrimary, fontSize:12.5, display:'inline-flex', alignItems:'center', gap:6 }}><RefreshCw size={13} /> Retry</button>}
+      </div>
+    </div>
   )
 }
 

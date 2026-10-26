@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronRight, Plus, MoreHorizontal, Star, StarOff, Trash2, PenLine,
-  Smile, FolderInput, Clock, FilePlus2,
+  Smile, FolderInput, Clock, FilePlus2, Copy, Link2, ExternalLink,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { buildTree, dropPlacement, ancestorIds } from './treeModel'
@@ -12,6 +12,14 @@ import MovePicker from './MovePicker'
 import TrashDialog from './TrashDialog'
 
 const EXPANDED_KEY = 'pages_tree_expanded'
+// Below this many pages the whole tree fits on screen, and a Recent list
+// would only repeat it.
+const RECENT_MIN_PAGES = 12
+
+function requestId() {
+  try { if (crypto?.randomUUID) return crypto.randomUUID() } catch { /* not available */ }
+  return `tree-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 function readExpanded() {
   try { return new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY) || '[]')) } catch { return new Set() }
@@ -55,7 +63,10 @@ function RowMenu({ node, isFav, onClose, actions }) {
     <div ref={ref} role="menu" aria-label={`Actions for ${node.title || 'Untitled'}`} className="pt-menu" data-no-drag>
       {item(PenLine, 'Rename', actions.rename)}
       {item(Smile, 'Change icon…', actions.icon)}
-      {item(FilePlus2, 'Add sub-page', actions.addChild)}
+      {node.content_type !== 'artifact' && item(FilePlus2, 'Add sub-page', actions.addChild)}
+      {actions.duplicate && item(Copy, 'Duplicate', actions.duplicate)}
+      {item(Link2, 'Copy link', actions.copyLink)}
+      {item(ExternalLink, 'Open in new tab', actions.openNewTab)}
       {item(FolderInput, 'Move to…', actions.move)}
       {item(isFav ? StarOff : Star, isFav ? 'Remove from favourites' : 'Add to favourites', actions.favourite)}
       <div style={{ height:1, background:'var(--border)', margin:'4px 6px' }} />
@@ -80,11 +91,13 @@ function RenameInput({ initial, onDone }) {
 /**
  * The pages sidebar: Favourites, Recent, the nested outline and the Trash.
  *
- * Props: refreshKey (reload when it changes), currentId, onOpen(node),
- * onNewPage(), onCreated(page) after a sub-page is made, onChanged() after
- * anything that changes the flat list, onToast(msg, ok).
+ * Props: refreshKey (reload when it changes), patch ({ id, ...fields } to
+ * apply at once, or { id, _removed }), currentId, onOpen(node), onNewPage(),
+ * onCreated(page) after a sub-page is made, onChanged() after anything that
+ * changes the flat list, onRename(id, title) (true when the open editor took
+ * it), onDuplicate(node), onTrashed(ids), onToast(msg, ok, action).
  */
-export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage, onCreated, onChanged, onToast }) {
+export default function PageTreePanel({ refreshKey, patch, currentId, onOpen, onNewPage, onCreated, onChanged, onRename, onDuplicate, onTrashed, onToast }) {
   const [data, setData] = useState(null)
   const [recent, setRecent] = useState([])
   const [err, setErr] = useState('')
@@ -96,21 +109,46 @@ export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage
   const [trashOpen, setTrashOpen] = useState(false)
   const [showRecent, setShowRecent] = useState(true)
 
-  const toast = (m, ok = true) => onToast?.(m, ok)
+  const toast = (m, ok = true, action = null) => onToast?.(m, ok, action)
+  const busyRef = useRef(new Set())   // one create per parent at a time
+  const etagRef = useRef(null)
   const fail = (e, fallback) => toast(e?.message || fallback, false)
 
-  const load = useCallback(async () => {
+  // Reloads only what changed: with the tree's ETag held, an unchanged tree
+  // is a 304 and nothing re-renders.
+  const load = useCallback(async (force = false) => {
     if (!api.pageTree) return
     try {
-      const [t, r] = await Promise.all([api.pageTree.tree(), api.pageTree.recent().catch(() => [])])
-      setData(t && Array.isArray(t.pages) ? t : { ready: false, pages: [], favourites: [] })
-      setRecent(Array.isArray(r) ? r : [])
+      const treeReq = api.pageTree.treeIfChanged
+        ? api.pageTree.treeIfChanged(force ? null : etagRef.current)
+        : api.pageTree.tree().then(data => ({ data }))
+      const [t, r] = await Promise.all([treeReq, api.pageTree.recent().catch(() => null)])
+      if (Array.isArray(r)) setRecent(r)
+      if (!t?.notModified) {
+        etagRef.current = t?.etag || null
+        const d = t?.data
+        setData(d && Array.isArray(d.pages) ? d : { ready: false, pages: [], favourites: [] })
+      }
       setErr('')
     } catch (e) {
-      setErr(e?.message || 'Could not load pages')
+      setErr(e?.status == null ? 'Could not reach the server.' : 'Could not load pages.')
     }
   }, [])
   useEffect(() => { load() }, [load, refreshKey])
+
+  // A save elsewhere (a rename in the editor) shows here straight away.
+  useEffect(() => {
+    if (!patch?.id) return
+    setData(d => {
+      if (!d) return d
+      if (patch._removed) return { ...d, pages: d.pages.filter(p => p.id !== patch.id) }
+      if (!d.pages.some(p => p.id === patch.id)) return d
+      const fields = {}
+      for (const k of ['title', 'icon', 'is_published', 'content_type', 'slug']) if (patch[k] !== undefined) fields[k] = patch[k]
+      return { ...d, pages: d.pages.map(p => p.id === patch.id ? { ...p, ...fields } : p) }
+    })
+    if (patch.title !== undefined) setRecent(rs => rs.map(p => p.id === patch.id ? { ...p, title: patch.title } : p))
+  }, [patch])
 
   useEffect(() => { try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded])) } catch {} }, [expanded])
 
@@ -132,27 +170,48 @@ export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage
     return n
   })
 
-  const changed = async (msg) => { await load(); onChanged?.(); if (msg) toast(msg) }
+  const changed = async (msg, action) => { await load(true); onChanged?.(); if (msg) toast(msg, true, action) }
+  const appUrl = (n) => `${window.location.origin}/pages/${n.id}`
 
   const actions = {
     rename: (n) => setRenaming(n.id),
     icon: (n) => setIconFor(n),
     move: (n) => setMoveFor(n),
     addChild: async (n) => {
+      if (busyRef.current.has(n.id)) return
+      busyRef.current.add(n.id)
       try {
-        const created = await api.pageTree.createChild(n.id, { title: 'Untitled' })
+        const created = await api.pageTree.createChild(n.id, { title: 'Untitled', content_type: 'doc', client_request_id: requestId() })
         toggle(n.id, true)
         await changed()
         onCreated?.(created)
       } catch (e) { fail(e, 'Could not add a sub-page') }
+      finally { busyRef.current.delete(n.id) }
     },
+    duplicate: onDuplicate ? (n) => onDuplicate(n) : null,
+    copyLink: (n) => {
+      navigator.clipboard?.writeText(appUrl(n)).then(() => toast('Link copied')).catch(() => toast('Could not copy the link', false))
+    },
+    openNewTab: (n) => { window.open(`/pages/${n.id}`, '_blank', 'noopener') },
     favourite: async (n) => {
       const on = !favs.has(n.id)
       try { await api.pageTree.favourite(n.id, on); await load(); toast(on ? 'Added to favourites' : 'Removed from favourites') }
       catch (e) { fail(e, 'Could not update favourites') }
     },
     trash: async (n) => {
-      try { await api.pageTree.trashPage(n.id); await changed(`Moved “${n.title || 'Untitled'}” to the trash`) }
+      try {
+        const res = await api.pageTree.trashPage(n.id)
+        const ids = Array.isArray(res?.trashed) && res.trashed.length ? res.trashed : [n.id]
+        onTrashed?.(ids)
+        const more = ids.length - 1
+        await changed(`Moved “${n.title || 'Untitled'}”${more > 0 ? ` and ${more} sub-page${more === 1 ? '' : 's'}` : ''} to the trash`, {
+          label: 'Undo',
+          run: async () => {
+            try { await api.pageTree.restore(n.id); await changed(`Restored “${n.title || 'Untitled'}”`) }
+            catch (e) { fail(e, 'Could not restore it') }
+          },
+        })
+      }
       catch (e) { fail(e, 'Could not move to the trash') }
     },
   }
@@ -162,7 +221,9 @@ export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage
     const n = tree.byId.get(id)
     if (!title || !n || title === n.title) return
     setData(d => ({ ...d, pages: d.pages.map(p => p.id === id ? { ...p, title } : p) }))
-    try { await api.pages.update(id, { title }); await changed() } catch (e) { fail(e, 'Rename failed'); load() }
+    // The open page is renamed through its editor, which saves it.
+    if (onRename?.(id, title)) return
+    try { await api.pages.update(id, { title }); await changed() } catch (e) { fail(e, 'Rename failed'); load(true) }
   }
 
   const doIcon = async (icon) => {
@@ -229,10 +290,12 @@ export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage
             </button>
           )}
           <div className="pt-actions" data-open={menuFor === n.id} data-no-drag>
-            <button type="button" className="pt-icon-btn" aria-label={`Add a sub-page to ${label}`} title="Add sub-page"
-              onClick={() => actions.addChild(n)}>
-              <Plus size={14} />
-            </button>
+            {n.content_type !== 'artifact' && (
+              <button type="button" className="pt-icon-btn" aria-label={`Add a sub-page to ${label}`} title="Add sub-page"
+                onClick={() => actions.addChild(n)}>
+                <Plus size={14} />
+              </button>
+            )}
             <button type="button" className="pt-icon-btn" aria-label={`Page options for ${label}`} aria-haspopup="menu"
               aria-expanded={menuFor === n.id} title="More" onClick={() => setMenuFor(m => m === n.id ? null : n.id)}>
               <MoreHorizontal size={14} />
@@ -283,7 +346,7 @@ export default function PageTreePanel({ refreshKey, currentId, onOpen, onNewPage
           </section>
         )}
 
-        {recent.length > 0 && (
+        {recent.length > 0 && (data?.pages?.length || 0) >= RECENT_MIN_PAGES && (
           <section aria-label="Recent">
             <button type="button" className="pt-section" onClick={() => setShowRecent(s => !s)} aria-expanded={showRecent}
               style={{ all:'unset', boxSizing:'border-box', display:'flex', alignItems:'center', gap:6, width:'100%', padding:'12px 8px 4px', fontSize:10.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--text-3)', cursor:'pointer' }}>

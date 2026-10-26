@@ -8,7 +8,7 @@ import { PageGlyph } from './PageGlyph'
 function when(iso) {
   if (!iso) return ''
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-IN', { timeZone:'Asia/Kolkata', day:'numeric', month:'short', hour:'numeric', minute:'2-digit' })
 }
 
 // Trashed pages, each with the sub-pages that went in with it. Restore puts
@@ -54,7 +54,7 @@ export default function TrashDialog({ open, onClose, onChanged }) {
   const btn = { display:'inline-flex', alignItems:'center', gap:5, padding:'5px 9px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', border:'1px solid var(--border)', background:'var(--card-bg)', color:'var(--text-1)' }
 
   return (
-    <Modal open={open} onClose={onClose} title="Trash" subtitle="Pages moved to the trash are hidden from lists and their public links." width={480}>
+    <Modal open={open} onClose={onClose} title="Trash" subtitle="Pages in the trash are hidden from lists and their public links stop working. Sub-pages go with their page and come back with it." width={480}>
       {err && <div role="alert" style={{ marginBottom:10, fontSize:12.5, color:'var(--fin-negative)' }}>{err}</div>}
       {items === null ? (
         <div style={{ padding:'14px 4px', fontSize:13, color:'var(--text-2)' }}>Loading…</div>

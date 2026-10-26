@@ -30,6 +30,7 @@ vi.mock('../services/api', () => {
         preview: ok({ token: 't', expires_in: 900 }),
         versions: ok({ items: [] }),
         get: vi.fn(async (id) => ({ ...PAGES.find(p => p.id === id), content: 'Item,Amount\nRent,45000\nFood,12000\nTotal,=SUM(B2:B3)' })),
+        context: vi.fn(async (id) => { const { api } = await import('../services/api'); return { page: await api.pages.get(id), breadcrumbs: [], children: [], row_context: null } }),
         create: vi.fn(async (body) => { calls.create.push(body); return { id: 'new1', ...body, is_published: false } }),
         update: vi.fn(async (id, body) => { calls.update.push([id, body]); return { ...PAGES.find(p => p.id === id), ...body } }),
       },
@@ -738,6 +739,13 @@ describe('editor helpers', () => {
   })
 })
 
+
+// Editor actions other than writing and publishing live in the "…" menu.
+async function menuItem(name) {
+  fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+  fireEvent.click(await screen.findByRole(/menuitem/.test(name) ? 'menuitem' : 'menuitem', { name }))
+}
+
 describe('PagesManager spreadsheet pages', () => {
   async function openSheet() {
     const PagesManager = (await import('../pages/PagesManager')).default
@@ -762,7 +770,7 @@ describe('PagesManager spreadsheet pages', () => {
 
   it('a template brings its formulas and formats', async () => {
     await openSheet()
-    fireEvent.click(screen.getByRole('button', { name: 'Use template' }))
+    await menuItem('Templates')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Budget vs actual/ })) })
     await waitFor(() => expect(document.querySelector('.ft-sheet [data-r="8"][data-c="1"]')?.textContent).toBe('₹5,18,000'))
     expect(document.querySelector('.ft-sheet [data-r="2"][data-c="4"]').textContent).toBe('-3.4%')
@@ -781,7 +789,7 @@ describe('PagesManager spreadsheet pages', () => {
     api.pages.versions.mockResolvedValueOnce({ items: [ver] })
     api.pages.getVersion = vi.fn(async () => ver)
     await openSheet()
-    fireEvent.click(screen.getByRole('button', { name: /History/ }))
+    await menuItem('Version history')
     fireEvent.click(await screen.findByText('v2'))
     await waitFor(() => expect(document.querySelector('.ft-sv tbody td:nth-child(2)')?.textContent).toBe('₹45,000.00'))
   })
@@ -796,7 +804,7 @@ describe('PagesManager spreadsheet pages', () => {
     api.pages.getVersion = vi.fn(async () => ver)
     api.pages.restoreVersion = vi.fn(async () => ({ ok: true, page: { ...PAGES[0], content: ver.content } }))
     await openSheet()
-    fireEvent.click(screen.getByRole('button', { name: /History/ }))
+    await menuItem('Version history')
     fireEvent.click(await screen.findByText('v2'))
     fireEvent.click(await screen.findByRole('button', { name: /Restore this version/ }))
     await waitFor(() => expect(calls.update).toHaveLength(1))
