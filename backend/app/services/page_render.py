@@ -33,6 +33,7 @@ origin and cannot reach the embedding app — see PAGE_SANDBOX.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Sandbox
@@ -323,6 +324,17 @@ VIEWER_RUNTIME = r"""
 })();
 """.strip()
 
+# ---------------------------------------------------------------------------
+# Shared data: window.fintrack.db
+# ---------------------------------------------------------------------------
+
+# Every document gets the data API (artifact_db_sdk.js). It never touches the
+# network: calls are posted to the parent, which validates them and calls the
+# API itself, so nothing here loosens the sandbox or the policy above. Kept in
+# its own file so it can be read and checked as JavaScript.
+DATA_SDK = Path(__file__).with_name("artifact_db_sdk.js").read_text(encoding="utf-8").strip()
+assert "</script" not in DATA_SDK.lower()
+
 # The agent bridge enables two-way communication between the sandboxed preview
 # iframe and the parent editor:
 # 1. Error capture — any unhandled error or rejection is forwarded to the parent
@@ -455,6 +467,7 @@ def build_document(
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f"<style>{reset}{pad}</style>"
         f"<script>{VIEWER_PRELUDE}</script>"
+        f"<script>{DATA_SDK}</script>"
         + (f"<script>{PROTECT_SCRIPT}</script>" if protect else "")
     )
     bridge = f"<script>{AGENT_BRIDGE}</script>" if preview else ""

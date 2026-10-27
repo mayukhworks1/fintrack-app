@@ -102,7 +102,7 @@ function LiveFrames({ url, storeKey }) {
             style={front
               ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
               : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column' }}>
-            <ArtifactFrame src={src} height="100%" title="Live preview of the artifact being built" storeKey={storeKey} persist={false}
+            <ArtifactFrame src={src} height="100%" title="Live preview of the artifact being built" storeKey={storeKey} persist={false} data={{ mode: 'memory' }}
               onLoad={front ? undefined : () => setTimeout(() => setShown(src), 200)} style={{ flex: 1, minHeight: 0 }} />
           </div>
         )

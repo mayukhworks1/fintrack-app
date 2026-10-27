@@ -2786,7 +2786,8 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
         form={form} set={set} onSlugEdit={editSlug} slugStatus={slugStatus} folders={folders} shareUrl={shareUrl}
         isPublished={isPublished} hasUnpublished={hasUnpublished || (isPublished && dirty)} canPublish={!!form.title.trim()}
         busy={publishing} onPublish={publish} onUnpublish={unpublish} onSavePassword={savePassword}
-        onCopied={() => onToast?.('Link copied')} />
+        onCopied={() => onToast?.('Link copied')}
+        collectsData={isArtifact && /fintrack\.db\b/.test(form.content || '')} />
     </div>
   )
   return fullscreen ? <Overlay>{body}</Overlay> : body

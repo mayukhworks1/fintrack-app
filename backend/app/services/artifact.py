@@ -54,9 +54,10 @@ sandboxed iframe with an opaque origin.
 - External code only when it truly helps, and only from these hosts, pinned to an
   exact version: {", ".join(CDN_ALLOWLIST)}. Prefer plain JavaScript, inline
   <svg> for charts and the icon sprite below for icons.
-- State lives in localStorage only, behind try/catch, under one key prefixed
-  with the app's name. The app must work (with defaults) when storage is empty
-  or unavailable. Never use cookies or IndexedDB.
+- Data that should last or be seen by others goes through window.fintrack.db
+  (see SHARED DATA below). localStorage is only for purely personal UI
+  preferences (a theme, a collapsed panel), behind try/catch, under one key
+  prefixed with the app's name. Never use cookies or IndexedDB.
 - No alert(), confirm() or prompt() — use inline messages, toasts and undo.
 
 {artifact_design.DESIGN_RULES}
@@ -65,6 +66,72 @@ OUTPUT FORMAT:
 Return only the HTML document, <!DOCTYPE html> through </html>. No commentary,
 no markdown code fences."""
 
+# --- shared data ---------------------------------------------------------------
+#
+# Every artifact is given window.fintrack.db by the renderer (page_render.py,
+# artifact_db_sdk.js): cloud data shared live between everyone who opens it,
+# with the parent app doing the network calls. Kept in its own constant, and
+# joined into ARTIFACT_RULES below, so the rest of the brief can change
+# independently of it.
+SHARED_DATA_RULES = """SHARED DATA — window.fintrack.db (always present; no setup, no keys)
+Use it for ANY data that should persist or that other people should see: to-do
+lists, sign-up sheets, polls, votes, likes, RSVPs, trackers, forms, guest books,
+leaderboards, inventories, bookings, comments, scores, shared settings. Pure
+calculators keep no data. Changes reach every open copy within about 2 seconds.
+
+Cheat-sheet (every call returns a Promise):
+  var db = window.fintrack.db;
+  var c = db.collection('tasks');                 // shared: everyone sees the same records
+  var mine = db.collection('notes', {scope: 'private'}); // each visitor sees only their own
+  c.add({title: 'Milk', done: false})             // -> record
+  c.update(id, {done: true})                      // field-level merge -> record
+  c.update(id, {qty: 3}, {version: rec.version})  // fails if someone changed it first
+  c.remove(id)
+  c.get(id)                                       // -> record or null
+  c.list({where: {done: false}, orderBy: 'createdAt', desc: true, limit: 50})
+  c.count({done: true})                           // -> number
+  c.increment(id, 'votes', 1)                     // atomic: polls, likes, counters, stock
+  c.upsert('sku-42', {name: 'Pen', stock: 10})    // one record per key
+  var off = c.subscribe(function(records){ render(records); }, {orderBy: 'createdAt'});
+  db.doc('settings').get() / .set(obj) / .update(patch) / .increment('count') / .subscribe(cb)
+  db.files.upload(fileInput.files[0])             // images/PDF up to 5 MB -> {id, url, name, type, size}
+  db.me()                                         // -> {id, isOwner, canAdd, canEditOthers, signedIn}
+  db.onStatus(function(s){ ... })                 // 'connecting' | 'synced' | 'syncing' | 'offline' | 'local'
+A record is {id, data, key, mine, version, createdAt, updatedAt, pending}; your
+fields are in record.data. Write data as plain JSON objects (under 16 KB each).
+Collection and field names: letters, digits, _ and -, starting with a letter.
+
+Rules for using it:
+- Render from subscribe(): it fires at once with the current list and again on
+  every change, local or remote. Do not keep a second copy of the data.
+- Writes show immediately. Wrap them in try/catch (or .catch) and show a short,
+  friendly message if one is refused (for example the owner made it read-only:
+  check (await db.me()).canAdd and hide add forms when it is false).
+- Show a small sync badge: "Synced" when synced, "Saving…" when syncing,
+  "Offline — changes will sync" when offline, "Not shared (preview)" when local.
+- Escape everything people typed before putting it in the page (textContent,
+  never innerHTML with user text). Show an empty state and counts.
+- Still no fetch/XHR/WebSocket of your own: window.fintrack.db is the only way
+  data leaves the page.
+
+Example, shared:
+  var tasks = window.fintrack.db.collection('tasks');
+  tasks.subscribe(function(list){ ul.replaceChildren.apply(ul, list.map(row)); count.textContent = list.length; });
+  form.onsubmit = function(e){ e.preventDefault(); tasks.add({title: input.value.trim(), done: false}).catch(showError); input.value = ''; };
+  function row(r){ var li = document.createElement('li'); li.textContent = r.data.title;
+    li.onclick = function(){ tasks.update(r.id, {done: !r.data.done}); }; return li; }
+
+Example, private (each visitor's own list, kept in the cloud):
+  var notes = window.fintrack.db.collection('notes', {scope: 'private'});
+  notes.subscribe(render, {orderBy: 'createdAt', desc: true});
+  save.onclick = function(){ notes.add({text: box.value}); };"""
+
+_OUTPUT_MARK = "\n\nOUTPUT FORMAT:"
+ARTIFACT_RULES = (
+    ARTIFACT_RULES.replace(_OUTPUT_MARK, "\n\n" + SHARED_DATA_RULES + _OUTPUT_MARK, 1)
+    if _OUTPUT_MARK in ARTIFACT_RULES else ARTIFACT_RULES + "\n\n" + SHARED_DATA_RULES
+)
+
 # Appended to the search/replace brief when an artifact is being refined, so a
 # revision keeps to the same constraints as the first build.
 REVISION_NOTE = (
@@ -72,10 +139,14 @@ REVISION_NOTE = (
     "in a sandboxed frame. Keep it that way: no network calls (fetch, XHR, "
     "WebSocket), external code only from "
     + ", ".join(CDN_ALLOWLIST)
-    + ", state in localStorage only behind try/catch, labelled accessible inputs, "
-    "responsive at 360px, and colours that work in both light and dark. Keep "
-    "its design system: style anything new with the existing tokens and kit "
-    "classes (.btn, .input, .card, .row, .badge …) so it matches what is there."
+    + ", labelled accessible inputs, responsive at 360px, and colours that work "
+    "in both light and dark. Keep its design system: style anything new with the "
+    "existing tokens and kit classes (.btn, .input, .card, .row, .badge …) so it "
+    "matches what is there. Data that should persist or be shared goes through "
+    "window.fintrack.db (collection(name, {scope}) with add/update/remove/list/"
+    "subscribe/increment/upsert, doc(name), files.upload): keep using it where the "
+    "artifact already does, render from subscribe(), and keep the sync status "
+    "badge; localStorage only for personal UI preferences, behind try/catch."
 )
 
 

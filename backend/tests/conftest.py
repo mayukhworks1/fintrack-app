@@ -28,16 +28,19 @@ class PgEnv:
         import app.routers.databases as RD
         import app.routers.page_tree as RT
         import app.routers.pages as RP
-        for mod in (PG, RC, RD, RT, RP):
+        import app.routers.artifact_data as RA
+        for mod in (PG, RC, RD, RT, RP, RA):
             monkeypatch.setattr(mod, "get_pool", getter)
 
     def run(self, fn, pool_size: int = 8):
         """Run `await fn(pool)` on a fresh event loop with a pool of this
         database installed as the app's pool."""
+        from app.services import artifact_data as AD
         from app.services import page_tree as T
 
         async def main():
             T.reset_ready_cache()
+            AD.reset_ready_cache()
             self._pool = await asyncpg.create_pool(**self.kw, min_size=1, max_size=pool_size)
             try:
                 return await fn(self._pool)

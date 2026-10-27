@@ -73,7 +73,7 @@ export default function SharePopover({
   open, anchorRef, onClose, isMobile,
   form, set, onSlugEdit, slugStatus, folders = [], shareUrl,
   isPublished, hasUnpublished, canPublish, busy, onPublish, onUnpublish,
-  onSavePassword, onCopied,
+  onSavePassword, onCopied, collectsData = false,
 }) {
   const ref = useRef(null)
   const [pos, setPos] = useState(null)
@@ -212,6 +212,13 @@ export default function SharePopover({
             <ShieldCheck size={12} /> Protect code
           </label>
         </div>
+
+        {collectsData && (
+          <div role="note" data-collects-data="" style={{ fontSize:12, lineHeight:1.5, color:'var(--text-1)', background:'var(--bg-base)', border:'1px solid var(--border)', borderRadius:10, padding:'8px 10px' }}>
+            <strong>This artifact saves what visitors enter.</strong>{' '}
+            <span style={{ color:'var(--text-2)' }}>Everyone with the link shares the same data, live. Choose who can change it, and see or export what was added, in the artifact's Data tab.</span>
+          </div>
+        )}
 
         <div style={{ display:'flex', gap:8, alignItems:'center', borderTop:'1px solid var(--border)', paddingTop:12 }}>
           <span style={{ fontSize:11.5, color:'var(--text-2)', flex:1 }}>

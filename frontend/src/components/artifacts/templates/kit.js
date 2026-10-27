@@ -13,8 +13,8 @@ import sipPlanner from './sip-planner.html?raw'
 
 export const todo = {
   id: 'task-organiser',
-  name: 'Task organiser',
-  description: 'To-do list with due dates, priorities, filters, reordering and undo.',
+  name: 'Shared to-do list',
+  description: 'One task list for everyone with the link, live: due dates, priorities, filters, reordering and undo.',
   icon: '✅',
   html: taskOrganiser,
 }

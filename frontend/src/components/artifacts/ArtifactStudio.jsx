@@ -19,6 +19,7 @@ import StreamingDraft from '../StreamingDraft'
 import ArtifactFrame, { readArtifactStore, writeArtifactStore } from './ArtifactFrame'
 import ArtifactTemplates from './ArtifactTemplates'
 import BuildProgress from './BuildProgress'
+import ArtifactDataPanel from './ArtifactDataPanel'
 import PlanCard, { PlanSkeleton } from './PlanCard'
 import { readDontAsk, usablePlan } from './artifactPlan'
 import { templateTitle } from './templates'
@@ -98,7 +99,7 @@ function HtmlFileButton({ onLoad, label = 'Upload .html' }) {
  * reach this page). Escape (passed on by the preview when pressed inside the
  * artifact) or the button closes it, and focus goes back.
  */
-function FullScreenPreview({ src, storeKey, title, onClose }) {
+function FullScreenPreview({ src, storeKey, title, onClose, data }) {
   const ref = useRef(null)
   const closeRef = useRef(null)
   const onCloseRef = useRef(onClose)
@@ -141,7 +142,7 @@ function FullScreenPreview({ src, storeKey, title, onClose }) {
         <span style={{ fontSize: 12, color: 'var(--text-2)' }} aria-hidden="true">Esc to close</span>
         <button ref={closeRef} type="button" style={btn} onClick={onClose}><X size={14} aria-hidden="true" /> Exit full screen</button>
       </div>
-      <ArtifactFrame src={src} height="100%" title={`${name} (full screen)`} storeKey={storeKey} style={{ flex: 1, minHeight: 0 }} />
+      <ArtifactFrame src={src} height="100%" title={`${name} (full screen)`} storeKey={storeKey} data={data} style={{ flex: 1, minHeight: 0 }} />
       <span tabIndex={0} data-focus-edge="" style={edge} onFocus={() => closeRef.current?.focus()} />
     </div>,
     document.body,
@@ -210,6 +211,9 @@ export default function ArtifactStudio({
   // A new artifact's preview keeps its state under "draft" until auto-save
   // gives the page an id; then that state moves to the page's own key.
   const storeKey = pageId ? `page:${pageId}` : 'draft'
+  // The preview works on the artifact's real shared data, as its owner, once
+  // the page exists; before that, in memory.
+  const dataDesc = pageId ? { mode: 'owner', pageId } : { mode: 'memory' }
   useEffect(() => {
     if (!pageId) return
     const draft = readArtifactStore('draft')
@@ -457,8 +461,9 @@ export default function ArtifactStudio({
 
   // ── Workspace: a live preview, with the code beside it on request ──────
   const streamingCreate = busy && mode === 'create'
-  const showCode = view !== 'preview'
-  const showPreview = view !== 'code'
+  const showData = view === 'data' && !!pageId
+  const showCode = !showData && view !== 'preview'
+  const showPreview = !showData && view !== 'code'
 
   const progress = (
     <BuildProgress
@@ -563,7 +568,7 @@ export default function ArtifactStudio({
               <button type="button" style={btn} onClick={() => setNonce(n => n + 1)}><RotateCw size={13} aria-hidden="true" /> Try again</button>
             </div>
           ) : previewUrl ? (
-            <ArtifactFrame key={nonce} src={previewUrl} height="100%" title={`Preview of ${title || 'the artifact'}`} storeKey={storeKey} style={{ flex: 1, minHeight: 0 }} />
+            <ArtifactFrame key={nonce} src={previewUrl} height="100%" title={`Preview of ${title || 'the artifact'}`} storeKey={storeKey} data={dataDesc} style={{ flex: 1, minHeight: 0 }} />
           ) : (
             <div aria-busy="true" aria-label="Preparing the preview" style={{ position: 'relative', flex: 1 }}>
               <div style={{ position: 'absolute', inset: 0, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} aria-hidden="true">
@@ -578,8 +583,8 @@ export default function ArtifactStudio({
     </div>
   )
 
-  const views = isMobile ? ['preview', 'code'] : ['preview', 'split', 'code']
-  const viewLabel = { preview: 'Preview', split: 'Split', code: 'Code' }
+  const views = [...(isMobile ? ['preview', 'code'] : ['preview', 'split', 'code']), ...(pageId ? ['data'] : [])]
+  const viewLabel = { preview: 'Preview', split: 'Split', code: 'Code', data: 'Data' }
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -625,9 +630,10 @@ export default function ArtifactStudio({
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}>
         {showCode && codePane}
         {showPreview && previewPane}
+        {showData && <ArtifactDataPanel pageId={pageId} isPublished={isPublished} isMobile={isMobile} />}
       </div>
       {fullOpen && previewUrl && (
-        <FullScreenPreview src={previewUrl} storeKey={storeKey} title={title} onClose={() => setFullOpen(false)} />
+        <FullScreenPreview src={previewUrl} storeKey={storeKey} title={title} data={dataDesc} onClose={() => setFullOpen(false)} />
       )}
     </div>
   )

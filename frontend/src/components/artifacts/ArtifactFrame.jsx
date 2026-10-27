@@ -24,10 +24,19 @@
  * Size: with `autoHeight` the frame follows the height its document reports
  * (the renderer posts it), between `minHeight` and `maxHeight`. Content that
  * just fills whatever box it is given (a 100vh layout) keeps `height`.
+ *
+ * Shared data: the artifact's window.fintrack.db calls arrive here and are
+ * served by a DataBridge (artifactData.js), which validates them and talks to
+ * the API. `data` says whose data: by default a slug reads the published
+ * artifact's data as a visitor, a page id its owner's view, and a bare `src`
+ * keeps everything in memory. Pass `data={false}` for no data at all.
+ * A published artifact that is republished while open reloads by itself when
+ * nobody is using it, or offers a Reload bar when someone is.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL, api } from '../../services/api'
 import { PAGE_SANDBOX, pageRenderUrl } from '../../utils/pageHtml'
+import { DataBridge, backendFor, descKey } from './artifactData'
 
 const STORE_PREFIX = 'ft_artifact_store:'
 const STORE_MARK = '__ftstore:'
@@ -121,6 +130,7 @@ export default function ArtifactFrame({
   openHref,
   style,
   onLoad,
+  data,
 }) {
   const frameRef = useRef(null)
   const [minted, setMinted] = useState(null)
@@ -129,6 +139,9 @@ export default function ArtifactFrame({
   const [loaded, setLoaded] = useState(false)
   const [slow, setSlow] = useState(false)
   const [fit, setFit] = useState(null)
+  const [revision, setRevision] = useState(null)   // a republish, reloaded into
+  const [updateBar, setUpdateBar] = useState(null) // a republish, waiting for a reload
+  const bridgeRef = useRef(null)
 
   // By id without a token: ask the API for one (only the page's author may).
   const needsMint = !srcOverride && !slug && !!pageId && !token
@@ -146,9 +159,44 @@ export default function ArtifactFrame({
     return () => { cancelled = true }
   }, [needsMint, pageId, attempt])
 
-  const src = srcOverride
+  const baseSrc = srcOverride
     || (slug ? pageRenderUrl(slug, token) : null)
     || (pageId && (token || minted) ? artifactRenderUrl(pageId, token || minted) : null)
+  // A republished artifact's render URL is cached for a minute; the revision
+  // in the query string asks for the new copy.
+  const src = baseSrc && revision && slug && !srcOverride
+    ? `${baseSrc}${baseSrc.includes('?') ? '&' : '?'}v=${encodeURIComponent(revision)}`
+    : baseSrc
+
+  // Whose data the artifact reads and writes.
+  const dataDesc = data === false ? null
+    : data || (slug && !srcOverride ? { mode: 'public', slug, token }
+      : pageId && !srcOverride ? { mode: 'owner', pageId } : { mode: 'memory' })
+  const dataKey = dataDesc ? descKey(dataDesc) : null
+  const descRef = useRef(dataDesc)
+  descRef.current = dataDesc
+
+  // Republished while open: reload now if nobody is in the middle of using
+  // it (part-way through typing, as the frame reports, or changes not yet
+  // saved), else offer it.
+  const editingRef = useRef(false)
+  const onRevisionRef = useRef(null)
+  onRevisionRef.current = (rev) => {
+    const busy = editingRef.current || (bridgeRef.current?.pendingWrites || 0) > 0
+    if (busy) setUpdateBar(rev)
+    else { setUpdateBar(null); setRevision(rev) }
+  }
+
+  useEffect(() => {
+    if (!dataKey) return undefined
+    const desc = descRef.current
+    const bridge = new DataBridge(backendFor(desc), {
+      post: (msg) => { try { frameRef.current?.contentWindow?.postMessage(msg, '*') } catch { /* frame gone */ } },
+      onRevision: (rev) => onRevisionRef.current?.(rev),
+    })
+    bridgeRef.current = bridge
+    return () => { bridge.stop(); if (bridgeRef.current === bridge) bridgeRef.current = null }
+  }, [dataKey])
 
   const key = persist ? (storeKey || (slug ? `slug:${slug}` : pageId ? `page:${pageId}` : null)) : null
 
@@ -162,6 +210,7 @@ export default function ArtifactFrame({
   // A new document starts loading: cover it, and give it a while to arrive.
   useEffect(() => {
     setLoaded(false); setSlow(false)
+    editingRef.current = false
     if (!src || !(loadTimeout > 0)) return undefined
     const t = setTimeout(() => setSlow(true), loadTimeout)
     return () => clearTimeout(t)
@@ -172,7 +221,11 @@ export default function ArtifactFrame({
     if (!frame || e.source !== frame.contentWindow) return
     const d = e.data
     if (!d || typeof d !== 'object') return
-    if (d.type === '__ft_artifact_store') {
+    if (d.type === '__ft_db') {
+      bridgeRef.current?.handle(d)
+    } else if (d.type === '__ft_editing') {
+      editingRef.current = d.editing === true
+    } else if (d.type === '__ft_artifact_store') {
       if (key) writeArtifactStore(key, d.data)
     } else if (d.type === '__ft_frame_size') {
       setLoaded(true)
@@ -220,9 +273,26 @@ export default function ArtifactFrame({
         title={title}
         sandbox={PAGE_SANDBOX}
         data-artifact-frame=""
-        onLoad={() => { setLoaded(true); onLoad?.() }}
+        onLoad={() => {
+          setLoaded(true)
+          // A published artifact always listens once it has loaded, so a
+          // republish reaches it even when it keeps no data; elsewhere the
+          // artifact's first data call starts the connection.
+          if (descRef.current?.mode === 'public') bridgeRef.current?.start()
+          onLoad?.()
+        }}
         style={{ width: '100%', height: frameHeight, minHeight: fullBleed ? 0 : 120, flex: fullBleed || height === '100%' ? 1 : 'none', border: 'none', display: 'block', background: 'transparent', colorScheme: 'normal', opacity: loaded ? 1 : 0, transition: 'opacity .15s ease, height .15s ease' }}
       />
+      {updateBar && (
+        <div role="status" data-artifact-updated=""
+          style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 6px 14px', borderRadius: 999, background: 'var(--card-bg, #fff)', color: 'var(--text-1, #14171f)', border: '1px solid var(--border, #d0d5dd)', boxShadow: '0 6px 24px rgba(16,24,40,.14)', fontSize: 13, maxWidth: 'calc(100% - 24px)' }}>
+          <span>Updated by its author.</span>
+          <button type="button" style={{ ...noticeBtn, minHeight: 30, padding: '4px 12px', borderRadius: 999 }}
+            onClick={() => { setRevision(updateBar); setUpdateBar(null) }}>Reload</button>
+          <button type="button" aria-label="Dismiss update notice" onClick={() => setUpdateBar(null)}
+            style={{ border: 'none', background: 'transparent', color: 'var(--text-2, #5b6372)', cursor: 'pointer', fontSize: 16, padding: '2px 6px' }}>×</button>
+        </div>
+      )}
       {!loaded && !showSlow && <FrameSkeleton fullBleed={fullBleed} />}
       {showSlow && (
         <FrameNotice box={{ position: 'absolute', inset: 0 }}

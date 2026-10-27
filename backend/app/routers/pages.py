@@ -41,6 +41,7 @@ from ..services import page_render
 from ..services import page_share
 from ..services import page_doc
 from ..services import artifact
+from ..services import artifact_data
 from ..services import page_tree
 from ..services import collab
 
@@ -735,6 +736,20 @@ def _is_expired(row) -> bool:
 
 def _source_protected(row) -> bool:
     return bool(_meta(row["metadata"]).get("protect_source"))
+
+
+def check_public_access(row, *, slug: str | None = None, token: str | None = None,
+                        unlock: bool = False) -> None:
+    """What every public route of a page checks, in this order: it exists, is
+    published and not in the trash (404); its link has not expired (410); and,
+    with `unlock`, a password-protected page comes with a valid unlock token
+    from /verify (401)."""
+    if not row or not row["is_published"] or page_tree.is_trashed(row):
+        raise HTTPException(404, "Page not found")
+    if _is_expired(row):
+        raise HTTPException(410, "Page has expired")
+    if unlock and row["is_password_protected"] and not _render_token_valid(slug or row["slug"], token):
+        raise HTTPException(401, "This page is protected.")
 
 
 class CreatePageBody(BaseModel):
@@ -1530,7 +1545,8 @@ async def update_page(
             # A database's schema and a row's property values are written by
             # routers/databases.py; an editor saving its copy of the metadata
             # must not roll them back.
-            for owned in ("database", "props", "db_row", "imports"):
+            # Likewise an artifact's shared-data settings (routers/artifact_data.py).
+            for owned in ("database", "props", "db_row", "imports", "data"):
                 if owned in old_meta:
                     new_meta[owned] = old_meta[owned]
             updates["metadata"] = json.dumps(new_meta)
@@ -1749,6 +1765,9 @@ async def publish_page(
     if page_tree.field(row, "parent_id"):
         await _invalidate_public_rows(row["parent_id"])
     await _invalidate_public_rows(page_id)
+    # An artifact open somewhere is told it was republished (its long-poll
+    # for data changes also watches the page's revision).
+    artifact_data.notify(page_id)
     return _page_dict(updated)
 
 
@@ -2050,10 +2069,7 @@ async def public_get_page(slug: str, request: Request):
             "SELECT * FROM published_pages WHERE slug = $1", slug
         )
 
-    if not row or not row["is_published"] or page_tree.is_trashed(row):
-        raise HTTPException(404, "Page not found")
-    if _is_expired(row):
-        raise HTTPException(410, "Page has expired")
+    check_public_access(row)
 
     import json as _json
     _no_cache = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
@@ -2180,10 +2196,7 @@ async def public_render_page(slug: str, t: str | None = None):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM published_pages WHERE slug = $1", slug)
 
-    if not row or not row["is_published"] or page_tree.is_trashed(row):
-        raise HTTPException(404, "Page not found")
-    if _is_expired(row):
-        raise HTTPException(410, "Page has expired")
+    check_public_access(row)
     protected = _source_protected(row)
     if (row["is_password_protected"] or protected) and not _render_token_valid(slug, t):
         raise HTTPException(401, "This page is protected.")
@@ -2208,10 +2221,7 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
             "SELECT * FROM published_pages WHERE slug = $1", slug
         )
 
-    if not row or not row["is_published"] or page_tree.is_trashed(row):
-        raise HTTPException(404, "Page not found")
-    if _is_expired(row):
-        raise HTTPException(410, "Page has expired")
+    check_public_access(row)
 
     row = _public_copy(row)
     if not row["is_password_protected"]:

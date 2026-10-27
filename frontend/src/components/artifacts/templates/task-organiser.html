@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Task Organiser</title>
-<meta name="description" content="Plan your day: add tasks with due dates and priorities, filter, reorder and clear what is done.">
+<meta name="description" content="A shared task list: add tasks with due dates and priorities, filter, reorder and clear what is done. Everyone with the link sees changes live.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -203,7 +203,7 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
       <p class="subtitle" id="today"></p>
     </div>
     <div class="header-meta">
-      <span class="badge badge-success" id="saved" aria-live="polite"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>Saved</span></span>
+      <span class="badge" id="saved" role="status" aria-live="polite"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>Connecting…</span></span>
     </div>
   </header>
 
@@ -256,7 +256,10 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
 
 <script>
 (function () {
-  var KEY = 'task-organiser:v1';
+  // Tasks live in the artifact's shared cloud data (window.fintrack.db):
+  // everyone with the link sees the same list, and every change, live.
+  var db = window.fintrack.db;
+  var col = db.collection('tasks');
   var DAY = 86400000;
   var $ = function (id) { return document.getElementById(id); };
   var fmtDate = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -266,45 +269,29 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
     var d = new Date(Date.now() + offsetDays * DAY);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
-  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-  function sample() {
-    return [
-      { id: uid(), title: 'Send the Q3 GST reconciliation to Neha', done: false, prio: 'high', due: iso(0) },
-      { id: uid(), title: 'Review Arjun’s travel claims', done: false, prio: 'medium', due: iso(1) },
-      { id: uid(), title: 'Renew the office internet plan', done: false, prio: 'low', due: iso(-1) },
-      { id: uid(), title: 'Draft the vendor payment schedule for November', done: false, prio: '', due: iso(5) },
-      { id: uid(), title: 'Book a call with the auditor', done: true, prio: 'medium', due: '' },
-      { id: uid(), title: 'File TDS return for September', done: true, prio: 'high', due: iso(-3) }
-    ];
-  }
-
-  function load() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      if (raw) { var data = JSON.parse(raw); if (Array.isArray(data.tasks)) return data.tasks; }
-    } catch (e) { /* storage unavailable */ }
-    return sample();
-  }
-
-  var tasks = load();
+  var tasks = [];
   var filter = 'all';
   var editing = null;
   var undoStack = [];
-  var savedTimer;
 
-  function save() {
-    var badge = $('saved');
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ tasks: tasks }));
-      badge.className = 'badge badge-success';
-      badge.lastElementChild.textContent = 'Saved';
-    } catch (e) {
-      badge.className = 'badge badge-warning';
-      badge.lastElementChild.textContent = 'Not saved';
-    }
-    clearTimeout(savedTimer);
+  function fromRecord(r) {
+    var d = r.data || {};
+    return { id: r.id, title: String(d.title || ''), done: !!d.done, prio: d.prio || '', due: d.due || '',
+      order: typeof d.order === 'number' ? d.order : 0, pending: r.pending };
   }
+  function fail(e) { toast(e && e.message ? e.message : 'That change did not save. Try again.', false); }
+
+  var STATUS = {
+    connecting: ['badge', 'Connecting…'], synced: ['badge badge-success', 'Synced'],
+    syncing: ['badge badge-warning', 'Saving…'], offline: ['badge badge-warning', 'Offline · will sync'],
+    local: ['badge', 'Not shared (preview)']
+  };
+  db.onStatus(function (st) {
+    var b = $('saved'), v = STATUS[st] || STATUS.connecting;
+    b.className = v[0];
+    b.lastElementChild.textContent = v[1];
+  });
 
   function dueInfo(due) {
     if (!due) return null;
@@ -383,7 +370,7 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
     box.checked = t.done;
     box.id = 'c-' + t.id;
     box.setAttribute('aria-label', (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title);
-    box.addEventListener('change', function () { t.done = box.checked; save(); render(); });
+    box.addEventListener('change', function () { col.update(t.id, { done: box.checked }).catch(fail); });
     li.appendChild(box);
 
     var main = el('div', 'row-main');
@@ -472,14 +459,16 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   function clearDrop() {
     document.querySelectorAll('.drop-before,.drop-after').forEach(function (n) { n.classList.remove('drop-before', 'drop-after'); });
   }
+  // Order is a number per task; a move takes the midpoint of its new neighbours.
   function moveTo(id, targetId, after) {
     if (!id || id === targetId) return;
-    var from = tasks.findIndex(function (t) { return t.id === id; });
-    if (from < 0) return;
-    var item = tasks.splice(from, 1)[0];
-    var to = tasks.findIndex(function (t) { return t.id === targetId; });
-    tasks.splice(after ? to + 1 : to, 0, item);
-    save(); render();
+    var rest = tasks.filter(function (t) { return t.id !== id; });
+    var to = rest.findIndex(function (t) { return t.id === targetId; });
+    if (to < 0) return;
+    var at = after ? to + 1 : to;
+    var prev = rest[at - 1], next = rest[at];
+    var order = prev && next ? (prev.order + next.order) / 2 : prev ? prev.order + 1 : next ? next.order - 1 : 0;
+    col.update(id, { order: order }).catch(fail);
   }
   function nudge(id, dir) {
     var shown = visible();
@@ -504,31 +493,29 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   function commit(t, value) {
     var v = value.trim();
     editing = null;
-    if (v) t.title = v;
-    save(); render(); focusRow(t.id);
+    if (v && v !== t.title) col.update(t.id, { title: v }).catch(fail);
+    render(); focusRow(t.id);
   }
 
+  function data(t) { return { title: t.title, done: t.done, prio: t.prio, due: t.due, order: t.order }; }
   function remove(id) {
-    var i = tasks.findIndex(function (t) { return t.id === id; });
-    if (i < 0) return;
-    var item = tasks.splice(i, 1)[0];
-    undoStack.push({ items: [{ item: item, index: i }] });
-    save(); render();
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    undoStack.push({ items: [data(t)] });
+    col.remove(id).catch(fail);
     toast('Task deleted', true);
   }
   function clearCompleted() {
-    var removed = [];
-    tasks = tasks.filter(function (t, i) { if (t.done) removed.push({ item: t, index: i }); return !t.done; });
-    if (!removed.length) return;
-    undoStack.push({ items: removed });
-    save(); render();
-    toast(removed.length === 1 ? '1 completed task cleared' : removed.length + ' completed tasks cleared', true);
+    var done = tasks.filter(function (t) { return t.done; });
+    if (!done.length) return;
+    undoStack.push({ items: done.map(data) });
+    done.forEach(function (t) { col.remove(t.id).catch(fail); });
+    toast(done.length === 1 ? '1 completed task cleared' : done.length + ' completed tasks cleared', true);
   }
   function undo() {
     var last = undoStack.pop();
     if (!last) return;
-    last.items.forEach(function (r) { tasks.splice(Math.min(r.index, tasks.length), 0, r.item); });
-    save(); render();
+    last.items.forEach(function (d) { col.add(d).catch(fail); });
     toast('Restored', false);
   }
 
@@ -554,10 +541,11 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
     var input = $('newTitle');
     var title = input.value.trim();
     if (!title) { input.focus(); return; }
-    tasks.unshift({ id: uid(), title: title, done: false, prio: $('newPrio').value, due: $('newDue').value });
+    var first = tasks.length ? tasks[0].order : 0;
+    col.add({ title: title.slice(0, 140), done: false, prio: $('newPrio').value, due: $('newDue').value, order: first - 1 }).catch(fail);
     input.value = ''; $('newPrio').value = ''; $('newDue').value = '';
     if (filter === 'done') setFilter('all');
-    save(); render(); input.focus();
+    input.focus();
   });
 
   function setFilter(f) {
@@ -579,6 +567,11 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   var now = new Date();
   $('today').textContent = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(now);
   render();
+  col.subscribe(function (list) {
+    tasks = list.map(fromRecord).sort(function (a, b) { return a.order - b.order; });
+    render();
+  });
+  db.me().then(function (me) { if (me && me.canAdd === false) $('composer').hidden = true; });
   $('newTitle').focus({ preventScroll: true });
 })();
 </script>

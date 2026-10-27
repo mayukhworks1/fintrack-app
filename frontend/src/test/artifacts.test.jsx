@@ -49,6 +49,7 @@ vi.mock('../context/ConfirmContext', () => ({
 import { api } from '../services/api'
 import { PAGE_SANDBOX } from '../utils/pageHtml'
 import { ARTIFACT_TEMPLATES } from '../components/artifacts/templates'
+import { DATA_SDK } from './artifactSdkSource'
 import ArtifactFrame, { readArtifactStore } from '../components/artifacts/ArtifactFrame'
 
 beforeEach(() => {
@@ -75,10 +76,10 @@ async function openNewArtifact() {
 const GST = ARTIFACT_TEMPLATES.find(t => t.id === 'gst-calculator')
 
 describe('Artifact templates', () => {
-  it('ships eleven complete single-file apps', () => {
-    expect(ARTIFACT_TEMPLATES).toHaveLength(11)
+  it('ships twelve complete single-file apps', () => {
+    expect(ARTIFACT_TEMPLATES).toHaveLength(12)
     const ids = new Set(ARTIFACT_TEMPLATES.map(t => t.id))
-    expect(ids.size).toBe(11)
+    expect(ids.size).toBe(12)
     for (const t of ARTIFACT_TEMPLATES) {
       expect(t.html.startsWith('<!DOCTYPE html>')).toBe(true)
       expect(t.html).toMatch(/<title>[^<]+<\/title>/)
@@ -94,15 +95,26 @@ describe('Artifact templates', () => {
     }
   })
 
-  it.each(ARTIFACT_TEMPLATES.map(t => [t.id, t]))('%s boots without a script error', (_id, t) => {
+  it.each(ARTIFACT_TEMPLATES.map(t => [t.id, t]))('%s boots without a script error', async (_id, t) => {
     const doc = new DOMParser().parseFromString(t.html, 'text/html')
     const script = doc.querySelector('script').textContent
     doc.querySelectorAll('script').forEach(s => s.remove())
     document.body.innerHTML = doc.body.innerHTML
+    // The renderer gives every artifact window.fintrack.db; unframed it runs locally.
+    delete window.fintrack
+    new Function(DATA_SDK)()
+    const errors = []
+    const onError = (e) => errors.push(e.reason || e.error)
+    window.addEventListener('unhandledrejection', onError)
     expect(() => new Function(script)()).not.toThrow()
+    // Data arrives a moment later (subscribe), and must render cleanly too.
+    await new Promise(r => setTimeout(r, 20))
+    window.removeEventListener('unhandledrejection', onError)
+    expect(errors).toEqual([])
     // Every result region starts filled in rather than blank or NaN.
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/)
     document.body.innerHTML = ''
+    delete window.fintrack
   })
 
   it('GST calculator splits 18% within a state into CGST and SGST', () => {
