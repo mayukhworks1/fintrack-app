@@ -1062,6 +1062,43 @@ async def ai_plan_artifact(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# A comment line the client ignores. Proxies in front of the API close a
+# response that stays silent for long, and a model can think for a minute or
+# more before it writes anything; the ping keeps the connection open.
+SSE_PING = ": ping\n\n"
+HEARTBEAT_S = 10.0
+
+
+async def with_heartbeat(frames, every: float = None):
+    """Frames from `frames`, with None in between whenever `every` seconds pass
+    without one."""
+    every = HEARTBEAT_S if every is None else every
+    it = frames.__aiter__()
+    nxt = asyncio.ensure_future(it.__anext__())
+    try:
+        while True:
+            done, _ = await asyncio.wait({nxt}, timeout=every)
+            if not done:
+                yield None
+                continue
+            try:
+                frame = nxt.result()
+            except StopAsyncIteration:
+                return
+            yield frame
+            nxt = asyncio.ensure_future(it.__anext__())
+    finally:
+        if not nxt.done():
+            nxt.cancel()
+            try:
+                await nxt
+            except (asyncio.CancelledError, StopAsyncIteration, Exception):
+                pass
+        aclose = getattr(it, "aclose", None)
+        if aclose:
+            await aclose()
+
+
 @router.post("/api/pages/ai/stream")
 async def ai_stream_page(
     body: AIStreamBody,
@@ -1073,14 +1110,14 @@ async def ai_stream_page(
     """Stream page generation as SSE events."""
     async def event_stream():
         try:
-            async for frame in stream_generate_page(
+            async for frame in with_heartbeat(stream_generate_page(
                 prompt=body.prompt,
                 content_type=body.content_type,
                 existing=body.existing,
                 clarifications=body.clarifications,
                 style=body.style,
-            ):
-                yield f"data: {json.dumps(frame)}\n\n"
+            )):
+                yield SSE_PING if frame is None else f"data: {json.dumps(frame)}\n\n"
         except ValueError as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         except Exception as e:

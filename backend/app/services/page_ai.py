@@ -734,6 +734,82 @@ _SECTION_TAG = re.compile(
 )
 
 
+# How long a model may stay silent before its first token (text or
+# reasoning) before the build moves on to the next model. Providers that send
+# keep-alive comments never trip the read timeout, so without this a stalled
+# model held the build for minutes with nothing on screen.
+FIRST_TOKEN_S = 45.0
+
+# Reasoning text is passed on in small batches, not per token.
+_REASONING_FLUSH_CHARS = 160
+_REASONING_FLUSH_S = 0.6
+
+
+_LIMIT_RE = re.compile(r"Limit\s+(\d+),\s*Requested\s+(\d+)", re.IGNORECASE)
+# Rough characters per token for the size estimate below; errs on the large side.
+_CHARS_PER_TOKEN = 3.3
+# Below this the answer cannot hold a complete app, so the model is skipped.
+_MIN_ANSWER_TOKENS = 2500
+
+
+def _fit_to_limit(messages, refusal: str, *, content_type: str, revising: bool,
+                  prompt: str, style: str | None, budget: int):
+    """Messages and an answer budget that fit a provider's per-request token
+    limit, read from its 413 refusal, or (messages, 0) when nothing fits."""
+    m = _LIMIT_RE.search(refusal or "")
+    limit = int(m.group(1)) if m else 0
+    if content_type == artifact.CONTENT_TYPE and not revising:
+        system = artifact.COMPACT_RULES
+        if style:
+            d = artifact_design.pick(prompt, style)
+            system += f"\n\nSTYLE: {d.label}: {d.summary}"
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
+    prompt_tokens = int(sum(len(x.get("content") or "") for x in messages) / _CHARS_PER_TOKEN) + 50
+    room = (limit - prompt_tokens - 200) if limit else MAX_TOKENS
+    answer = min(budget, MAX_TOKENS, room)
+    return messages, (answer if answer >= _MIN_ANSWER_TOKENS else 0)
+
+
+def _chunk_reasoning(chunk: dict) -> str:
+    """The thinking text a reasoning model streams before its answer."""
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ""
+    delta = choices[0].get("delta")
+    if not isinstance(delta, dict):
+        return ""
+    for key in ("reasoning", "reasoning_content"):
+        text = delta.get(key)
+        if isinstance(text, str) and text:
+            return text
+    return ""
+
+
+async def _lines_with_first_token_deadline(resp, deadline_s: float):
+    """resp.aiter_lines(), failing with TimeoutError if no line carrying text or
+    reasoning arrives within `deadline_s` of the request."""
+    it = resp.aiter_lines().__aiter__()
+    loop = asyncio.get_running_loop()
+    give_up_at = loop.time() + deadline_s
+    first = True
+    while True:
+        try:
+            if first:
+                left = give_up_at - loop.time()
+                if left <= 0:
+                    raise TimeoutError
+                line = await asyncio.wait_for(it.__anext__(), timeout=left)
+            else:
+                line = await it.__anext__()
+        except StopAsyncIteration:
+            return
+        if first:
+            data = _sse_chunk(line)
+            if isinstance(data, dict) and (_chunk_text(data) or _chunk_reasoning(data)):
+                first = False
+        yield line
+
+
 async def stream_generate_page(
     prompt: str,
     content_type: str = "html",
@@ -747,6 +823,8 @@ async def stream_generate_page(
     Yields dicts:
       {"type": "thought", "text": "..."} — architectural reasoning
       {"type": "plan", "sections": [...]} — section blueprint
+      {"type": "status", "text": "...", "model": "..."} — which model is working, and switches
+      {"type": "reasoning", "delta": "..."} — the model's thinking, in batches
       {"type": "delta", "delta": "..."}  — streamed code tokens
       {"type": "done", "content": "...", "model": "...", "warnings": [...]}
     """
@@ -806,10 +884,19 @@ async def stream_generate_page(
 
     cascade = _Cascade("page_build")
 
+    reported = 0
     for spec in await _ordered_models("page_build"):
         p = await cascade.provider_for(spec)
         if p is None:
             continue
+        label = _short(spec.id) if getattr(spec, "id", None) else "the model"
+        errors = getattr(cascade, "errors", [])
+        if len(errors) > reported and getattr(cascade, "contacted", False):
+            yield {"type": "status", "model": label,
+                   "text": f"The last model didn't finish ({errors[-1][:90]}). Switching to {label}."}
+        else:
+            yield {"type": "status", "model": label, "text": f"Sent your request to {label}."}
+        reported = len(errors)
         started = time.time()
         resp = None
         status: int | None = None
@@ -825,14 +912,26 @@ async def stream_generate_page(
 
             resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
             status = resp.status_code
-            if status == 413 and budget > MAX_TOKENS:
-                # A provider whose per-minute token allowance counts the
-                # requested output refuses the larger budget outright. The
-                # same model at the page budget is still worth a try.
+            if status == 413:
+                # A provider whose per-minute token allowance counts the prompt
+                # and the requested output together refuses a large request
+                # outright. Fit the request to the limit it names: the compact
+                # brief for a new artifact, and an answer budget that fits.
+                refusal = (await resp.aread()).decode("utf-8", errors="ignore")
                 await resp.aclose()
-                payload["max_tokens"] = MAX_TOKENS
-                resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
-                status = resp.status_code
+                retry_messages, retry_budget = _fit_to_limit(
+                    messages, refusal, content_type=content_type, revising=revising,
+                    prompt=user_content, style=style, budget=budget)
+                if retry_budget:
+                    yield {"type": "status", "model": label,
+                           "text": f"{label} has a small request limit; sending a shorter brief."}
+                    payload["messages"] = retry_messages
+                    payload["max_tokens"] = retry_budget
+                    resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
+                    status = resp.status_code
+                else:
+                    cascade.failed(spec, started, _error_text(refusal, 413), http_status=413)
+                    continue
 
             provider_dead = _auth_or_quota_error(status)
             if provider_dead:
@@ -847,8 +946,11 @@ async def stream_generate_page(
 
             full_raw = ""
             plan_emitted = False
+            thinking = ""
+            flushed_at = time.time()
+            writing = False
 
-            async for line in resp.aiter_lines():
+            async for line in _lines_with_first_token_deadline(resp, FIRST_TOKEN_S):
                 chunk_data = _sse_chunk(line)
                 if chunk_data is _SSE_DONE:
                     break
@@ -858,9 +960,22 @@ async def stream_generate_page(
                 if "error" in chunk_data:
                     raise RuntimeError(_error_message(chunk_data["error"])[:100])
 
+                reasoning = _chunk_reasoning(chunk_data)
+                if reasoning:
+                    thinking += reasoning
+                    if len(thinking) >= _REASONING_FLUSH_CHARS or time.time() - flushed_at >= _REASONING_FLUSH_S:
+                        yield {"type": "reasoning", "delta": thinking}
+                        thinking, flushed_at = "", time.time()
+
                 delta = _chunk_text(chunk_data)
                 if not delta:
                     continue
+                if thinking:
+                    yield {"type": "reasoning", "delta": thinking}
+                    thinking = ""
+                if not writing:
+                    writing = True
+                    yield {"type": "status", "model": label, "text": f"{label} is writing the code."}
 
                 full_raw += delta
                 yield {"type": "delta", "delta": delta}
@@ -941,6 +1056,9 @@ async def stream_generate_page(
 
         except (httpx.TimeoutException, httpx.ConnectError):
             cascade.failed(spec, started, "timeout/network", http_status=status, tokens=usage)
+        except TimeoutError:
+            cascade.failed(spec, started, f"no response in {int(FIRST_TOKEN_S)}s",
+                           http_status=status, tokens=usage)
         except (GeneratorExit, asyncio.CancelledError):
             if not settled:
                 cascade.failed(spec, started, "stopped: the client disconnected",

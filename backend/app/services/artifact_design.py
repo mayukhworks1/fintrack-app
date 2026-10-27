@@ -390,7 +390,10 @@ COMPONENT RULES
   Dates as DD MMM YYYY.
 - Colour: the accent marks the primary action, the selection, focus and the one
   key figure. Status colours (.badge-success / -warning / -danger) only for
-  status. No gradients on surfaces, no rainbow palettes.
+  status. No gradients on surfaces, no rainbow palettes — unless the request
+  asks for a look (glass, gradients, neon, retro, brutalist …): then build that
+  look properly, on top of the kit's tokens, spacing and states. A style the
+  person asks for always wins over the kit's defaults.
 - States — design every one of them:
   - empty: .empty with an .empty-icon, a heading, one helpful line and the
     primary action;

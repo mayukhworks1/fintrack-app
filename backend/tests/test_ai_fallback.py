@@ -875,6 +875,54 @@ class TestStreamingPages:
         assert [(t["status"], t["http_status"]) for t in db.traces] == [("failed", 400), ("ok", 200)]
 
 
+    def test_a_page_stream_passes_on_reasoning_and_says_which_model_is_working(self, db, client):
+        html = "<!DOCTYPE html><html><body><main>Hi</main></body></html>"
+        think = {"choices": [{"index": 0, "delta": {"reasoning": "Plan the task list first. " * 10}}]}
+        client({"groq": FakeStream(200, sse(think, delta(html)))})
+        frames = collect(page_ai.stream_generate_page("A to-do list", content_type="artifact"))
+        kinds = [f["type"] for f in frames]
+        assert "reasoning" in kinds and kinds.index("reasoning") < kinds.index("delta")
+        assert "".join(f["delta"] for f in frames if f["type"] == "reasoning").startswith("Plan the task list")
+        status = [f["text"] for f in frames if f["type"] == "status"]
+        assert status[0].startswith("Sent your request to") and any("writing the code" in t for t in status)
+        assert frames[-1]["type"] == "done"
+
+    def test_a_silent_model_is_dropped_after_the_first_token_deadline(self, db, client, monkeypatch):
+        html = "<!DOCTYPE html><html><body><main>Hi</main></body></html>"
+
+        class Silent(FakeStream):
+            async def aiter_lines(self):
+                yield ": keep-alive"
+                await asyncio.sleep(5)
+                yield "data: [DONE]"
+
+        monkeypatch.setattr(page_ai, "FIRST_TOKEN_S", 0.2)
+        client({"openai/gpt-oss-120b": Silent(200),
+                "openai/gpt-oss-20b": FakeStream(200, sse(delta(html)))})
+        frames = collect(page_ai.stream_generate_page("A bakery landing page"))
+        assert frames[-1]["model"] == "openai/gpt-oss-20b"
+        assert any(f["type"] == "status" and "Switching to" in f["text"] for f in frames)
+        assert db.traces[0]["status"] == "failed"
+
+    def test_a_too_large_artifact_request_is_resent_with_the_compact_brief(self, db, client):
+        html = "<!DOCTYPE html><html><body><main>Hi</main></body></html>"
+        refusal = (b'{"error":{"message":"Request too large for model openai/gpt-oss-120b on tokens per '
+                   b'minute (TPM): Limit 8000, Requested 23511, please reduce your message size"}}')
+        sent = []
+
+        def answer(payload):
+            sent.append(payload)
+            return FakeStream(413, body=refusal) if len(sent) == 1 else FakeStream(200, sse(delta(html)))
+
+        client({"openai/gpt-oss-120b": answer})
+        frames = collect(page_ai.stream_generate_page("A shared to-do list", content_type="artifact"))
+        assert frames[-1]["type"] == "done" and frames[-1]["model"] == "openai/gpt-oss-120b"
+        retry = sent[1]
+        assert retry["messages"][0]["content"].startswith("You build one self-contained")
+        prompt_chars = sum(len(m["content"]) for m in retry["messages"])
+        assert 2500 <= retry["max_tokens"] and prompt_chars / 3.3 + retry["max_tokens"] < 8000
+        assert any(f["type"] == "status" and "shorter brief" in f["text"] for f in frames)
+
 class TestChatRouter:
     def test_tokens_used_reaches_the_done_frame(self, db, http, client):
         client({"groq": FakeStream(200, sse(delta("===ANSWER===Alpha is fine.===END==="),
