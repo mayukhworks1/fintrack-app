@@ -31,11 +31,13 @@ export function friendlyAiError(message, fallback = 'Generation failed. Try agai
  *
  * Resolves to { content, model, warnings }.
  */
-export async function streamArtifact({ prompt, existing, signal, onThought, onDelta, onEdit }) {
+export async function streamArtifact({ prompt, existing, style, signal, onThought, onDelta, onEdit }) {
   const res = await api.pages.aiStream({
     prompt,
     content_type: ARTIFACT_TYPE,
     existing: existing && existing.trim() ? existing : undefined,
+    // The design direction picked in the plan step; omitted lets the server choose.
+    style: style || undefined,
   }, { signal })
 
   const reader = res.body.getReader()

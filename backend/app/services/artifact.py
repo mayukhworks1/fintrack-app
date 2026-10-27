@@ -14,6 +14,8 @@ from __future__ import annotations
 import html as _html
 import re
 
+from . import artifact_design
+
 CONTENT_TYPE = "artifact"
 
 # Content types served through the HTML renderer.
@@ -37,41 +39,27 @@ def is_rendered(content_type: str | None) -> bool:
 
 
 ARTIFACT_RULES = f"""You build small, self-contained interactive web apps ("artifacts"):
-calculators, converters, trackers, forms, timers and compact dashboards.
+anything from a calculator, to-do list or expense splitter to a CRM, booking
+page, poll, quiz, habit tracker, inventory or small game. They should look and feel like a polished product made by a
+good design team, not a demo: a real typeface, a considered layout, every state
+designed, every control aligned.
 
 THE ENVIRONMENT — the artifact is ONE HTML file served as its own document in a
 sandboxed iframe with an opaque origin.
-- Put everything in that one file: one <style> in <head>, one <script> before
+- Put everything in that one file: the <style> in <head>, one <script> before
   </body>. No relative URLs, no build step, no modules loaded from disk.
 - NO network calls. Never use fetch, XMLHttpRequest, WebSocket, EventSource or
   sendBeacon, and never post a form anywhere. Everything the app needs is in
   the file or typed in by the person using it.
-- External code only when it truly helps, and only from these CDNs, pinned to an
-  exact version: {", ".join(CDN_ALLOWLIST)}. Prefer plain JavaScript and inline
-  <svg> for charts and icons.
+- External code only when it truly helps, and only from these hosts, pinned to an
+  exact version: {", ".join(CDN_ALLOWLIST)}. Prefer plain JavaScript, inline
+  <svg> for charts and the icon sprite below for icons.
 - State lives in localStorage only, behind try/catch, under one key prefixed
   with the app's name. The app must work (with defaults) when storage is empty
   or unavailable. Never use cookies or IndexedDB.
-- No alert(), confirm() or prompt() for normal flow — show messages in the page.
+- No alert(), confirm() or prompt() — use inline messages, toasts and undo.
 
-WHAT GOOD LOOKS LIKE
-- It works on first load with sensible example values already filled in, and
-  every result updates as the inputs change.
-- Indian conventions by default: rupee amounts formatted with
-  Intl.NumberFormat('en-IN', {{style:'currency', currency:'INR'}}) (₹1,23,456.00),
-  dates as DD MMM YYYY, GST and TDS terminology where relevant.
-- Accessible: every input has a visible <label for>, buttons are <button>,
-  results live in an element with aria-live="polite", colour is never the only
-  signal, focus-visible outlines on everything interactive, contrast 4.5:1.
-- Responsive: usable at 360px wide with no sideways scrolling. Use CSS grid or
-  flex with minmax(0, 1fr) and min-width:0; no fixed pixel widths on containers.
-- Light and dark: define colours as CSS custom properties on :root and redefine
-  them inside @media (prefers-color-scheme: dark). Set color-scheme: light dark.
-- Validate input. Never show NaN, Infinity or undefined — show a short hint.
-- Include <!DOCTYPE html>, <meta charset="utf-8">, a viewport meta tag, a
-  specific <title> and a one-sentence <meta name="description">.
-- Keep it compact: finishing the file matters more than decoration. A file cut
-  off mid-script does nothing at all.
+{artifact_design.DESIGN_RULES}
 
 OUTPUT FORMAT:
 Return only the HTML document, <!DOCTYPE html> through </html>. No commentary,
@@ -85,7 +73,9 @@ REVISION_NOTE = (
     "WebSocket), external code only from "
     + ", ".join(CDN_ALLOWLIST)
     + ", state in localStorage only behind try/catch, labelled accessible inputs, "
-    "responsive at 360px, and colours that work in both light and dark."
+    "responsive at 360px, and colours that work in both light and dark. Keep "
+    "its design system: style anything new with the existing tokens and kit "
+    "classes (.btn, .input, .card, .row, .badge …) so it matches what is there."
 )
 
 

@@ -1,0 +1,68 @@
+/* The plan step in the artifact studio. Uses the app's own tokens. */
+.plan-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-bg);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 20px rgba(16, 24, 40, .05);
+  overflow: hidden;
+  max-width: 760px;
+}
+.plan-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.plan-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: .02em;
+}
+.plan-title { margin: 6px 0 4px; font-size: 18px; font-weight: 700; color: var(--text-1); letter-spacing: -.01em; }
+.plan-summary { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); max-width: 62ch; }
+.plan-body { padding: 16px 20px 4px; display: flex; flex-direction: column; gap: 18px; }
+.plan-group { border: 0; margin: 0; padding: 0; min-width: 0; }
+.plan-legend { padding: 0; margin: 0 0 8px; font-size: 13px; font-weight: 650; color: var(--text-1); }
+.plan-features { display: grid; gap: 2px 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+.plan-feature {
+  display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; margin: 0 -8px;
+  border-radius: 8px; font-size: 13px; line-height: 1.45; color: var(--text-1); cursor: pointer;
+}
+.plan-feature:hover { background: var(--bg-base); }
+.plan-feature input { width: 16px; height: 16px; margin: 1px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+.plan-feature.off span { color: var(--text-2); text-decoration: line-through; text-decoration-color: var(--border); }
+.plan-add { display: flex; gap: 8px; margin-top: 8px; }
+.plan-add input {
+  flex: 1; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--card-bg); color: var(--text-1); font: inherit; font-size: 13px;
+}
+.plan-add input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.plan-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-chip { position: relative; }
+.plan-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.plan-chip span {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 12px;
+  border: 1px solid var(--border); border-radius: 99px; background: var(--card-bg);
+  font-size: 12.5px; font-weight: 500; color: var(--text-1); cursor: pointer;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.plan-chip span:hover { border-color: var(--text-2); }
+.plan-chip input:checked + span { background: var(--accent-soft); border-color: var(--accent); color: var(--text-1); font-weight: 600; }
+.plan-chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plan-chip .tick { display: none; }
+.plan-chip input:checked + span .tick { display: inline; }
+.plan-styles { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); }
+.plan-style span { width: 100%; height: 100%; justify-content: center; flex-direction: column; align-items: flex-start; gap: 1px; border-radius: 10px; padding: 7px 12px; }
+.plan-style small { font-size: 11.5px; font-weight: 400; color: var(--text-2); }
+.plan-foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 20px; margin-top: 14px; border-top: 1px solid var(--border); background: var(--bg-base);
+}
+.plan-dontask { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); cursor: pointer; margin-right: auto; }
+.plan-dontask input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.plan-link {
+  border: 0; background: none; padding: 6px 4px; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; min-height: 32px;
+}
+.plan-link:hover { color: var(--text-1); }
+.plan-skeleton { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+@media (prefers-reduced-motion: reduce) { .plan-chip span { transition: none; } }
+@media (max-width: 560px) {
+  .plan-head, .plan-body, .plan-foot { padding-left: 14px; padding-right: 14px; }
+  .plan-dontask { flex: 1 1 100%; }
+  .plan-foot .plan-build { flex: 1 1 100%; justify-content: center; }
+}

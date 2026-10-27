@@ -249,7 +249,7 @@ async def _task_response(key: str) -> dict:
 def _built_in_prompt(task: str) -> str:
     """The prompt an editable task runs with when no override is active — the
     same default each call site hands to the gateway."""
-    from ..services import page_ai, studio_ask
+    from ..services import artifact_plan, page_ai, studio_ask
     return {
         "chat": openrouter.SYSTEM_PROMPT,
         "judge": openrouter._JUDGE_SYSTEM,
@@ -259,16 +259,19 @@ def _built_in_prompt(task: str) -> str:
         "status_update": openrouter._AI_UPDATE_SYSTEM,
         "invoice_parse": openrouter._INVOICE_EXTRACT_SYSTEM,
         "page_interview": page_ai._INTERVIEW_SYSTEM,
+        "artifact_plan": artifact_plan.PLAN_SYSTEM,
         "studio_ask": studio_ask._SYSTEM,
     }[task]
 
 
 def _page_build_parts() -> list[tuple[str, str]]:
-    from ..services import page_ai, page_edit
+    from ..services import artifact, page_ai, page_edit
     return [
         ("New web page (a design direction — palette and typefaces — is appended per request)",
          page_ai._HTML_RULES),
         ("New document", page_ai._MARKDOWN_RULES),
+        ("New artifact (a design direction is appended per request; up to "
+         f"{page_ai.ARTIFACT_MAX_TOKENS} output tokens)", artifact.ARTIFACT_RULES),
         ("Revising a page (the live page is sent with it)", page_edit.EDIT_RULES),
         ("Editing one section", page_ai._SECTION_EDIT_SYSTEM),
         ("Fixing a script error", page_ai._FIX_ERROR_SYSTEM),

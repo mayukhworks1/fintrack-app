@@ -36,6 +36,7 @@ from ..utils.uploads import read_upload, upload_limit
 from ..utils import fast_json
 from ..utils.client_ip import client_ip
 from ..services.page_ai import generate_page, analyze_prompt_needs, stream_generate_page, edit_page_section, fix_page_script_error
+from ..services.artifact_plan import plan_artifact
 from ..services import page_render
 from ..services import page_share
 from ..services import page_doc
@@ -831,6 +832,13 @@ class AIStreamBody(BaseModel):
     content_type: str = "html"
     existing: str | None = None
     clarifications: dict | None = None
+    # A design direction chosen in the plan step (artifacts) or the page form.
+    style: str | None = None
+
+
+class AIPlanBody(BaseModel):
+    prompt: str
+    content_type: str = "artifact"
 
 
 class AISectionEditBody(BaseModel):
@@ -1019,6 +1027,26 @@ async def ai_interview(
     return result
 
 
+@router.post("/api/pages/ai/plan")
+async def ai_plan_artifact(
+    body: AIPlanBody,
+    request: Request,
+    role: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.ai.use")),
+    _quota: None = Depends(_ai_quota),
+):
+    """
+    Propose a plan for an artifact before it is built: title, summary, the
+    features to build and a few questions with defaults. When the plan cannot
+    be made quickly the answer is {"fallback": true} and the client builds
+    straight from the prompt.
+    """
+    try:
+        return await plan_artifact(prompt=body.prompt, content_type=body.content_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/api/pages/ai/stream")
 async def ai_stream_page(
     body: AIStreamBody,
@@ -1035,6 +1063,7 @@ async def ai_stream_page(
                 content_type=body.content_type,
                 existing=body.existing,
                 clarifications=body.clarifications,
+                style=body.style,
             ):
                 yield f"data: {json.dumps(frame)}\n\n"
         except ValueError as e:

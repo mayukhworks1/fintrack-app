@@ -198,6 +198,7 @@ class TestAIQuotaCoverage:
     # route walk below catches the next one before it ships.
     OTHER_LLM_ENDPOINTS = [
         ("pages", "ai_generate_page"), ("pages", "ai_interview"), ("pages", "ai_stream_page"),
+        ("pages", "ai_plan_artifact"),
         ("pages", "ai_section_edit"), ("pages", "ai_fix_error"),
         ("invoices", "parse_invoice"), ("web_invoices", "parse_web_invoice"),
         ("status", "generate_ai_status_update"),
@@ -212,7 +213,7 @@ class TestAIQuotaCoverage:
     # What a route calls to reach the model. Studio's /ask and /analyze check
     # the same quota inline and are covered in test_studio_scoping.
     LLM_ENTRY_POINTS = {
-        "generate_page", "analyze_prompt_needs", "stream_generate_page",
+        "generate_page", "analyze_prompt_needs", "stream_generate_page", "plan_artifact",
         "edit_page_section", "fix_page_script_error",
         "_try_chat", "stream_chat_with_ai",
         "judge_answer", "autofill_project", "analyze_project",

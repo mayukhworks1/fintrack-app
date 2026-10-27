@@ -20,7 +20,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from . import ai_gateway as gateway
-from . import artifact, page_design, page_edit
+from . import artifact, artifact_design, page_design, page_edit
 from .openrouter import (
     _SSE_DONE,
     _Cascade,
@@ -46,6 +46,16 @@ from .openrouter import (
 # page with no error. Raised, with a structural truncation check behind it for
 # the models in the cascade whose own output ceiling is lower than this.
 MAX_TOKENS = 8000
+
+# An artifact is a working app — a stylesheet built on the design kit, the
+# markup and a script with real features — and a good one runs 8–16k tokens.
+# At the page budget the brief had to trade design away to finish the file.
+ARTIFACT_MAX_TOKENS = 16000
+
+
+def max_tokens_for(content_type: str) -> int:
+    """The output budget for building or revising this type."""
+    return ARTIFACT_MAX_TOKENS if content_type == artifact.CONTENT_TYPE else MAX_TOKENS
 
 # Enough freedom for varied layout, low enough to keep the markup well-formed.
 TEMPERATURE = 0.6
@@ -193,6 +203,8 @@ def _rules_for(content_type: str, brief: str = "", style: str | None = None) -> 
     that decides whether the page looks designed or generated.
     """
     base = _rules_for_base(content_type)
+    if content_type == artifact.CONTENT_TYPE:
+        return f"{base}\n\n{artifact_design.scaffold(artifact_design.pick(brief, style))}"
     if content_type != "html":
         return base
     direction = page_design.pick(brief, style)
@@ -509,7 +521,7 @@ async def generate_page(
 
     result = await _try_chat(
         messages,
-        max_tokens=MAX_TOKENS,
+        max_tokens=max_tokens_for(content_type),
         temperature=TEMPERATURE,
         # extract=False: the answer-extraction heuristics are tuned for chat
         # prose and would mangle a markup document.
@@ -727,6 +739,7 @@ async def stream_generate_page(
     content_type: str = "html",
     existing: str | None = None,
     clarifications: dict[str, Any] | None = None,
+    style: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Stream page generation as SSE frames.
@@ -774,7 +787,7 @@ async def stream_generate_page(
         ]
     else:
         messages = [
-            {"role": "system", "content": _rules_for(content_type, prompt)},
+            {"role": "system", "content": _rules_for(content_type, prompt, style)},
             {"role": "user", "content": user_content},
         ]
 
@@ -803,14 +816,23 @@ async def stream_generate_page(
         usage: dict | None = None
         settled = False
         try:
+            budget = max_tokens_for(content_type)
             payload = _build_payload(
-                spec, messages, max_tokens=MAX_TOKENS,
+                spec, messages, max_tokens=budget,
                 temperature=TEMPERATURE, stream=True,
                 stream_options={"include_usage": True},
             )
 
             resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
             status = resp.status_code
+            if status == 413 and budget > MAX_TOKENS:
+                # A provider whose per-minute token allowance counts the
+                # requested output refuses the larger budget outright. The
+                # same model at the page budget is still worth a try.
+                await resp.aclose()
+                payload["max_tokens"] = MAX_TOKENS
+                resp = await _stream_post_with_retries(payload, provider=p, on_sent=cascade.sent)
+                status = resp.status_code
 
             provider_dead = _auth_or_quota_error(status)
             if provider_dead:

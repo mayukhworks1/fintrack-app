@@ -75,17 +75,21 @@ async function openNewArtifact() {
 const GST = ARTIFACT_TEMPLATES.find(t => t.id === 'gst-calculator')
 
 describe('Artifact templates', () => {
-  it('ships eight complete single-file apps', () => {
-    expect(ARTIFACT_TEMPLATES).toHaveLength(8)
+  it('ships eleven complete single-file apps', () => {
+    expect(ARTIFACT_TEMPLATES).toHaveLength(11)
     const ids = new Set(ARTIFACT_TEMPLATES.map(t => t.id))
-    expect(ids.size).toBe(8)
+    expect(ids.size).toBe(11)
     for (const t of ARTIFACT_TEMPLATES) {
       expect(t.html.startsWith('<!DOCTYPE html>')).toBe(true)
       expect(t.html).toMatch(/<title>[^<]+<\/title>/)
       expect(t.html).toMatch(/<meta name="description" content="[^"]+">/)
-      expect(t.html).toContain('prefers-color-scheme: dark')
-      // No network: nothing fetched, nothing loaded from elsewhere.
-      expect(t.html).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon|<script src|<link[^>]+href="http/)
+      expect(t.html).toMatch(/prefers-color-scheme: ?dark/)
+      // No network: nothing fetched, nothing loaded from elsewhere but the
+      // Google Fonts stylesheet the design kit uses.
+      expect(t.html).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|sendBeacon|<script src/)
+      for (const [, href] of t.html.matchAll(/<link[^>]+href="(http[^"]*)"/g)) {
+        expect(href).toMatch(/^https:\/\/fonts\.(googleapis|gstatic)\.com(\/|$)/)
+      }
       expect(t.html).toContain("'en-IN'")
     }
   })

@@ -19,6 +19,8 @@ import StreamingDraft from '../StreamingDraft'
 import ArtifactFrame, { readArtifactStore, writeArtifactStore } from './ArtifactFrame'
 import ArtifactTemplates from './ArtifactTemplates'
 import BuildProgress from './BuildProgress'
+import PlanCard, { PlanSkeleton } from './PlanCard'
+import { readDontAsk, usablePlan } from './artifactPlan'
 import { templateTitle } from './templates'
 import { friendlyAiError, isNotSetUp, streamArtifact } from './artifactAi'
 
@@ -170,6 +172,9 @@ export default function ArtifactStudio({
   const [fullOpen, setFullOpen] = useState(false)
   const [nonce, setNonce] = useState(0)
   const [announce, setAnnounce] = useState('')
+  // The plan step before a first build: { prompt, status: 'loading' | 'ready', data }.
+  const [plan, setPlan] = useState(null)
+  const planReq = useRef(0)
   const abortRef = useRef(null)
   const busyRef = useRef(false)
   busyRef.current = busy
@@ -258,7 +263,7 @@ export default function ArtifactStudio({
     confirmLabel: 'Replace',
   })
 
-  const run = async (text, existing) => {
+  const run = async (text, existing, style) => {
     const p = (text || '').trim()
     if (!p || busy) return
     const editing = !!existing
@@ -271,6 +276,7 @@ export default function ArtifactStudio({
       const res = await streamArtifact({
         prompt: p,
         existing,
+        style,
         signal: controller.signal,
         onThought: (t) => setThought(t),
         onDelta: (s) => setDraft(s),
@@ -290,7 +296,7 @@ export default function ArtifactStudio({
         setErr({
           title: editing ? "Couldn't make that change" : "Couldn't build that",
           message,
-          retry: isNotSetUp(message) ? null : () => run(p, editing ? content : undefined),
+          retry: isNotSetUp(message) ? null : () => run(p, editing ? content : undefined, style),
         })
       }
     } finally {
@@ -298,6 +304,32 @@ export default function ArtifactStudio({
       abortRef.current = null
     }
   }
+
+  /**
+   * A first build asks before it builds: a quick plan with features and a few
+   * questions. Any trouble getting the plan (slow, refused, unusable) and it
+   * builds straight from the request instead, as does the person's own
+   * "Don't ask before building". Changes to an existing artifact never ask.
+   */
+  const startBuild = async (text) => {
+    const p = (text || '').trim()
+    if (!p || busy || plan) return
+    if (readDontAsk()) { run(p); return }
+    const req = ++planReq.current
+    setErr(null); setNote(null)
+    setPlan({ prompt: p, status: 'loading' })
+    setAnnounce('Planning your app.')
+    let data = null
+    try { data = usablePlan(await api.pages.aiPlan({ prompt: p, content_type: 'artifact' })) } catch { data = null }
+    if (req !== planReq.current) return          // skipped or abandoned meanwhile
+    if (!data) { setPlan(null); run(p); return }
+    setPlan({ prompt: p, status: 'ready', data })
+    setAnnounce('The plan is ready. Review it, then build.')
+  }
+  const closePlan = () => { planReq.current += 1; setPlan(null) }
+  const buildFromPlan = (text, style) => { closePlan(); run(text, undefined, style) }
+  const skipPlan = () => { const p = plan?.prompt; closePlan(); if (p) run(p) }
+  const backToPrompt = () => { closePlan(); requestAnimationFrame(() => promptRef.current?.focus()) }
 
   const fixError = async () => {
     if (!pageError || busy) return
@@ -359,7 +391,11 @@ export default function ArtifactStudio({
         </div>
         {errorBox}
         {note?.kind === 'cancelled' && <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{note.text}</div>}
-        {canUseAi && (
+        {plan && (plan.status === 'loading'
+          ? <PlanSkeleton onSkip={skipPlan} btnStyle={btn} />
+          : <PlanCard key={plan.prompt} prompt={plan.prompt} plan={plan.data} onBuild={buildFromPlan}
+              onSkip={skipPlan} onBack={backToPrompt} btnStyle={btn} btnPrimaryStyle={btnPrimary} />)}
+        {canUseAi && !plan && (
           <section aria-labelledby="art-describe">
             <h3 id="art-describe" style={sectionTitle}>Describe what you need</h3>
             <p id="art-describe-hint" style={sectionHint}>Say what it should work out and what it should show. Plain words are fine.</p>
@@ -369,7 +405,7 @@ export default function ArtifactStudio({
               aria-describedby="art-describe-hint art-describe-keys"
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(prompt) } }}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); startBuild(prompt) } }}
               rows={3}
               placeholder="e.g. a quote builder that adds GST, applies a discount and shows the total in words"
               style={{ ...input, resize: 'vertical', lineHeight: 1.5, fontSize: 14 }}
@@ -386,19 +422,19 @@ export default function ArtifactStudio({
               </div>
               <span style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
                 {!isMobile && <span id="art-describe-keys" style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Ctrl + Enter</span>}
-                <button type="button" style={{ ...btnPrimary, padding: '8px 16px', fontSize: 13, opacity: prompt.trim() ? 1 : 0.6 }} disabled={!prompt.trim()} onClick={() => run(prompt)}>
+                <button type="button" style={{ ...btnPrimary, padding: '8px 16px', fontSize: 13, opacity: prompt.trim() ? 1 : 0.6 }} disabled={!prompt.trim()} onClick={() => startBuild(prompt)}>
                   Build artifact
                 </button>
               </span>
             </div>
           </section>
         )}
-        <section aria-labelledby="art-templates">
+        {!plan && <section aria-labelledby="art-templates">
           <h3 id="art-templates" style={sectionTitle}>{canUseAi ? 'Or start from a template' : 'Start from a template'}</h3>
           <p style={sectionHint}>Ready to use, and you can change anything afterwards.</p>
           <ArtifactTemplates onPick={pickTemplate} />
-        </section>
-        <details open={!canUseAi || undefined} style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+        </section>}
+        {!plan && <details open={!canUseAi || undefined} style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
           <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-1)', minHeight: 24 }}>Have your own HTML? Paste or upload it</summary>
           <div style={{ marginTop: 10 }}>
             <textarea
@@ -414,7 +450,7 @@ export default function ArtifactStudio({
               <HtmlFileButton onLoad={(html, name) => apply(html, { name: name.replace(/\.html?$/i, '') })} />
             </div>
           </div>
-        </details>
+        </details>}
       </div>
     )
   }

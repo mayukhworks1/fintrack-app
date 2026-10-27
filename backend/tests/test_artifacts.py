@@ -101,7 +101,10 @@ class TestAccepted:
 
     def test_page_builder_accepts_the_type(self):
         assert "artifact" in page_ai._SUPPORTED_TYPES
-        assert page_ai._rules_for("artifact", "a GST calculator") == artifact.ARTIFACT_RULES
+        rules = page_ai._rules_for("artifact", "a GST calculator")
+        # The artifact brief, then the artifact's own design direction.
+        assert rules.startswith(artifact.ARTIFACT_RULES)
+        assert 'DESIGN DIRECTION — "Clean SaaS"' in rules
 
     def test_other_types_are_still_refused(self):
         with pytest.raises(ValueError, match="Web Page and Document"):
@@ -205,12 +208,14 @@ class TestGeneration:
         async def fake_chat(messages, **kw):
             seen["messages"] = messages
             seen["task"] = kw.get("task")
+            seen["max_tokens"] = kw.get("max_tokens")
             return {"content": "```html\n" + DOC.replace("<body>", '<body><div class="placeholder">Finance</div>') + "\n```",
                     "model": "m", "model_short": "m"}
         monkeypatch.setattr(page_ai, "_try_chat", fake_chat)
         out = asyncio.run(page_ai.generate_page("GST calculator", content_type="artifact"))
         assert seen["task"] == "page_build"
-        assert seen["messages"][0]["content"] == artifact.ARTIFACT_RULES
+        assert seen["messages"][0]["content"].startswith(artifact.ARTIFACT_RULES)
+        assert seen["max_tokens"] == page_ai.ARTIFACT_MAX_TOKENS
         assert "unsplash" not in out["content"]
         assert out["content"].startswith("<!DOCTYPE html>")
 

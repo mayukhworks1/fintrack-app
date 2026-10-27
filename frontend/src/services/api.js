@@ -981,6 +981,12 @@ export const api = {
       }
       return res
     },
+    // The plan before an artifact is built. The server answers within ~15 s or
+    // says { fallback: true }; the client gives up a little later regardless
+    // and builds straight away, so the plan never holds a build up for long.
+    aiPlan:        (data)          => request('/api/pages/ai/plan', {
+      method: 'POST', body: JSON.stringify(data), timeout: 20000,
+    }, 0),
     aiInterview:   (data)          => request('/api/pages/ai/interview', {
       method: 'POST', body: JSON.stringify(data), timeout: AI_TIMEOUT_MS,
     }),

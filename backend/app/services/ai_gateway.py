@@ -198,7 +198,7 @@ TASKS: dict[str, TaskDef] = {t.key: t for t in (
         description="Builds new pages and revises existing ones, including section edits and "
                     "script fixes.",
         output="stream", personal_data=False, prompt_editable=False,
-        default_route=DEFAULT_ROUTE, max_tokens=8000,
+        default_route=DEFAULT_ROUTE, max_tokens=16000,
         sample_input="A one-page summary of Q2 delivery for the leadership team: three headline "
                      "numbers, a short timeline and the risks for Q3.",
         call_sites=("page_ai.generate_page (POST /api/pages/ai-generate)",
@@ -216,6 +216,15 @@ TASKS: dict[str, TaskDef] = {t.key: t for t in (
         default_route=DEFAULT_ROUTE, max_tokens=800,
         sample_input="Make a page for our clients.",
         call_sites=("page_ai.analyze_prompt_needs (POST /api/pages/ai/interview)",),
+    ),
+    TaskDef(
+        key="artifact_plan", label="Artifact plan and questions", module="Pages",
+        description="Before an artifact is built, proposes a title, the features to build "
+                    "and a few questions to confirm. Falls back to building directly.",
+        output="json", personal_data=False, prompt_editable=True,
+        default_route=DEFAULT_ROUTE, max_tokens=1200,
+        sample_input="make a to do list organiser",
+        call_sites=("artifact_plan.plan_artifact (POST /api/pages/ai/plan)",),
     ),
     TaskDef(
         key="studio_ask", label="Studio: answer from documents", module="Studio",

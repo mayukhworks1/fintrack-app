@@ -28,6 +28,7 @@ PDF = ("invoice.pdf", b"%PDF-1.4 stub", "application/pdf")
 ROUTES = {
     "/api/pages/ai-generate":     ("editor", "generate_page", {"json": {"prompt": "A bakery landing page"}}),
     "/api/pages/ai/interview":    ("editor", "analyze_prompt_needs", {"json": {"prompt": "A bakery landing page"}}),
+    "/api/pages/ai/plan":         ("editor", "plan_artifact", {"json": {"prompt": "A to-do list"}}),
     "/api/pages/ai/stream":       ("editor", "stream_generate_page", {"json": {"prompt": "A bakery landing page"}}),
     "/api/pages/ai/section-edit": ("editor", "edit_page_section",
                                    {"json": {"content": "<section id='a'></section>", "section_id": "a", "prompt": "darker"}}),
@@ -58,6 +59,7 @@ def model(monkeypatch):
     page = {"content": "<html></html>", "model": "m", "model_short": "m", "warnings": []}
     monkeypatch.setattr(P, "generate_page", rec("generate_page", page))
     monkeypatch.setattr(P, "analyze_prompt_needs", rec("analyze_prompt_needs", {"needs_interview": False}))
+    monkeypatch.setattr(P, "plan_artifact", rec("plan_artifact", {"fallback": True}))
     monkeypatch.setattr(P, "stream_generate_page", stream_stub)
     monkeypatch.setattr(P, "edit_page_section", rec("edit_page_section", {"content": "<html></html>"}))
     monkeypatch.setattr(P, "fix_page_script_error", rec("fix_page_script_error", {"content": "<html></html>"}))
