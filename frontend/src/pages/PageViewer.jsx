@@ -350,7 +350,11 @@ function PageContent({ page, slug }) {
   // its source blanked and is shown only through its render URL.
   if (content_type === 'html') return <HTMLPage slug={slug} token={page.render_token} title={page.title} />
   // An artifact is a Web Page that keeps its state on the visitor's device.
-  if (content_type === 'artifact') return <ArtifactFrame slug={slug} token={page.render_token} title={page.title} fullBleed />
+  // The frame shows a skeleton while it loads, and Try again / Open in a new
+  // tab if it never does.
+  if (content_type === 'artifact') {
+    return <ArtifactFrame slug={slug} token={page.render_token} title={page.title || 'Artifact'} fullBleed openHref={pageRenderUrl(slug, page.render_token)} />
+  }
   // A database's rows arrive with it; its content field is empty.
   if (content_type === 'database') return <Suspense fallback={<Waiting />}><PublicDatabase page={page} /></Suspense>
   if (!content) return <div style={{ color: 'var(--pv-mute)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>This page has no content.</div>

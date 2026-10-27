@@ -3,7 +3,7 @@
 // appending to the list passed to the editor; each entry is self-contained.
 import {
   Pilcrow, Heading1, Heading2, Heading3, List, ListOrdered, ListTodo, ChevronRight,
-  Quote, Lightbulb, Minus, SquareCode, Image as ImageIcon, Youtube, Table, FilePlus2, Link2,
+  Quote, Lightbulb, Minus, SquareCode, Image as ImageIcon, Youtube, Table, FilePlus2, Link2, Puzzle,
 } from 'lucide-react'
 
 const clear = (editor, range) => editor.chain().focus().deleteRange(range)
@@ -54,6 +54,9 @@ export const BLOCK_COMMANDS = [
   { id: 'linkpage', group: 'Pages', title: 'Link to page', description: 'Link to another page', icon: Link2, keywords: ['page', 'mention', 'link', 'reference'],
     available: e => !!e.storage.blocks?.pages,
     run: (e, r) => { clear(e, r).run(); e.storage.blocks.pages.pickPage() } },
+  { id: 'artifact', group: 'Pages', title: 'Artifact', description: 'A calculator, tracker or form from your pages', icon: Puzzle, keywords: ['app', 'calculator', 'tool', 'widget', 'form', 'tracker', 'mini-app'],
+    available: e => !!e.storage.blocks?.pages,
+    run: (e, r) => { clear(e, r).run(); e.storage.blocks.pages.pickArtifact() } },
 
   { id: 'table', group: 'Advanced', title: 'Table', description: 'Rows and columns', icon: Table, keywords: ['grid', 'cells', 'spreadsheet'],
     run: (e, r) => clear(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },

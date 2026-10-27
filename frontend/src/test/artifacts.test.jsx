@@ -136,7 +136,7 @@ describe('Artifact editor', () => {
     // The result opens on its preview; Split puts the code beside it.
     await waitFor(() => expect(document.querySelector('iframe[data-artifact-frame]')).not.toBeNull(), { timeout: 3000 })
     expect(screen.queryByLabelText('Artifact code')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'split' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Split' }))
     expect(await screen.findByLabelText('Artifact code')).toBeTruthy()
 
     await waitFor(() => expect(document.querySelector('iframe[data-artifact-frame]')).not.toBeNull(), { timeout: 3000 })
@@ -147,7 +147,7 @@ describe('Artifact editor', () => {
     expect(api.pages.preview).toHaveBeenCalledWith(ARTIFACT_TEMPLATES.find(t => t.id === 'emi-calculator').html)
   })
 
-  it('Refine sends the artifact to the page builder with the artifact brief', async () => {
+  it('a change request sends the artifact to the page builder with the artifact brief', async () => {
     auth.granted = new Set(['module.ai.use'])
     const revised = GST.html.replace('GST Calculator</h1>', 'GST Calculator (refined)</h1>')
     sse.frames = [
@@ -157,14 +157,14 @@ describe('Artifact editor', () => {
     ]
     await openNewArtifact()
     fireEvent.click(await screen.findByRole('button', { name: 'Use template: GST calculator' }))
-    const box = await screen.findByLabelText('Refine the artifact')
+    const box = await screen.findByLabelText('Describe a change')
     fireEvent.change(box, { target: { value: 'add a reset button' } })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refine' })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Make changes' })) })
 
     await waitFor(() => expect(api.pages.aiStream).toHaveBeenCalled())
     const [body] = api.pages.aiStream.mock.calls[0]
     expect(body).toMatchObject({ prompt: 'add a reset button', content_type: 'artifact', existing: GST.html })
-    fireEvent.click(screen.getByRole('button', { name: 'code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Code' }))
     await waitFor(() => expect(screen.getByLabelText('Artifact code').value).toBe(revised))
   })
 
@@ -175,11 +175,35 @@ describe('Artifact editor', () => {
     await openNewArtifact()
     fireEvent.change(await screen.findByLabelText('Describe the artifact'), { target: { value: 'a SIP planner' } })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Build artifact/ })) })
-    fireEvent.click(await screen.findByRole('button', { name: 'code' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Code' }))
     await waitFor(() => expect(screen.getByLabelText('Artifact code').value).toBe(built))
     expect(api.pages.aiStream.mock.calls[0][0]).toMatchObject({ prompt: 'a SIP planner', content_type: 'artifact' })
     expect(api.pages.aiStream.mock.calls[0][0].existing).toBeUndefined()
     expect(screen.getAllByDisplayValue('SIP Planner').length).toBeGreaterThan(0)
+  })
+
+  it('full screen editing leaves with Escape, and makes the app behind it inert', async () => {
+    // The app proper lives in #root; the full-screen editor portals beside it.
+    const app = document.createElement('div')
+    app.id = 'root'
+    document.body.appendChild(app)
+    await openNewArtifact()
+    fireEvent.click(await screen.findByRole('button', { name: 'Use template: GST calculator' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Full screen' }))
+    await waitFor(() => expect(document.querySelector('[data-fullscreen]')).not.toBeNull())
+    expect(document.querySelector('[data-fullscreen]').getAttribute('aria-label')).toBe('Editor, full screen')
+    expect(app.inert).toBe(true)
+    // Escape while a menu is open closes the menu, not full screen.
+    fireEvent.click(screen.getByRole('button', { name: 'More page options' }))
+    await screen.findByRole('menu')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(document.querySelector('[data-fullscreen]')).not.toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(document.querySelector('[data-fullscreen]')).toBeNull())
+    expect(app.inert).toBe(false)
+    app.remove()
   })
 
   it('hides the AI prompts without module.ai.use but keeps templates and paste', async () => {
@@ -188,9 +212,9 @@ describe('Artifact editor', () => {
     expect(screen.getByLabelText('Paste HTML')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Paste HTML'), { target: { value: '<h1>Mine</h1>' } })
     fireEvent.click(screen.getByRole('button', { name: 'Use this HTML' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'code' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Code' }))
     expect((await screen.findByLabelText('Artifact code')).value).toBe('<h1>Mine</h1>')
-    expect(screen.queryByLabelText('Refine the artifact')).toBeNull()
+    expect(screen.queryByLabelText('Describe a change')).toBeNull()
   })
 })
 

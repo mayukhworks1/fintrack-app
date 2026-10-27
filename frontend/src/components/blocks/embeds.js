@@ -97,7 +97,30 @@ export function resolveEmbed(raw) {
   return null
 }
 
-export const EMBED_PROVIDERS = PROVIDERS.map(p => p.label)
+export const EMBED_PROVIDERS = [...PROVIDERS.map(p => p.label), 'FinTrack artifacts']
+
+const PAGE_PATH = /^\/p\/([a-z0-9][a-z0-9_-]{0,199})\/?$/i
+
+/**
+ * A FinTrack page link (/p/<slug>, or the same on this site's own address) as
+ * { provider: 'page', label, slug, path }, else null. It is shown through the
+ * app's own artifact frame — the page renderer under PAGE_SANDBOX — never
+ * under EMBED_SANDBOX, whose allow-same-origin is only safe for other sites.
+ */
+export function resolvePageEmbed(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  const s = raw.trim()
+  let path = null
+  if (s.startsWith('/') && !s.startsWith('//')) path = s.split(/[?#]/)[0]
+  else {
+    try {
+      const u = new URL(s)
+      if (typeof window !== 'undefined' && u.origin === window.location.origin) path = u.pathname
+    } catch { return null }
+  }
+  const m = path ? PAGE_PATH.exec(path) : null
+  return m ? { provider: 'page', label: 'Artifact', slug: m[1], path: `/p/${m[1]}` } : null
+}
 
 /** Sandbox for embed frames: enough for players and viewers, no top navigation. */
 export const EMBED_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms'

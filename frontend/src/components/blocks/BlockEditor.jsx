@@ -198,7 +198,9 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
       editor.chain().focus().insertContent([content, { type: 'text', text: ' ' }]).run()
     }
     store.pages = {
-      pickPage: () => setPicker(true),
+      pickPage: () => setPicker('link'),
+      pickArtifact: () => setPicker('artifact'),
+      insertArtifact: (p) => { if (p?.slug) editor.chain().focus().insertEmbed(`/p/${p.slug}`).run() },
       createSubPage: async () => {
         try {
           const id = `sub-${pageId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -333,8 +335,12 @@ export default function BlockEditor({ value, onChange, uploadImage, onReady, com
       <EditorContent editor={editor} />
 
       {picker && (
-        <PagePicker editor={editor} excludeId={pageId} onClose={() => setPicker(false)}
-          onPick={(p) => { setPicker(false); editor.storage.blocks?.pages?.insertLink(p) }} />
+        <PagePicker editor={editor} excludeId={pageId} onClose={() => setPicker(false)} kind={picker}
+          onPick={(p) => {
+            setPicker(false)
+            const pages = editor.storage.blocks?.pages
+            if (picker === 'artifact') pages?.insertArtifact(p); else pages?.insertLink(p)
+          }} />
       )}
 
       {blockMenu && <BlockMenu editor={editor} target={blockMenu} style={blockMenu.style} onClose={closeBlockMenu} />}

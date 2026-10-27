@@ -99,11 +99,18 @@ export default function SharePopover({
       if (ref.current?.contains(e.target) || anchorRef?.current?.contains(e.target)) return
       onClose()
     }
-    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); anchorRef?.current?.focus?.() } }
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); anchorRef?.current?.focus?.() } }
     document.addEventListener('mousedown', down)
     document.addEventListener('keydown', key)
     return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key) }
   }, [open, onClose, anchorRef])
+
+  // Opening it moves focus in, so the keyboard and a screen reader land on it.
+  useEffect(() => {
+    if (!open) return undefined
+    const raf = requestAnimationFrame(() => { if (ref.current && !ref.current.contains(document.activeElement)) ref.current.focus() })
+    return () => cancelAnimationFrame(raf)
+  }, [open])
 
   if (!open || typeof document === 'undefined') return null
   const state = publishState({ isPublished, hasUnpublished })
@@ -126,8 +133,8 @@ export default function SharePopover({
   return createPortal(
     <>
       {isMobile && <div aria-hidden="true" onClick={onClose} style={{ position:'fixed', inset:0, zIndex:2199, background:'rgba(0,0,0,0.35)' }} />}
-      <div ref={ref} role="dialog" aria-label="Share and publish" className="app-pop"
-        style={{ ...panelStyle, zIndex:2200, overflowY:'auto', background:'var(--bg-base)', border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,0.22)', padding:14, boxSizing:'border-box', display:'flex', flexDirection:'column', gap:12 }}>
+      <div ref={ref} role="dialog" aria-label="Share and publish" className="app-pop" tabIndex={-1}
+        style={{ ...panelStyle, outline:'none', zIndex:2200, overflowY:'auto', background:'var(--bg-base)', border:'1px solid var(--border)', boxShadow:'0 16px 48px rgba(0,0,0,0.22)', padding:14, boxSizing:'border-box', display:'flex', flexDirection:'column', gap:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <Globe size={15} style={{ color:'var(--text-2)' }} />
           <span style={{ fontSize:14, fontWeight:700, color:'var(--text-1)' }}>Share</span>

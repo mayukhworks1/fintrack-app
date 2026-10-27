@@ -284,8 +284,33 @@ VIEWER_RUNTIME = r"""
 
   function pass(){ hardenLinks(); handleImages(); annotateFrames(); }
 
+  // Size: a framed document tells its parent how tall its content is, so an
+  // embed can fit it instead of showing a box with a scrollbar inside. Only a
+  // number is sent; the parent decides whether to use it (and ignores it when
+  // the content simply fills the viewport, as a 100vh layout does).
+  var sizeQueued = 0, lastSize = '';
+  function reportSize(){
+    sizeQueued = 0;
+    if (window.parent === window) return;
+    var de = document.documentElement, b = document.body;
+    if (!de || !b) return;
+    // The body's own height says how tall the content is even when it is
+    // shorter than the frame; the root's scroll height catches overflow.
+    var cs = window.getComputedStyle ? getComputedStyle(b) : null;
+    var bodyH = b.scrollHeight + (cs ? (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0) : 0);
+    var h = Math.ceil(Math.max(bodyH, de.scrollHeight > window.innerHeight ? de.scrollHeight : 0));
+    var key = h + 'x' + window.innerHeight;
+    if (key === lastSize) return;
+    lastSize = key;
+    try { parent.postMessage({ type: '__ft_frame_size', height: h, viewport: window.innerHeight }, '*'); } catch (e) {}
+  }
+  function queueSize(){ if (!sizeQueued) sizeQueued = requestAnimationFrame(reportSize); }
+
   pass();
-  window.addEventListener('load', pass);
+  queueSize();
+  window.addEventListener('load', function(){ pass(); queueSize(); });
+  window.addEventListener('resize', queueSize);
+  if (window.ResizeObserver && document.body) new ResizeObserver(queueSize).observe(document.body);
   if (window.MutationObserver && document.body) {
     var pending = 0;
     new MutationObserver(function(){
@@ -327,6 +352,16 @@ AGENT_BRIDGE = r"""
   window.addEventListener('unhandledrejection', function(e){
     var msg = e.reason ? (e.reason.message || String(e.reason)) : 'Unhandled promise rejection';
     report(msg, '', 0, 0, e.reason instanceof Error ? e.reason : null);
+  });
+
+  // ── Escape ─────────────────────────────────────────────────────────
+  // Keys pressed inside the frame never reach the editor, so an editor
+  // showing the preview full screen could not be left with Escape once the
+  // preview had focus. Only the fact that Escape was pressed is passed on,
+  // and only when the page itself did not use the key.
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    try { parent.postMessage({ type: '__ft_escape' }, '*'); } catch(_){}
   });
 
   // ── Section inspector ──────────────────────────────────────────────

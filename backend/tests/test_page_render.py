@@ -187,4 +187,22 @@ class TestAgentBridge:
         out = page_render.build_document("<p>Hello</p>", preview=False)
         assert "__ft_page_error" not in out
         assert "__ft_section_click" not in out
+        assert "__ft_escape" not in out
+
+    def test_preview_passes_on_escape_only(self):
+        out = page_render.build_document("<p>Hello</p>", preview=True)
+        assert "parent.postMessage({ type: '__ft_escape' }, '*')" in out
+
+
+class TestFrameSize:
+    def test_a_framed_document_reports_its_height_and_nothing_more(self):
+        out = page_render.build_document("<p>Hello</p>")
+        assert "__ft_frame_size" in out
+        # Only when framed, and only numbers: the height and the viewport.
+        assert "window.parent === window" in out
+        assert "{ type: '__ft_frame_size', height: h, viewport: window.innerHeight }" in out
+
+    def test_reporting_size_does_not_loosen_the_sandbox(self):
+        assert "allow-same-origin" not in page_render.PAGE_SANDBOX
+        assert "allow-top-navigation" not in page_render.PAGE_SANDBOX
 

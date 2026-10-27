@@ -4,6 +4,11 @@ export const ARTIFACT_TYPE = 'artifact'
 
 const NOT_SET_UP = /no ai provider|admin\s*(→|->|>)\s*ai gateway|ai gateway|api key|openrouter_api_key|groq_api_key/i
 
+/** True when building is switched off for the workspace: trying again won't help. */
+export function isNotSetUp(message) {
+  return NOT_SET_UP.test(String(message || '')) || /isn't available right now/i.test(String(message || ''))
+}
+
 /**
  * An error from the AI endpoints as something the person can act on. Messages
  * written for administrators (settings screens, provider keys) become a plain

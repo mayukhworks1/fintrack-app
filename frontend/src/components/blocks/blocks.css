@@ -253,6 +253,20 @@ html.dark .ft-blocks:not(.is-public), html.dark .ft-pop {
 .ft-blocks .ft-embed-form .ft-embed-cancel { background: transparent; color: var(--blk-mute); padding: 6px 8px; }
 .ft-blocks .ft-embed-error { margin-top: 6px; font-size: 12.5px; color: var(--blk-t-red); }
 .ft-blocks .ft-embed-link a { color: var(--blk-accent); }
+/* An artifact from this workspace: sized by its content, not by a ratio. */
+.ft-blocks .ft-embed-artifact { position: relative; width: 100%; border-radius: 6px; overflow: hidden; background: var(--blk-card); border: 1px solid var(--blk-line); }
+.ft-blocks .ft-embed.is-selected .ft-embed-artifact, .ft-blocks .ft-embed.ProseMirror-selectednode .ft-embed-artifact { outline: 3px solid var(--blk-select); }
+.ft-blocks .ft-embed-skel { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.ft-blocks .ft-embed-notice { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 14px 16px; font-size: 13.5px; color: var(--blk-ink); background: var(--blk-subtle); }
+.ft-blocks .ft-embed-notice-actions { display: inline-flex; gap: 10px; align-items: center; }
+.ft-blocks .ft-embed-notice a { color: var(--blk-accent); font-weight: 600; }
+.ft-blocks .ft-embed-notice button { font: inherit; font-size: 13px; font-weight: 600; min-height: 32px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--blk-line); background: var(--blk-card); color: var(--blk-ink); cursor: pointer; }
+.ft-blocks .ft-embed-caption a { display: inline-flex; align-items: center; min-height: 24px; }
+/* A read-only document has no selection to show: a block that happens to hold
+   it (the last one, often an embed) must not look focused. */
+.ft-blocks.is-readonly .ft-prose .ProseMirror-selectednode,
+.ft-blocks.is-readonly .ft-prose .ProseMirror-selectednode .ft-embed-frame,
+.ft-blocks.is-readonly .ft-prose .ProseMirror-selectednode .ft-embed-artifact { box-shadow: none; outline: none; }
 
 /* Placeholders */
 .ft-blocks .ft-prose .is-empty::before {

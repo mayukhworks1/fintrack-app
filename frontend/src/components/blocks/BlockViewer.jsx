@@ -22,7 +22,8 @@ export default function BlockViewer({ content, protect = false, variant = 'app',
     content: doc,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
-    editorProps: { attributes: { class: 'ft-prose' } },
+    // The read-only document is still a textbox to assistive tech; it needs a name.
+    editorProps: { attributes: { class: 'ft-prose', 'aria-label': 'Page content' } },
   }, [extensions])
 
   useEffect(() => {

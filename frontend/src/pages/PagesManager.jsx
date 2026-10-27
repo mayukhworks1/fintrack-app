@@ -2081,6 +2081,33 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
   const [tab, setTab] = useState('edit')
   const [error, setError] = useState('')
   const [fullscreen, setFullscreen] = useState(false)
+  const editorRootRef = useRef(null)
+  // Full screen covers the app: the app behind is made inert so Tab stays in
+  // the editor (popovers and dialogs portal beside it and stay reachable),
+  // Escape leaves when nothing else is open to close, and focus goes back to
+  // the menu that started it.
+  useEffect(() => {
+    if (!fullscreen) return undefined
+    const app = document.getElementById('root')
+    if (app) app.inert = true
+    const raf = requestAnimationFrame(() => {
+      const root = editorRootRef.current
+      if (root && !root.contains(document.activeElement)) root.focus()
+    })
+    const layerOpen = () => [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')]
+      .some(el => el !== editorRootRef.current && el.getClientRects().length > 0)
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || layerOpen()) return
+      setFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      if (app) app.inert = false
+      window.removeEventListener('keydown', onKey, true)
+      requestAnimationFrame(() => editorRootRef.current?.querySelector('[aria-label="More page options"]')?.focus())
+    }
+  }, [fullscreen])
   const [saveState, setSaveState] = useState(null)   // { state, failures, error }
   const [conflict, setConflict] = useState(null)
   const [conflictBusy, setConflictBusy] = useState(false)
@@ -2564,7 +2591,8 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
     : { position:'relative', height:'100%' }
 
   const body = (
-    <div className="ft-page-editor" data-fullscreen={fullscreen || undefined}
+    <div ref={editorRootRef} className="ft-page-editor" data-fullscreen={fullscreen || undefined}
+      tabIndex={fullscreen ? -1 : undefined} role={fullscreen ? 'region' : undefined} aria-label={fullscreen ? 'Editor, full screen' : undefined}
       style={{ ...shell, display:'flex', flexDirection:'column', minHeight:0, background:'var(--bg-base)' }}>
 
       {/* Top bar: where the page is, whether it is saved and live, and the
@@ -2716,8 +2744,13 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
             onChange={setContent}
             onTitle={t=>edit(f => f.title.trim() ? f : { ...f, title:t })}
             pageId={currentId}
+            title={form.title}
             canUseAi={hasPerm('module.ai.use')}
             isMobile={isMobile}
+            shareUrl={shareUrl}
+            isPublished={isPublished}
+            onShare={() => setShareOpen(true)}
+            onCopied={() => onToast?.('Link copied')}
           />
           </Suspense>
         ) : isSpreadsheet ? (
@@ -2744,7 +2777,7 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
           </div>
         )}
       </div>
-      {currentId && tab === 'edit' && !isDatabase && !isSpreadsheet && (
+      {currentId && tab === 'edit' && !isDatabase && !isSpreadsheet && (!isArtifact || ctx?.children?.length > 0) && (
         <SubPagesList pageId={currentId} initial={ctx?.children} onOpen={p=>openOther(p)}
           onAdd={!isArtifact && onCreateChild ? (id=>{ saveNow(); onCreateChild(id) }) : undefined} />
       )}
