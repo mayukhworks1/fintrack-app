@@ -546,7 +546,7 @@ export default function ArtifactStudio({
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-base)', flexShrink: 0, flexWrap: 'wrap' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', flex: '1 1 200px', minWidth: 0 }}>
         <ShieldCheck size={14} aria-hidden="true" style={{ flexShrink: 0, color: 'var(--fin-positive)' }} />
-        <span>{isMobile ? 'Runs in a private sandbox.' : 'Runs in a private sandbox, separate from your FinTrack data.'}</span>
+        <span>{isMobile ? 'Runs in a private sandbox.' : 'Runs in a private sandbox: it can only see its own data, never your FinTrack accounts.'}</span>
       </span>
       <button type="button" style={btnQuiet} aria-label="Reload preview" title="Reload preview" onClick={() => setNonce(n => n + 1)}><RotateCw size={14} aria-hidden="true" /></button>
       <button type="button" style={btnSmall} onClick={() => setFullOpen(true)} disabled={!previewUrl}><Maximize2 size={13} aria-hidden="true" /> Open full screen</button>
