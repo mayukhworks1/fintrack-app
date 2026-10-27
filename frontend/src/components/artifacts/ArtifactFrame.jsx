@@ -120,6 +120,7 @@ export default function ArtifactFrame({
   loadTimeout = LOAD_TIMEOUT_MS,
   openHref,
   style,
+  onLoad,
 }) {
   const frameRef = useRef(null)
   const [minted, setMinted] = useState(null)
@@ -219,7 +220,7 @@ export default function ArtifactFrame({
         title={title}
         sandbox={PAGE_SANDBOX}
         data-artifact-frame=""
-        onLoad={() => setLoaded(true)}
+        onLoad={() => { setLoaded(true); onLoad?.() }}
         style={{ width: '100%', height: frameHeight, minHeight: fullBleed ? 0 : 120, flex: fullBleed || height === '100%' ? 1 : 'none', border: 'none', display: 'block', background: 'transparent', colorScheme: 'normal', opacity: loaded ? 1 : 0, transition: 'opacity .15s ease, height .15s ease' }}
       />
       {!loaded && !showSlow && <FrameSkeleton fullBleed={fullBleed} />}

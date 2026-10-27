@@ -18,6 +18,7 @@ import { previewRenderUrl } from '../../utils/pageHtml'
 import StreamingDraft from '../StreamingDraft'
 import ArtifactFrame, { readArtifactStore, writeArtifactStore } from './ArtifactFrame'
 import ArtifactTemplates from './ArtifactTemplates'
+import BuildProgress from './BuildProgress'
 import { templateTitle } from './templates'
 import { friendlyAiError, isNotSetUp, streamArtifact } from './artifactAi'
 
@@ -170,6 +171,8 @@ export default function ArtifactStudio({
   const [nonce, setNonce] = useState(0)
   const [announce, setAnnounce] = useState('')
   const abortRef = useRef(null)
+  const busyRef = useRef(false)
+  busyRef.current = busy
   const promptRef = useRef(null)
   const changeRef = useRef(null)
   const galleryBtnRef = useRef(null)
@@ -188,7 +191,7 @@ export default function ArtifactStudio({
   useEffect(() => {
     const onMsg = (e) => {
       const d = e.data
-      if (d && typeof d === 'object' && d.type === '__ft_page_error') {
+      if (d && typeof d === 'object' && d.type === '__ft_page_error' && !busyRef.current) {
         setPageError({ message: String(d.message || 'Script error'), lineno: d.lineno || 0, colno: d.colno || 0, stack: d.stack || '' })
       }
     }
@@ -422,31 +425,17 @@ export default function ArtifactStudio({
   const showPreview = view !== 'code'
 
   const progress = (
-    <div data-artifact-progress="" style={{ margin: 'auto', width: 'min(440px, 100%)', padding: 24, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Loader2 size={20} className="animate-spin" aria-hidden="true" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-        <strong style={{ fontSize: 15, color: 'var(--text-1)' }}>{stepLabel}…</strong>
-        <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>{elapsed}s</span>
-      </div>
-      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-        {[
-          ['Reading your request', true, !!(thought || draft)],
-          ['Writing the app', !!(thought || draft), false],
-        ].map(([label, started, done]) => (
-          <li key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, color: started ? 'var(--text-1)' : 'var(--text-2)' }}>
-            {done ? <Check size={14} aria-hidden="true" style={{ color: 'var(--fin-positive)' }} />
-              : <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: 99, border: `2px solid ${started ? 'var(--accent)' : 'var(--border)'}`, boxSizing: 'border-box' }} />}
-            {label}{done ? <span className="sr-only"> (done)</span> : null}
-          </li>
-        ))}
-      </ol>
-      {thought && <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{thought}</p>}
-      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)' }}>This usually takes under a minute. You can keep this tab open and wait.</p>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" style={btn} onClick={() => abortRef.current?.abort()}>Cancel</button>
-        {view === 'preview' && !isMobile && <button type="button" style={btnQuiet} onClick={() => setView('split')}>Watch it being written</button>}
-      </div>
-    </div>
+    <BuildProgress
+      title={stepLabel}
+      draft={draft}
+      thought={thought}
+      elapsed={elapsed}
+      storeKey={storeKey}
+      btnStyle={btn}
+      quietStyle={btnQuiet}
+      onCancel={() => abortRef.current?.abort()}
+      onWatchCode={view === 'preview' && !isMobile ? () => setView('split') : null}
+    />
   )
 
   const status = (busy && !streamingCreate) || pageError || note || err ? (
