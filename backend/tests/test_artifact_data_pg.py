@@ -174,6 +174,17 @@ class TestSharedRecords:
         r = call(env, lambda c: c.post(pub(env) + "/todos", json={"data": {"t": 1}}, headers=V("short")))
         assert r.status_code == 400
 
+    def test_a_web_page_takes_no_data_from_visitors(self, env):
+        slug = "web-" + uuid.uuid4().hex[:6]
+        env.page(env.owner, "Web", content_type="html", content="<p>x</p>", published=True, slug=slug)
+
+        async def flow(c):
+            me = (await c.get(pub(env, slug), headers=V(VA))).json()
+            assert me["me"]["canAdd"] is False
+            r = await c.post(pub(env, slug) + "/todos", json={"data": {"t": "spam"}}, headers=V(VA))
+            assert r.status_code == 403
+        call(env, flow)
+
     def test_records_are_scoped_to_their_page(self, env):
         other_slug = "other-" + uuid.uuid4().hex[:6]
         other = env.page(env.owner, "Other", content_type="artifact", published=True, slug=other_slug)

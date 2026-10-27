@@ -131,7 +131,12 @@ async def public_ctx(request: Request, slug: str) -> Ctx:
     actor = D.Actor(page_id=page_id, is_owner=bool(user_id) and P._owns_page(row, user_id, role or ""),
                     user_id=user_id, visitor=D.visitor_hash(request.headers.get("x-visitor-id")))
     rev = page_tree.field(row, "published_at_rev") or row["published_at"]
-    return Ctx(page_id, actor, D.settings_of(row["metadata"]), rev_sql, D._iso(rev), True, client_ip(request))
+    settings = D.settings_of(row["metadata"])
+    if ctype != artifact.CONTENT_TYPE:
+        # A Web Page is served by the same renderer, but only an artifact takes
+        # data from visitors: anywhere else the store is read-only to them.
+        settings = {**settings, "access": "owner"}
+    return Ctx(page_id, actor, settings, rev_sql, D._iso(rev), True, client_ip(request))
 
 
 async def owner_ctx(request: Request, page_id: str, role: str) -> Ctx:
