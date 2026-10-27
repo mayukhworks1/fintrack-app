@@ -386,6 +386,8 @@ export default function Layout({ children, style }) {
         }}
         aria-label="Mobile navigation"
         aria-hidden={!drawerOpen}
+        // Closed, the drawer is off screen: keep its links out of the tab order.
+        inert={drawerOpen ? undefined : ''}
         aria-modal={drawerOpen}
         role="dialog"
       >
