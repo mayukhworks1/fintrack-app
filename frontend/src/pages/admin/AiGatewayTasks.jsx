@@ -1,7 +1,7 @@
-// AI gateway › Tasks & prompts: each task's route, cap and prompt, plus a test run.
+// AI gateway › Routing & fallbacks: each task's fallback chain, switch and prompt, plus a test run.
 import { useState, useEffect, useMemo } from 'react'
 import {
-  Settings2, FileText, Play, ArrowUp, ArrowDown, Trash2, Plus, RotateCcw, Loader2, CheckCircle2, AlertTriangle, Eye, Undo2,
+  Settings2, FileText, Play, RotateCcw, Loader2, CheckCircle2, AlertTriangle, Eye, Undo2,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import Modal from '../../components/Modal'
@@ -9,18 +9,14 @@ import { useToast } from '../../context/ToastContext'
 import { useConfirm } from '../../context/ConfirmContext'
 import { Badge, Err, Skeleton, Toggle } from './ui'
 import {
-  Field, Notice, RouteChain, WarningList, OUTPUT_BADGE, MAX_ROUTE_STEPS, MAX_PROMPT_CHARS, MAX_TEST_INPUT, MODEL_ID_RE,
-  istStamp, localRouteWarnings, num, parseCap, useDomId,
+  Field, Notice, RouteChain, WarningList, OUTPUT_BADGE, MAX_PROMPT_CHARS, MAX_TEST_INPUT,
+  istStamp, num, useDomId,
 } from './AiGatewayShared'
+import { RouteEditor, routeProblem, sameRoute, toPayload, withIds } from './AiGatewayRouteEditor'
 
 const CHAT_MARKERS = ['===ANSWER===', '===END===']
 
-let stepSeq = 0
-const withIds = (route) => (route || []).map(s => ({ provider: s.provider, model: s.model || '', id: ++stepSeq }))
-const sameRoute = (a, b) => a.length === (b || []).length
-  && a.every((s, i) => s.provider === b[i].provider && s.model.trim() === b[i].model)
-
-export function AiGatewayTasks({ tasks, providers, labels, readOnly, onChanged }) {
+export function AiGatewayTasks({ tasks, providers, catalog = [], v2 = false, defaultRoute = [], labels, readOnly, onChanged }) {
   const [dialog, setDialog] = useState(null)
   const close = () => setDialog(null)
 
@@ -40,7 +36,8 @@ export function AiGatewayTasks({ tasks, providers, labels, readOnly, onChanged }
         <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <h3 id="ai-gateway-tasks-title" className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Tasks</h3>
           <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>
-            Each task tries its route in order and moves to the next step when a model fails or its provider is unavailable.
+            Each task tries its chain in order and moves to the next step when a model fails, times out or is over a limit.
+            Dashed steps come from the global default chain.
           </p>
         </div>
         {groups.map(([module, list]) => (
@@ -60,8 +57,8 @@ export function AiGatewayTasks({ tasks, providers, labels, readOnly, onChanged }
       </section>
 
       {dialog?.kind === 'settings' && (
-        <TaskSettingsModal task={dialog.task} providers={providers} readOnly={readOnly} onClose={close}
-          onSaved={() => { close(); onChanged() }} />
+        <TaskSettingsModal task={dialog.task} providers={providers} catalog={catalog} v2={v2} defaultRoute={defaultRoute}
+          labels={labels} readOnly={readOnly} onClose={close} onSaved={() => { close(); onChanged() }} />
       )}
       {dialog?.kind === 'prompt' && (
         <TaskPromptModal task={dialog.task} readOnly={readOnly} onClose={close} onChanged={onChanged} />
@@ -96,7 +93,7 @@ function TaskRow({ task, labels, first, onOpen }) {
         {task.description && (
           <p className="text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>{task.description}</p>
         )}
-        <RouteChain route={task.route} warnings={task.route_warnings} labels={labels} />
+        <RouteChain route={task.effective_route || task.route} warnings={task.route_warnings} labels={labels} />
         <WarningList warnings={task.route_warnings} />
       </div>
       <div className="flex flex-col gap-2 lg:items-end lg:text-right flex-shrink-0 lg:w-64">
@@ -123,52 +120,31 @@ function TaskRow({ task, labels, first, onOpen }) {
   )
 }
 
-// ── Settings: on/off, route, daily cap ───────────────────────────────────────
+// ── Settings: on/off, fallback chain ─────────────────────────────────────────
 
-function modelHint(m) {
-  return [m.free && 'free', m.vision && 'vision', m.context && `${num(m.context)} context`].filter(Boolean).join(' · ')
-}
-
-function TaskSettingsModal({ task, providers, readOnly, onClose, onSaved }) {
+function TaskSettingsModal({ task, providers, catalog, v2, defaultRoute, labels, readOnly, onClose, onSaved }) {
   const toast = useToast()
   const uid = useDomId()
   const [enabled, setEnabled] = useState(Boolean(task.enabled))
   const [route, setRoute] = useState(() => withIds(task.route))
-  const [cap, setCap] = useState(task.daily_cap != null ? String(task.daily_cap) : '')
+  const [fallback, setFallback] = useState(task.fallback_to_default !== false)
   const [saving, setSaving] = useState(false)
 
-  const capValue = parseCap(cap)
-  const badStep = route.findIndex(s => !MODEL_ID_RE.test(s.model.trim()))
-  const warnings = useMemo(() => localRouteWarnings(route, providers), [route, providers])
-  const problem = !route.length ? 'Add at least one step.'
-    : badStep >= 0 ? `Step ${badStep + 1}: enter a model id (letters, digits and . _ : / @ + - only, up to 120 characters).`
-    : Number.isNaN(capValue) ? 'The daily cap must be a whole number of 1 or more, or blank for no cap.'
-    : null
+  const problem = routeProblem(route)
   const isDefault = sameRoute(route, task.default_route)
-
-  const update = (i, patch) => setRoute(r => r.map((s, j) => (j === i ? { ...s, ...patch } : s)))
-  const move = (i, delta) => setRoute(r => {
-    const next = [...r]
-    ;[next[i], next[i + delta]] = [next[i + delta], next[i]]
-    return next
-  })
-  const remove = (i) => setRoute(r => r.filter((_, j) => j !== i))
-  const add = () => setRoute(r => (r.length >= MAX_ROUTE_STEPS ? r : [
-    ...r, { id: ++stepSeq, provider: r[r.length - 1]?.provider || providers[0]?.key || '', model: '' },
-  ]))
+  const appended = (defaultRoute || []).filter(d => !route.some(s => s.provider === d.provider && s.model.trim() === d.model))
 
   const save = async () => {
     if (problem || readOnly) return
-    // Only what changed. The default route goes as null, so the task follows
-    // the built-in route — a saved copy of it would pin today's model ids and
-    // miss a release that changes them.
+    // Only what changed. The default chain goes as null, so the task follows
+    // it — a saved copy would pin today's model ids and miss a later change.
     const patch = {}
     if (enabled !== Boolean(task.enabled)) patch.enabled = enabled
-    if (capValue !== (task.daily_cap ?? null)) patch.daily_cap = capValue
+    if (fallback !== (task.fallback_to_default !== false)) patch.fallback_to_default = fallback
     if (isDefault) {
       if (task.route_custom) patch.route = null
     } else if (!sameRoute(route, task.route)) {
-      patch.route = route.map(s => ({ provider: s.provider, model: s.model.trim() }))
+      patch.route = toPayload(route)
     }
     if (!Object.keys(patch).length) { onClose(); return }
     setSaving(true)
@@ -183,10 +159,8 @@ function TaskSettingsModal({ task, providers, readOnly, onClose, onSaved }) {
     }
   }
 
-  const listId = (key) => `${uid}-models-${key}`
-
   return (
-    <Modal open onClose={onClose} title={`${task.label} settings`} subtitle={task.description} width={760}
+    <Modal open onClose={onClose} title={`${task.label} settings`} subtitle={task.description} width={780}
       footer={<>
         <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
         <button type="button" className="btn-primary" onClick={save} disabled={saving || Boolean(problem) || readOnly}>
@@ -208,80 +182,36 @@ function TaskSettingsModal({ task, providers, readOnly, onClose, onSaved }) {
 
         <div className="space-y-2">
           <div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Route</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Fallback chain</p>
             <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>
-              Tried top to bottom. Up to {MAX_ROUTE_STEPS} steps. Model suggestions come from each provider's last connection test.
+              Tried top to bottom: when a step fails, times out, is over a limit or is benched, the next one is tried.
+              Model suggestions come from the catalogue and each provider's last connection test.
             </p>
           </div>
-          <ol className="space-y-2">
-            {route.map((step, i) => {
-              const stepWarnings = warnings.filter(w => w.index === i)
-              const level = stepWarnings.some(w => w.level === 'error') ? 'error' : stepWarnings.length ? 'warn' : null
-              return (
-                <li key={step.id} className="rounded-lg border p-2 space-y-1.5"
-                  style={{
-                    background: 'var(--bg-input)',
-                    borderColor: level === 'error' ? 'var(--fin-neg-border)' : level === 'warn' ? 'var(--fin-warn-border)' : 'var(--border)',
-                  }}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold flex-shrink-0"
-                      style={{ background: 'var(--card-bg)', color: 'var(--text-2)', border: '1px solid var(--border)' }}
-                      aria-hidden="true">{i + 1}</span>
-                    <select aria-label={`Provider for step ${i + 1}`} value={step.provider}
-                      onChange={e => update(i, { provider: e.target.value })}
-                      className="input text-xs py-1.5" style={{ width: 140, flex: '0 0 auto' }}>
-                      {!providers.some(p => p.key === step.provider) && <option value={step.provider}>{step.provider}</option>}
-                      {providers.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-                    </select>
-                    <input aria-label={`Model for step ${i + 1}`} value={step.model} list={listId(step.provider)}
-                      aria-invalid={level === 'error' || !MODEL_ID_RE.test(step.model.trim()) ? true : undefined}
-                      aria-describedby={stepWarnings.length ? stepWarnings.map((_, j) => `${uid}-step${step.id}-w${j}`).join(' ') : undefined}
-                      onChange={e => update(i, { model: e.target.value })}
-                      placeholder="Model id, e.g. openai/gpt-oss-120b" spellCheck={false} autoComplete="off"
-                      className="input text-xs py-1.5 font-mono" style={{ flex: '1 1 200px', minWidth: 0 }} />
-                    <div className="flex gap-1 ml-auto">
-                      <button type="button" className="btn-icon" aria-label={`Move step ${i + 1} up`}
-                        disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp size={13} aria-hidden="true" /></button>
-                      <button type="button" className="btn-icon" aria-label={`Move step ${i + 1} down`}
-                        disabled={i === route.length - 1} onClick={() => move(i, 1)}><ArrowDown size={13} aria-hidden="true" /></button>
-                      <button type="button" className="btn-icon" aria-label={`Remove step ${i + 1}`}
-                        disabled={route.length === 1} onClick={() => remove(i)}><Trash2 size={13} aria-hidden="true" /></button>
-                    </div>
-                  </div>
-                  {stepWarnings.map((w, j) => (
-                    <p key={j} id={`${uid}-step${step.id}-w${j}`} className="text-[11px] flex items-center gap-1 pl-8"
-                      style={{ color: w.level === 'error' ? 'var(--fin-negative)' : 'var(--fin-warning)' }}>
-                      <AlertTriangle size={11} aria-hidden="true" /> {w.message}
-                    </p>
-                  ))}
-                </li>
-              )
-            })}
-          </ol>
-          {providers.map(p => (
-            <datalist key={p.key} id={listId(p.key)}>
-              {[...(p.models || [])]
-                .sort((a, b) => (Boolean(b.free) - Boolean(a.free)) || a.id.localeCompare(b.id))
-                .map(m => <option key={m.id} value={m.id} label={modelHint(m) || undefined} />)}
-            </datalist>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary text-xs px-3 py-1.5" onClick={add}
-              disabled={route.length >= MAX_ROUTE_STEPS}>
-              <Plus size={12} aria-hidden="true" /> Add step
-            </button>
-            <button type="button" className="btn-ghost text-xs px-3 py-1.5" onClick={() => setRoute(withIds(task.default_route))}
-              disabled={isDefault}>
-              <RotateCcw size={12} aria-hidden="true" /> Reset to default route
-            </button>
-          </div>
+          <RouteEditor uid={uid} route={route} setRoute={setRoute} providers={providers} catalog={catalog} />
+          <button type="button" className="btn-ghost text-xs px-3 py-1.5" onClick={() => setRoute(withIds(task.default_route))}
+            disabled={isDefault}>
+            <RotateCcw size={12} aria-hidden="true" /> Reset to default route
+          </button>
         </div>
 
-        <Field label="Daily call cap" htmlFor={`${uid}-cap`}
-          hint="Provider calls a day for this task, counted from midnight IST. Leave blank for no cap.">
-          <input id={`${uid}-cap`} type="number" inputMode="numeric" min="1" step="1" value={cap}
-            onChange={e => setCap(e.target.value)} placeholder="No cap" className="input text-sm" style={{ maxWidth: 200 }} />
-        </Field>
+        <div className="flex items-start justify-between gap-4 rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Then the global default chain</p>
+            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>
+              When every step above fails, try the default chain's other models as a last resort.
+              {!v2 && ' Changing this needs database migration 0008.'}
+            </p>
+            {fallback && appended.length > 0 && (
+              <div className="mt-2"><RouteChain route={appended.map(s => ({ ...s, fallback: true }))} labels={labels} label="Default chain steps added" /></div>
+            )}
+          </div>
+          <Toggle checked={fallback} onChange={setFallback} label="Fall back to the default chain" disabled={!v2} />
+        </div>
+
+        <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+          Daily, weekly and monthly limits for this task are set under Limits.
+        </p>
 
         {problem && <Notice tone="error">{problem}</Notice>}
       </div>

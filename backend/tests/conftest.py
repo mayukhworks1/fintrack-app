@@ -96,6 +96,16 @@ class PgEnv:
         return pid
 
 
+@pytest.fixture(autouse=True)
+def _fresh_ai_breaker():
+    """The AI gateway's circuit breaker is process state: one test's failing
+    models must not be benched in the next."""
+    from app.services import ai_gateway
+    ai_gateway.reset_bench()
+    yield
+    ai_gateway.reset_bench()
+
+
 def req(user: str | None, role: str = "editor", headers: dict | None = None):
     return SimpleNamespace(
         state=SimpleNamespace(auth_user_id=user, auth_role=role, auth_user_name="Tester", token_hint="t"),

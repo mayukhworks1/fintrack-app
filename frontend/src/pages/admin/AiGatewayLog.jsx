@@ -1,4 +1,5 @@
-// AI gateway › Call log: usage totals per task and every provider call, newest first.
+// AI gateway › Logs: usage totals per task, how each model is doing, and every
+// provider call, newest first, with why a failed one failed in plain words.
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { api } from '../../services/api'
@@ -10,6 +11,8 @@ const PAGE_SIZE = 50
 const MAX_RANGE_DAYS = 92
 const RANGES = [['today', 'Today'], ['7d', '7 days'], ['30d', '30 days']]
 const STATUSES = [['', 'All statuses'], ['ok', 'Answered'], ['failed', 'Failed'], ['not_sent', 'Not sent']]
+const LATENCIES = [['', 'Any time'], ['1000', 'Over 1 s'], ['5000', 'Over 5 s'], ['15000', 'Over 15 s'], ['30000', 'Over 30 s']]
+const STAT_DAYS = [[1, 'Today'], [7, '7 days'], [30, '30 days']]
 
 function StatusPill({ status }) {
   const [color, label] = STATUS_BADGE[status] || ['default', status || '—']
@@ -19,7 +22,7 @@ function StatusPill({ status }) {
 const tokens = (a, b) => `${num(a ?? 0)} / ${num(b ?? 0)}`
 const ms = (v) => (v != null ? `${num(v)} ms` : '—')
 
-export function AiGatewayLog({ day, tasks, providers, labels }) {
+export function AiGatewayLog({ day, tasks, providers, labels, catalog = [] }) {
   const uid = useDomId()
   const today = day || istDay()
   const [range, setRange] = useState('today')
@@ -28,6 +31,8 @@ export function AiGatewayLog({ day, tasks, providers, labels }) {
   const [task, setTask] = useState('')
   const [provider, setProvider] = useState('')
   const [status, setStatus] = useState('')
+  const [model, setModel] = useState('')
+  const [minMs, setMinMs] = useState('')
   const [offset, setOffset] = useState(0)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -39,14 +44,17 @@ export function AiGatewayLog({ day, tasks, providers, labels }) {
     const id = ++seq.current
     setLoading(true); setError(null)
     try {
-      const res = await api.admin.aiGateway.calls({ from, to, task, provider, status, limit: PAGE_SIZE, offset })
+      const params = { from, to, task, provider, status, limit: PAGE_SIZE, offset }
+      if (model) params.model = model
+      if (minMs) params.min_ms = Number(minMs)
+      const res = await api.admin.aiGateway.calls(params)
       if (id === seq.current) setData(res)
     } catch (e) {
       if (id === seq.current) setError(e.message || 'Could not load the call log')
     } finally {
       if (id === seq.current) setLoading(false)
     }
-  }, [from, to, task, provider, status, offset])
+  }, [from, to, task, provider, status, model, minMs, offset])
 
   useEffect(() => { load() }, [load])
 
@@ -74,9 +82,15 @@ export function AiGatewayLog({ day, tasks, providers, labels }) {
   const byTask = data?.by_task || []
   const rows = data?.rows || []
   const taskLabel = (key, fallback) => fallback || tasks.find(t => t.key === key)?.label || key || '—'
+  const modelIds = [...new Set([
+    ...catalog.filter(m => !provider || m.provider === provider).map(m => m.model),
+    ...tasks.flatMap(t => (t.effective_route || t.route || []).filter(s => !provider || s.provider === provider).map(s => s.model)),
+  ])].sort()
 
   return (
     <div className="space-y-4">
+      <ModelStats labels={labels} onPick={(p, m) => { setProvider(p || ''); setModel(m); setStatus('failed'); setOffset(0) }} />
+
       <section className="card space-y-3" aria-labelledby={`${uid}-usage`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 id={`${uid}-usage`} className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Usage</h3>
@@ -121,6 +135,18 @@ export function AiGatewayLog({ day, tasks, providers, labels }) {
           <Field label="Status" htmlFor={`${uid}-status`} className="sm:w-36">
             <select id={`${uid}-status`} value={status} onChange={filter(setStatus)} className="input text-xs py-1.5">
               {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </Field>
+          <Field label="Model" htmlFor={`${uid}-model`} className="col-span-2 sm:col-span-1 sm:w-56">
+            <select id={`${uid}-model`} value={model} onChange={filter(setModel)} className="input text-xs py-1.5">
+              <option value="">All models</option>
+              {model && !modelIds.includes(model) && <option value={model}>{model}</option>}
+              {modelIds.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+          <Field label="Latency" htmlFor={`${uid}-latency`} className="sm:w-32">
+            <select id={`${uid}-latency`} value={minMs} onChange={filter(setMinMs)} className="input text-xs py-1.5">
+              {LATENCIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </Field>
         </div>
@@ -192,7 +218,10 @@ export function AiGatewayLog({ day, tasks, providers, labels }) {
                         </span>
                       ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
                     </td>
-                    <td className="px-3 py-2"><StatusPill status={r.status} /></td>
+                    <td className="px-3 py-2">
+                      <StatusPill status={r.status} />
+                      {r.why && <span className="block mt-1 text-[11px] leading-snug max-w-[260px]" style={{ color: 'var(--text-3)' }}>{r.why}</span>}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-2)' }}>{tokens(r.prompt_tokens, r.answer_tokens)}</td>
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums" style={{ color: 'var(--text-2)' }}>{ms(r.latency_ms)}</td>
                     <td className="px-3 py-2 max-w-[200px] truncate" style={{ color: 'var(--text-3)' }} title={r.user_email || ''}>{r.user_email || '—'}</td>
@@ -275,6 +304,7 @@ function CallDetailModal({ id, labels, taskLabel, onClose }) {
             <KV k="Request ID" mono>{row.request_id || '—'}</KV>
             <KV k="Session ID" mono>{row.session_id || '—'}</KV>
           </dl>
+          {row.why && <Notice tone={row.status === 'not_sent' ? 'warn' : 'error'}><strong>Why: </strong>{row.why}</Notice>}
           {row.error && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Error</p>
@@ -297,5 +327,99 @@ function CallDetailModal({ id, labels, taskLabel, onClose }) {
         </div>
       )}
     </Modal>
+  )
+}
+
+const rateColor = (r) => (r == null ? 'var(--text-3)' : r >= 0.95 ? 'var(--fin-positive)' : r >= 0.8 ? 'var(--fin-warning)' : 'var(--fin-negative)')
+
+// Per model: requests, success rate, median and p95 latency of answered
+// calls, and the last failure in plain words.
+function ModelStats({ labels, onPick }) {
+  const uid = useDomId()
+  const [days, setDays] = useState(7)
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    setError(null)
+    api.admin.aiGateway.modelStats(days)
+      .then(res => { if (alive) setData(res) })
+      .catch(e => { if (alive) setError(e.message || 'Could not load the model statistics') })
+    return () => { alive = false }
+  }, [days])
+
+  const models = data?.models || []
+  return (
+    <section className="card space-y-3" aria-labelledby={`${uid}-title`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id={`${uid}-title`} className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Models</h3>
+        <div role="group" aria-label="Model statistics period" className="inline-flex gap-1 p-1 rounded-xl"
+          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+          {STAT_DAYS.map(([d, label]) => (
+            <button key={d} type="button" aria-pressed={days === d} onClick={() => setDays(d)}
+              aria-label={`Model statistics: ${label.toLowerCase()}`}
+              className="px-3 py-1 rounded-lg text-xs font-medium"
+              style={days === d
+                ? { background: 'var(--card-bg)', color: 'var(--text-1)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                : { color: 'var(--text-3)', background: 'transparent' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {error ? <Notice tone="error">{error}</Notice> : !data ? <Skeleton rows={3} /> : !models.length ? (
+        <Empty label="No model calls in this period." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+          <table className="w-full text-xs">
+            <caption className="sr-only">Success rate and latency per model</caption>
+            <thead>
+              <tr style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border)' }}>
+                {['Provider · model', 'Requests', 'Success', 'Median', 'p95', 'Last failure'].map((h, i) => (
+                  <th key={h} scope="col" className={`px-3 py-2 font-semibold whitespace-nowrap ${i && i < 5 ? 'text-right' : 'text-left'}`}
+                    style={{ color: 'var(--text-2)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {models.map(m => (
+                <tr key={`${m.provider}|${m.model}`} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th scope="row" className="px-3 py-2 text-left font-normal max-w-[260px]">
+                    <span className="block truncate" title={m.model}>
+                      <span style={{ color: 'var(--text-1)' }}>{labels[m.provider] || m.provider || '—'}</span>
+                      <span style={{ color: 'var(--text-3)' }}> · </span>
+                      <span className="font-mono" style={{ color: 'var(--text-2)' }}>{m.label || m.model}</span>
+                    </span>
+                    {m.benched && <span className="block text-[11px]" style={{ color: 'var(--fin-warning)' }}>{m.benched}</span>}
+                  </th>
+                  <td className="px-3 py-2 text-right tabular-nums">{num(m.requests)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <span className="inline-flex items-center gap-1.5 justify-end">
+                      <span className="tabular-nums" style={{ color: rateColor(m.success_rate) }}>
+                        {m.success_rate == null ? '—' : `${Math.round(m.success_rate * 1000) / 10}%`}
+                      </span>
+                      <span aria-hidden="true" className="hidden sm:inline-block h-1.5 w-12 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                        <span className="block h-full" style={{ width: `${Math.round((m.success_rate || 0) * 100)}%`, background: rateColor(m.success_rate) }} />
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{ms(m.p50_ms)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{ms(m.p95_ms)}</td>
+                  <td className="px-3 py-2 min-w-[200px]">
+                    {m.why ? (
+                      <button type="button" className="text-left hover:underline" style={{ color: 'var(--text-2)' }}
+                        onClick={() => onPick(m.provider, m.model)} aria-label={`Show failed calls to ${m.model}`}>
+                        {m.why}
+                      </button>
+                    ) : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }

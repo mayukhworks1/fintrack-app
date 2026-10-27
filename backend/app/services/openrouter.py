@@ -5,8 +5,8 @@ Architecture
 ------------
 1. Routes, not a hardcoded model list — which provider and model serve each AI
    task is set in Admin → AI gateway (services/ai_gateway.py). A call names its
-   task, is admitted (switched on, under its daily caps), then tries the task's
-   route in order. Every attempt that reaches a provider is logged, failed
+   task, is admitted (switched on, under its limits), then tries the task's
+   fallback chain in order, the global default chain last. Every attempt that reaches a provider is logged, failed
    ones included, streaming ones with their token counts.
 
 2. Delimited-answer protocol — every prompt instructs the model to wrap
@@ -63,6 +63,15 @@ class ModelSpec:
     # fields differ.
     provider: str = "openrouter"
     attempt: int = 0       # 1-based position in the route, as tried
+    # Which vendor extensions the provider's API takes ("openrouter", "groq"
+    # or plain "openai"); see ai_gateway.ProviderState.flavor.
+    flavor: str = ""
+    timeout_s: int | None = None        # the step's own timeout, else the provider's
+    skip_over_limit: bool = True        # skip the step once its provider/model limit is reached
+    fallback: bool = False              # appended from the global default chain
+    benched: str | None = None          # on the circuit breaker's bench: tried last
+    max_output: int | None = None       # the catalogue's max output tokens
+    request_limit: int | None = None    # the catalogue's per-request token limit (prompt + answer)
 
 
 # How much reasoning a model is known to leak into its answer, by id fragment.
@@ -76,14 +85,68 @@ def _leakage(model_id: str) -> int:
 
 
 def _spec(step: gateway.RouteStep) -> ModelSpec:
+    entry = step.entry
+    flavor = step.provider.flavor
     return ModelSpec(
         step.model,
         leakage=_leakage(step.model),
         # `reasoning` is an OpenRouter extension; Groq rejects unknown fields.
-        supports_reasoning_param=step.provider.key == "openrouter",
+        supports_reasoning_param=flavor == "openrouter",
         provider=step.provider.key,
         attempt=step.attempt,
+        flavor=flavor,
+        timeout_s=step.timeout_s,
+        skip_over_limit=step.skip_over_limit,
+        fallback=step.fallback,
+        benched=step.benched,
+        max_output=entry.max_output_tokens if entry else None,
+        request_limit=(entry.request_token_limit or entry.context_window) if entry else None,
     )
+
+
+# A rough count: about four characters to a token, and a flat allowance for
+# an attached image.
+CHARS_PER_TOKEN = 4.0
+_IMAGE_TOKENS = 1500
+
+
+def estimate_tokens(messages: list[dict]) -> int:
+    """Roughly how many tokens `messages` take, for sizing a request before
+    it is sent."""
+    chars, images = 0, 0
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, str):
+            chars += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    chars += len(part.get("text") or "")
+                elif isinstance(part, dict):
+                    images += 1
+    return int(chars / CHARS_PER_TOKEN) + 8 * len(messages) + images * _IMAGE_TOKENS
+
+
+# The smallest answer budget worth sending a request for.
+MIN_ANSWER_TOKENS = 256
+
+
+def fit_budget(spec: ModelSpec, messages: list[dict], max_tokens: int) -> int | None:
+    """
+    `max_tokens` cut to what the model takes: its max output, and what is
+    left of its per-request token limit once the prompt is counted. None when
+    the prompt alone leaves too little room: the step is skipped rather than
+    sent to be refused.
+    """
+    budget = max_tokens
+    if spec.max_output:
+        budget = min(budget, spec.max_output)
+    if spec.request_limit:
+        room = spec.request_limit - estimate_tokens(messages) - 64
+        if room < min(MIN_ANSWER_TOKENS, budget):
+            return None
+        budget = min(budget, room)
+    return budget
 
 
 async def _ordered_models(task: str = "chat", *, vision: bool = False) -> list[ModelSpec]:
@@ -269,6 +332,15 @@ def _total_tokens(usage: Any) -> int | None:
     return total or None
 
 
+def _token_split(usage: Any) -> tuple[int, int]:
+    if not isinstance(usage, dict):
+        return 0, 0
+    try:
+        return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    except (TypeError, ValueError):
+        return 0, 0
+
+
 def _meter(spec: ModelSpec, latency_ms: int, *, task: str, tokens: Any = None,
            ok: bool = True, error: str | None = None, http_status: int | None = None,
            requests: int = 1) -> None:
@@ -279,7 +351,9 @@ def _meter(spec: ModelSpec, latency_ms: int, *, task: str, tokens: Any = None,
     """
     written = None
     try:
-        written = gateway.note_usage(task, spec.provider, _total_tokens(tokens) or 0, ok, calls=requests)
+        tin, tout = _token_split(tokens)
+        written = gateway.note_usage(task, spec.provider, _total_tokens(tokens) or 0, ok, calls=requests,
+                                     model=spec.id, tokens_in=tin, tokens_out=tout)
     except Exception:
         pass
     try:
@@ -310,9 +384,10 @@ def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, 
     repeated at each call site.
     """
     payload: dict[str, Any] = {"model": spec.id, "messages": messages, **extra}
-    if spec.supports_reasoning_param and spec.provider == "openrouter":
+    flavor = spec.flavor or spec.provider
+    if spec.supports_reasoning_param and flavor == "openrouter":
         payload["reasoning"] = {"exclude": True}
-    elif spec.provider == "groq" and "gpt-oss" in spec.id:
+    elif flavor == "groq" and "gpt-oss" in spec.id:
         # gpt-oss reasons before it answers and the reasoning counts against
         # max_tokens; at its default effort a short budget (the judge has 350)
         # can be spent before any answer is written.
@@ -321,7 +396,11 @@ def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, 
 
 
 def _provider_label(provider: str) -> str:
-    pdef = gateway.PROVIDERS.get(provider)
+    cfg = gateway._config
+    p = cfg.providers.get(provider) if cfg is not None else None
+    if p is not None:
+        return p.label
+    pdef = gateway.PRESETS.get(provider)
     return pdef.label if pdef else provider
 
 
@@ -554,8 +633,12 @@ class _Cascade:
     route that burns three models before one answers costs three calls against
     the provider's rate limit, and a log that counted only the answer would
     understate the load exactly when it matters most. A step whose provider is
-    off, has no key or is at its daily cap is skipped without a log row; if
-    that leaves nothing contacted at all, the call is refused as not_sent.
+    off, has no key, whose model is switched off in the catalogue, or whose
+    provider or model limit is reached (unless the step says to try it
+    anyway) is skipped without a log row; if that leaves nothing contacted at
+    all, the call is refused as not_sent. Every outcome feeds the circuit
+    breaker, which moves a provider or model that keeps failing to the end of
+    every chain for a few minutes.
     """
 
     def __init__(self, task: str, attempts: list | None = None):
@@ -575,17 +658,13 @@ class _Cascade:
         if spec.provider in self.dead:
             self.skip(spec, "skipped: key rejected on an earlier step", report=False)
             return None
-        p = (await gateway.get_config()).providers.get(spec.provider)
-        if p is None:
-            reason = "unknown provider"
-        elif not p.enabled:
-            reason = "provider off"
-        elif not p.api_key:
-            reason = "no key"
-        elif not await gateway.provider_has_capacity(p.key):
-            reason = "daily cap reached"
-        else:
-            return p
+        cfg = await gateway.get_config()
+        p = cfg.providers.get(spec.provider)
+        reason = gateway.step_problem(cfg, p, spec.id)
+        if reason is None and spec.skip_over_limit:
+            reason = await gateway.step_blocked(p.key, spec.id)
+        if reason is None:
+            return gateway.with_step_timeout(p, spec.timeout_s)
         self.skip(spec, reason)
         return None
 
@@ -600,10 +679,19 @@ class _Cascade:
                http_status: int | None = None, tokens: Any = None) -> None:
         self._record(spec, started, ok=False, error=error or "failed",
                      http_status=http_status, tokens=tokens)
+        _breaker_failed(spec, error, http_status)
 
     def succeeded(self, spec: ModelSpec, started: float, *,
                   http_status: int | None = None, tokens: Any = None) -> None:
         self._record(spec, started, ok=True, http_status=http_status, tokens=tokens)
+        try:
+            gateway.breaker_note(spec.provider, spec.id, ok=True)
+        except Exception:
+            pass
+
+    def too_large(self, spec: ModelSpec) -> None:
+        """A step whose prompt alone is over the model's per-request limit."""
+        self.skip(spec, "request larger than the model's per-request token limit")
 
     def _record(self, spec, started, *, ok, error=None, http_status=None, tokens=None) -> None:
         self.contacted = True
@@ -618,12 +706,32 @@ class _Cascade:
             self.errors.append(f"{_short(spec.id)} ({_provider_label(spec.provider)}): {(error or '')[:120]}")
         if self.attempts is not None:
             self.attempts.append({"provider": spec.provider, "model": spec.id, "ok": ok,
-                                  "ms": ms, "error": None if ok else error, "skipped": skipped})
+                                  "ms": ms, "error": None if ok else error, "skipped": skipped,
+                                  "fallback": spec.fallback, "benched": bool(spec.benched)})
 
     def give_up(self) -> NoReturn:
         if not self.contacted:
             gateway.refuse(self.task, gateway.no_provider_message(self.task))
         raise ValueError("All AI models are unavailable right now. Tried: " + "; ".join(self.errors))
+
+
+# Failures that say nothing about the provider or the model.
+_NOT_THEIR_FAULT = ("client disconnected", "out of time")
+
+
+def _breaker_failed(spec: ModelSpec, error: str | None, http_status: int | None) -> None:
+    """Count a failed attempt on the circuit breaker. The provider is blamed
+    for a network failure, a 5xx or a refused key; anything else (a 429, an
+    unusable answer, a refusal of this model) counts against the model only."""
+    text = (error or "").lower()
+    if any(word in text for word in _NOT_THEIR_FAULT):
+        return
+    provider_fault = (http_status is None and ("timeout" in text or "network" in text)) \
+        or (http_status is not None and (http_status >= 500 or http_status in (401, 402, 403)))
+    try:
+        gateway.breaker_note(spec.provider, spec.id, ok=False, provider_fault=provider_fault, error=error)
+    except Exception:
+        pass
 
 
 # ── Core chat orchestrator ────────────────────────────────────────────
@@ -662,12 +770,16 @@ async def _try_chat(
         p = await cascade.provider_for(spec)
         if p is None:
             continue
+        budget = fit_budget(spec, messages, max_tokens)
+        if budget is None:
+            cascade.too_large(spec)
+            continue
         started = time.time()
         status: int | None = None
         usage: dict | None = None
         try:
             payload = _build_payload(
-                spec, messages, max_tokens=max_tokens, temperature=temperature,
+                spec, messages, max_tokens=budget, temperature=temperature,
             )
 
             r = await _post_with_retries(payload, provider=p, deadline=deadline, on_sent=cascade.sent)
@@ -772,6 +884,10 @@ async def stream_chat_with_ai(
         p = await cascade.provider_for(spec)
         if p is None:
             continue
+        budget = fit_budget(spec, messages, 1024)
+        if budget is None:
+            cascade.too_large(spec)
+            continue
         started = time.time()
         resp: httpx.Response | None = None
         status: int | None = None
@@ -779,7 +895,7 @@ async def stream_chat_with_ai(
         settled = False
         try:
             payload = _build_payload(
-                spec, messages, max_tokens=1024,
+                spec, messages, max_tokens=budget,
                 temperature=0.5 if temperature is None else temperature,
                 stream=True, stream_options={"include_usage": True},
             )

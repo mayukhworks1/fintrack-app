@@ -752,19 +752,25 @@ _CHARS_PER_TOKEN = 3.3
 _MIN_ANSWER_TOKENS = 2500
 
 
+def _prompt_tokens(messages) -> int:
+    return int(sum(len(x.get("content") or "") for x in messages) / _CHARS_PER_TOKEN) + 50
+
+
 def _fit_to_limit(messages, refusal: str, *, content_type: str, revising: bool,
-                  prompt: str, style: str | None, budget: int):
-    """Messages and an answer budget that fit a provider's per-request token
-    limit, read from its 413 refusal, or (messages, 0) when nothing fits."""
-    m = _LIMIT_RE.search(refusal or "")
-    limit = int(m.group(1)) if m else 0
+                  prompt: str, style: str | None, budget: int, limit: int | None = None):
+    """Messages and an answer budget that fit a per-request token limit —
+    `limit` when the model catalogue knows it, else the one a provider's 413
+    refusal names — or (messages, 0) when nothing fits."""
+    if not limit:
+        m = _LIMIT_RE.search(refusal or "")
+        limit = int(m.group(1)) if m else 0
     if content_type == artifact.CONTENT_TYPE and not revising:
         system = artifact.COMPACT_RULES
         if style:
             d = artifact_design.pick(prompt, style)
             system += f"\n\nSTYLE: {d.label}: {d.summary}"
         messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
-    prompt_tokens = int(sum(len(x.get("content") or "") for x in messages) / _CHARS_PER_TOKEN) + 50
+    prompt_tokens = _prompt_tokens(messages)
     room = (limit - prompt_tokens - 200) if limit else MAX_TOKENS
     answer = min(budget, MAX_TOKENS, room)
     return messages, (answer if answer >= _MIN_ANSWER_TOKENS else 0)
@@ -889,6 +895,23 @@ async def stream_generate_page(
         p = await cascade.provider_for(spec)
         if p is None:
             continue
+        # Sized for the model before anything is sent: when the catalogue
+        # knows its per-request token limit, a request that would not fit
+        # goes as the compact brief with an answer budget that does, instead
+        # of waiting for a 413 to say so.
+        budget = max_tokens_for(content_type)
+        if getattr(spec, "max_output", None):
+            budget = min(budget, spec.max_output)
+        send_messages, shortened = messages, False
+        limit = getattr(spec, "request_limit", None)
+        if limit and _prompt_tokens(messages) + budget > limit:
+            send_messages, fitted = _fit_to_limit(
+                messages, "", content_type=content_type, revising=revising,
+                prompt=user_content, style=style, budget=budget, limit=limit)
+            if not fitted:
+                cascade.too_large(spec)
+                continue
+            budget, shortened = fitted, True
         label = _short(spec.id) if getattr(spec, "id", None) else "the model"
         errors = getattr(cascade, "errors", [])
         if len(errors) > reported and getattr(cascade, "contacted", False):
@@ -897,15 +920,17 @@ async def stream_generate_page(
         else:
             yield {"type": "status", "model": label, "text": f"Sent your request to {label}."}
         reported = len(errors)
+        if shortened:
+            yield {"type": "status", "model": label,
+                   "text": f"{label} takes at most {limit:,} tokens a request; sending a shorter brief."}
         started = time.time()
         resp = None
         status: int | None = None
         usage: dict | None = None
         settled = False
         try:
-            budget = max_tokens_for(content_type)
             payload = _build_payload(
-                spec, messages, max_tokens=budget,
+                spec, send_messages, max_tokens=budget,
                 temperature=TEMPERATURE, stream=True,
                 stream_options={"include_usage": True},
             )
@@ -920,7 +945,7 @@ async def stream_generate_page(
                 refusal = (await resp.aread()).decode("utf-8", errors="ignore")
                 await resp.aclose()
                 retry_messages, retry_budget = _fit_to_limit(
-                    messages, refusal, content_type=content_type, revising=revising,
+                    send_messages, refusal, content_type=content_type, revising=revising,
                     prompt=user_content, style=style, budget=budget)
                 if retry_budget:
                     yield {"type": "status", "model": label,

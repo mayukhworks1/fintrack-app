@@ -5,7 +5,8 @@
  * grouping and route warnings; switches and the route editor send the payload
  * the API expects; a pasted key goes out once and is never shown again; prompt
  * versions save, revert and restore; a test run shows who answered; and the
- * call log turns its filters into query params.
+ * call log turns its filters into query params. The newer screens (overview,
+ * models, limits, the default chain and the breaker) are in aigatewayadmin.test.jsx.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
@@ -34,6 +35,11 @@ vi.mock('../services/api', () => ({
         saveGlobal: vi.fn(),
         calls: vi.fn(),
         call: vi.fn(),
+        modelStats: vi.fn(),
+        saveDefaultRoute: vi.fn(),
+        saveBreaker: vi.fn(),
+        resetBench: vi.fn(),
+        saveLimits: vi.fn(),
       },
     },
   },
@@ -119,9 +125,11 @@ beforeEach(() => {
   confirm.mockImplementation(async () => true)
   gw.get.mockResolvedValue(makeState())
   gw.calls.mockResolvedValue(CALLS)
+  gw.modelStats.mockResolvedValue({ days: 7, models: [] })
 })
 
-function mount(sub) {
+// Tasks and their prompts live under Routing & Fallbacks.
+function mount(sub = 'routing') {
   const path = sub ? `/admin?tab=ai-gateway&sub=${sub}` : '/admin?tab=ai-gateway'
   return render(<MemoryRouter initialEntries={[path]}><AiGatewayTab /></MemoryRouter>)
 }
@@ -152,6 +160,16 @@ describe('state', () => {
     expect(screen.getByText('Step 1: Not offered by Groq — calls to it will fail')).toBeInTheDocument()
   })
 
+  it('opens on the overview, and an old "tasks" link lands on Routing & Fallbacks', async () => {
+    const { unmount } = mount(null)
+    expect(await screen.findByRole('button', { name: 'Overview' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { name: 'Provider health' })).toBeInTheDocument()
+    unmount()
+    mount('tasks')
+    expect(await screen.findByRole('button', { name: 'Routing & Fallbacks' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Settings for AI assistant chat' })).toBeInTheDocument()
+  })
+
   it('says read-only when the gateway tables are missing, and flags no ready provider', async () => {
     const state = makeState({ storage_ok: false })
     state.providers = state.providers.map(p => ({ ...p, ready: false }))
@@ -180,11 +198,12 @@ describe('task settings', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-checked', 'true')
-    fireEvent.change(within(dialog).getByLabelText('Daily call cap'), { target: { value: '50' } })
+    // Limits moved to the Limits tab.
+    expect(within(dialog).queryByLabelText('Daily call cap')).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     // The untouched route stays out of the request, so it is not stored as an override.
-    await waitFor(() => expect(gw.saveTask).toHaveBeenCalledWith('judge', { enabled: true, daily_cap: 50 }))
+    await waitFor(() => expect(gw.saveTask).toHaveBeenCalledWith('judge', { enabled: true }))
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Answer check saved', 'success'))
     await waitFor(() => expect(gw.get).toHaveBeenCalledTimes(2))
   })
@@ -206,12 +225,10 @@ describe('task settings', () => {
     expect(d.getByLabelText('Model for step 2')).toHaveValue(' openai/gpt-oss-20b ')
     fireEvent.click(d.getByRole('button', { name: 'Remove step 1' }))
     fireEvent.click(d.getByRole('button', { name: 'Move step 2 up' }))
-    fireEvent.change(d.getByLabelText('Daily call cap'), { target: { value: '' } })
     fireEvent.click(d.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(gw.saveTask).toHaveBeenCalledWith('chat', {
       route: [ORFREE, G20],
-      daily_cap: null,
     }))
   })
 
@@ -242,7 +259,7 @@ describe('task settings', () => {
     expect(gw.saveTask).toHaveBeenCalledTimes(1)
   })
 
-  it('caps the route at six steps and resets to the default route', async () => {
+  it('caps the route at ten steps and resets to the default route', async () => {
     mount()
     const dialog = await openDialog('Settings for Answer check')
     const d = within(dialog)
@@ -251,9 +268,9 @@ describe('task settings', () => {
     expect(d.getByRole('button', { name: 'Reset to default route' })).toBeDisabled()
 
     const add = d.getByRole('button', { name: 'Add step' })
-    for (let i = 0; i < 5; i++) fireEvent.click(add)
-    expect(d.getByLabelText('Model for step 6')).toBeInTheDocument()
-    expect(d.queryByLabelText('Model for step 7')).toBeNull()
+    for (let i = 0; i < 9; i++) fireEvent.click(add)
+    expect(d.getByLabelText('Model for step 10')).toBeInTheDocument()
+    expect(d.queryByLabelText('Model for step 11')).toBeNull()
     expect(add).toBeDisabled()
     // Empty model ids block the save until they are filled in.
     expect(d.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -270,14 +287,10 @@ describe('providers', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
     fireEvent.change(within(dialog).getByLabelText('Base URL'), { target: { value: 'https://api.groq.com/openai/v1/' } })
-    fireEvent.change(within(dialog).getByLabelText('Daily token cap'), { target: { value: '2000000' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     // The base URL and timeout are unchanged, so they are not pinned as explicit values.
-    await waitFor(() => expect(gw.saveProvider).toHaveBeenCalledWith('groq', {
-      enabled: false,
-      daily_token_cap: 2000000,
-    }))
+    await waitFor(() => expect(gw.saveProvider).toHaveBeenCalledWith('groq', { enabled: false }))
   })
 
   it('says the env key is not sent to a base URL on another host', async () => {
@@ -318,7 +331,7 @@ describe('providers', () => {
     expect(screen.getByText('No key')).toBeInTheDocument()
     expect(screen.getByText(/Connected · 278 ms · checked .* · 2 models offered/)).toBeInTheDocument()
     expect(screen.getByText('Not tested')).toBeInTheDocument()
-    expect(screen.getByText('0 of 100 requests · 0 tokens')).toBeInTheDocument()
+    expect(screen.getByText('12 requests · 3,400 tokens')).toBeInTheDocument()
     expect(screen.getByText('used by AI assistant chat, Build and revise pages')).toBeInTheDocument()
     // The stored Groq list lacks the judge's model; OpenRouter has no list yet, so nothing is flagged there.
     expect(screen.getAllByText(/calls to it will fail/)).toHaveLength(1)
@@ -390,16 +403,6 @@ describe('providers', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Test Groq connection' }))
     await waitFor(() => expect(gw.testProvider).toHaveBeenCalledWith('groq'))
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Key rejected by Groq', 'error'))
-  })
-
-  it('saves the gateway caps, blank meaning no cap', async () => {
-    gw.saveGlobal.mockResolvedValue({})
-    mount('providers')
-    const dialog = await openDialog('Edit gateway caps')
-    fireEvent.change(within(dialog).getByLabelText('Daily call cap'), { target: { value: '' } })
-    fireEvent.change(within(dialog).getByLabelText('Daily token cap'), { target: { value: '500000' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(gw.saveGlobal).toHaveBeenCalledWith({ daily_call_cap: null, daily_token_cap: 500000 }))
   })
 })
 

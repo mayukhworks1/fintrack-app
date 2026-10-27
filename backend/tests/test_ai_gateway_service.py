@@ -88,6 +88,9 @@ class GatewayDB:
     async def fetch(self, sql, *args):
         await asyncio.sleep(0)
         self._check(sql)
+        if "ai_gateway_models" in sql or "ai_gateway_limits" in sql:
+            # Migration 0008 has not run on this fake: the 0003 settings serve.
+            raise UndefinedTableError('relation "ai_gateway_limits" does not exist')
         if "FROM ai_traces" in sql:
             self.usage_args.append(args)
             return [dict(u) for u in self.usage]
@@ -469,8 +472,9 @@ class TestConfigCache:
         config()
         assert db.config_reads == 1
         asyncio.run(G.save_task("chat", {"daily_cap": 5}, "a@b.c"))
+        reads = db.config_reads          # a write reads the settings fresh first
         config()
-        assert db.config_reads == 2
+        assert db.config_reads == reads + 1
 
     def test_a_cold_burst_reads_once(self, gw):
         db = gw(GatewayDB())
@@ -686,11 +690,13 @@ class TestRouteSpecs:
                      tasks=[{"key": "invoice_parse", "route": route}]))
         plain = asyncio.run(G.route_specs("invoice_parse"))
         vision = asyncio.run(G.route_specs("invoice_parse", vision=True))
-        assert [s.model for s in plain] == [s["model"] for s in route]
+        # The global default chain follows, without the steps already in it.
+        assert [s.model for s in plain] == [s["model"] for s in route] + ["openai/gpt-oss-20b"]
+        assert [s.fallback for s in plain] == [False] * 4 + [True]
         assert [s.model for s in vision] == [
             "google/gemma-4-31b-it:free", "meta-llama/llama-4-scout-17b-16e-instruct",
-            "openai/gpt-oss-120b", "openrouter/free"]
-        assert [s.attempt for s in vision] == [1, 2, 3, 4]
+            "openai/gpt-oss-120b", "openrouter/free", "openai/gpt-oss-20b"]
+        assert [s.attempt for s in vision] == [1, 2, 3, 4, 5]
 
     def test_the_stored_model_list_outranks_the_id_hints(self, gw):
         route = [{"provider": "groq", "model": "openai/gpt-oss-120b"},
@@ -702,13 +708,15 @@ class TestRouteSpecs:
                      tasks=[{"key": "invoice_parse", "route": route}]))
         vision = asyncio.run(G.route_specs("invoice_parse", vision=True))
         assert [s.model for s in vision] == ["openrouter/free", "openai/gpt-oss-120b",
-                                             "google/gemma-4-31b-it:free"]
+                                             "google/gemma-4-31b-it:free", "openai/gpt-oss-20b"]
 
     def test_a_stored_step_with_an_unknown_provider_is_skipped(self, gw):
         gw(GatewayDB(tasks=[{"key": "chat", "route": [{"provider": "acme", "model": "m"},
                                                       {"provider": "groq", "model": "openai/gpt-oss-20b"}]}]))
         steps = asyncio.run(G.route_specs("chat"))
-        assert [(s.provider.key, s.attempt) for s in steps] == [("groq", 1)]
+        assert [(s.provider.key, s.model, s.attempt) for s in steps] == [
+            ("groq", "openai/gpt-oss-20b", 1),
+            ("groq", "openai/gpt-oss-120b", 2), ("openrouter", "openrouter/free", 3)]
 
 
 class TestSystemPrompt:
@@ -954,10 +962,15 @@ GROQ_MODELS = {"object": "list", "data": [
 class TestModelLists:
     def test_an_openrouter_list(self):
         assert G.parse_models("openrouter", OPENROUTER_MODELS) == [
-            {"id": "acme/zero-priced", "context": 8192, "vision": False, "free": True},
-            {"id": "google/gemma-4-31b-it:free", "context": 262144, "vision": True, "free": True},
-            {"id": "openrouter/free", "context": 200000, "vision": True, "free": True},
-            {"id": "openai/gpt-oss-120b", "context": 131072, "vision": False, "free": False},
+            {"id": "acme/zero-priced", "context": 8192, "vision": False, "free": True,
+             "input_cost_per_m": 0.0, "output_cost_per_m": 0.0},
+            {"id": "google/gemma-4-31b-it:free", "context": 262144, "vision": True, "free": True,
+             "input_cost_per_m": 0.0, "output_cost_per_m": 0.0},
+            {"id": "openrouter/free", "context": 200000, "vision": True, "free": True,
+             "input_cost_per_m": 0.0, "output_cost_per_m": 0.0},
+            # Per-token prices become prices per 1M tokens, for the catalogue.
+            {"id": "openai/gpt-oss-120b", "context": 131072, "vision": False, "free": False,
+             "input_cost_per_m": 0.15, "output_cost_per_m": 0.6},
         ]
 
     def test_a_groq_list(self):
@@ -965,7 +978,8 @@ class TestModelLists:
             {"id": "groq/compound", "context": 131072, "vision": None, "free": None},
             {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "context": 131072, "vision": True,
              "free": None},
-            {"id": "openai/gpt-oss-120b", "context": 131072, "vision": None, "free": None},
+            {"id": "openai/gpt-oss-120b", "context": 131072, "vision": None, "free": None,
+             "max_output": 65536},
         ]
 
     def test_at_most_600_are_kept(self):
@@ -1085,7 +1099,12 @@ class TestIstDay:
     def test_usage_is_counted_from_ist_midnight(self, gw):
         db = gw(GatewayDB())
         asyncio.run(G.usage_today())
-        assert db.usage_args == [(datetime(2026, 10, 14, 18, 30, tzinfo=timezone.utc),)]
+        # One read covers the month and the week; it says which rows are today's.
+        # 15 Oct 2026 is a Thursday: the week began on Monday 12 Oct.
+        midnight = datetime(2026, 10, 14, 18, 30, tzinfo=timezone.utc)
+        week = datetime(2026, 10, 11, 18, 30, tzinfo=timezone.utc)
+        month = datetime(2026, 9, 30, 18, 30, tzinfo=timezone.utc)
+        assert db.usage_args == [(month, midnight, week, month)]
 
     def test_local_counts_reset_when_the_day_turns(self, gw, monkeypatch):
         gw(GatewayDB())

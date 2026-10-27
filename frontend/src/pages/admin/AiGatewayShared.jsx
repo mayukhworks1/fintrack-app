@@ -5,7 +5,7 @@ import { formatIst } from '../../utils/ist'
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 
-export const MAX_ROUTE_STEPS = 6
+export const MAX_ROUTE_STEPS = 10
 export const MAX_PROMPT_CHARS = 20000
 export const MAX_TEST_INPUT = 4000
 export const MODEL_ID_RE = /^[A-Za-z0-9._:/@+-]{1,120}$/
@@ -15,6 +15,12 @@ export const OUTPUT_BADGE = {
   text:   ['blue', 'Text'],
   stream: ['teal', 'Stream'],
 }
+
+export const PERIODS = [['day', 'Today', 'Daily'], ['week', 'This week', 'Weekly'], ['month', 'This month', 'Monthly']]
+export const METRICS = [['requests', 'Requests'], ['tokens', 'Tokens'], ['spend', 'Spend (USD)']]
+export const PERIOD_LABEL = Object.fromEntries(PERIODS.map(([id, now]) => [id, now]))
+export const PERIOD_ADJ = Object.fromEntries(PERIODS.map(([id, , adj]) => [id, adj]))
+export const METRIC_LABEL = Object.fromEntries(METRICS)
 
 export const STATUS_BADGE = {
   ok:       ['green', 'Answered'],
@@ -27,6 +33,37 @@ export function num(n) {
   if (n == null || n === '') return '—'
   const v = Number(n)
   return Number.isFinite(v) ? v.toLocaleString('en-IN') : '—'
+}
+
+// "$1.25" — estimated spend; small amounts keep their cents' fractions.
+export function usd(n) {
+  if (n == null || n === '') return '—'
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 4 : 2 })}`
+}
+
+// A limit's value in its own unit.
+export function metricValue(metric, v) {
+  return metric === 'spend' ? usd(v) : num(v)
+}
+
+// 131072 → "131K", 1000000 → "1M": compact token counts for dense rows.
+export function compact(n) {
+  if (n == null) return '—'
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  if (v >= 1e6) return `${+(v / 1e6).toFixed(v % 1e6 ? 1 : 0)}M`
+  if (v >= 1e3) return `${+(v / 1e3).toFixed(v % 1e3 ? 1 : 0)}K`
+  return String(v)
+}
+
+// '' → null; a number ≥ 0 (decimals allowed) → that number; else NaN.
+export function parseAmount(text) {
+  const s = String(text ?? '').trim()
+  if (!s) return null
+  if (!/^\d+(\.\d+)?$/.test(s)) return NaN
+  return Number(s)
 }
 
 // "12 of 100 calls" with a cap, "12 calls" without.
@@ -86,9 +123,12 @@ export function envKeyApplies(p) {
 // Why a provider has no key to call with; the server words it the same way.
 export function missingKeyMessage(p) {
   if (p.key_unreadable) return "Stored key can't be read — set it again"
+  if (!p.env_var) return 'No key set'
   if (!envKeyApplies(p)) return `No key saved for this base URL (${p.env_var} is only sent to ${hostOf(p.default_base_url)})`
   return `No key set (${p.env_var})`
 }
+
+export { hostOf }
 
 export function keyBadge(p) {
   if (p.key_unreadable) return ['red', 'Key unreadable']
@@ -98,7 +138,7 @@ export function keyBadge(p) {
 }
 
 // Same checks the server runs for route_warnings, for a route still being edited.
-export function localRouteWarnings(route, providers) {
+export function localRouteWarnings(route, providers, catalog = []) {
   const byKey = Object.fromEntries((providers || []).map(p => [p.key, p]))
   const out = []
   route.forEach((step, index) => {
@@ -109,6 +149,10 @@ export function localRouteWarnings(route, providers) {
     const model = String(step.model || '').trim()
     const offered = p.last_test?.ok && p.models?.length ? p.models.some(m => m.id === model) : true
     if (model && !offered) out.push({ index, level: 'error', message: `Not offered by ${p.label} — calls to it will fail` })
+    const entry = catalog.find(c => c.provider === p.key && c.model === model)
+    if (entry && !entry.enabled) out.push({ index, level: 'warn', message: 'Model is switched off in the catalogue' })
+    const benched = p.benched || entry?.benched
+    if (benched) out.push({ index, level: 'warn', bench: true, message: benched[0].toUpperCase() + benched.slice(1) })
   })
   return out
 }
@@ -184,26 +228,88 @@ function warningStyle(level) {
 }
 
 // Provider · model → Provider · model, with each step tinted by its worst warning.
-export function RouteChain({ route, warnings = [], labels = {} }) {
+// Steps appended from the global default chain are drawn dashed and marked.
+export function RouteChain({ route, warnings = [], labels = {}, label = 'Route' }) {
   if (!route?.length) return <span className="text-xs" style={{ color: 'var(--text-3)' }}>No route</span>
   return (
-    <ol className="flex flex-wrap items-center gap-1.5" aria-label="Route">
+    <ol className="flex flex-wrap items-center gap-1.5" aria-label={label}>
       {route.map((step, i) => {
-        const w = warnings.filter(x => x.index === i)
+        const w = step.fallback ? [] : warnings.filter(x => x.index === i)
         const level = w.some(x => x.level === 'error') ? 'error' : w.length ? 'warn' : null
+        const base = level ? warningStyle(level) : { background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-2)' }
         return (
           <li key={`${i}-${step.provider}-${step.model}`} className="flex items-center gap-1.5 min-w-0">
             {i > 0 && <ArrowRight size={11} aria-hidden="true" style={{ color: 'var(--text-3)' }} />}
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] max-w-full min-w-0"
-              style={level ? warningStyle(level) : { background: 'var(--bg-input)', borderColor: 'var(--border)', color: 'var(--text-2)' }}>
+              style={step.fallback ? { ...base, borderStyle: 'dashed', opacity: 0.8 } : base}
+              title={step.fallback ? 'From the global default chain' : undefined}>
               <span className="font-semibold whitespace-nowrap">{labels[step.provider] || step.provider}</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono truncate">{step.model}</span>
+              {step.fallback && <span className="sr-only"> (default chain)</span>}
             </span>
           </li>
         )
       })}
     </ol>
+  )
+}
+
+function barTone(pct) {
+  if (pct >= 100) return 'var(--fin-negative)'
+  if (pct >= 80) return 'var(--fin-warning)'
+  return 'var(--accent)'
+}
+
+// One limit's usage: "Requests today · 40 of 200", with a bar that turns amber
+// at 80% and red once reached.
+export function LimitBar({ label, used, cap, metric, compactRow = false }) {
+  const pct = cap ? Math.min(100, Math.round((100 * (used || 0)) / cap)) : 0
+  const reached = cap && (used || 0) >= cap
+  return (
+    <div className={compactRow ? 'space-y-0.5' : 'space-y-1'}>
+      <div className="flex items-baseline justify-between gap-2 text-[11px]">
+        <span style={{ color: 'var(--text-2)' }}>{label}</span>
+        <span className="tabular-nums whitespace-nowrap" style={{ color: reached ? 'var(--fin-negative)' : 'var(--text-3)' }}>
+          {metricValue(metric, used || 0)} of {metricValue(metric, cap)}{reached ? ' · reached' : ''}
+        </span>
+      </div>
+      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}
+        aria-valuetext={`${metricValue(metric, used || 0)} of ${metricValue(metric, cap)}`}
+        className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barTone(pct), transition: 'width 200ms ease' }} />
+      </div>
+    </div>
+  )
+}
+
+// Every limit of one target as bars, or a quiet "No limits" line.
+export function LimitBars({ limits }) {
+  if (!limits?.length) return <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>No limits — only the provider's own rate limits apply.</p>
+  return (
+    <div className="space-y-2">
+      {limits.map(l => (
+        <LimitBar key={`${l.period}-${l.metric}`} label={`${PERIOD_ADJ[l.period]} ${METRIC_LABEL[l.metric].toLowerCase()}`}
+          used={l.used} cap={l.cap} metric={l.metric} />
+      ))}
+    </div>
+  )
+}
+
+// A centred "nothing here yet" panel with an optional action.
+export function EmptyState({ icon: Icon, title, children, action }) {
+  return (
+    <div className="flex flex-col items-center text-center gap-2 px-4 py-8">
+      {Icon && (
+        <span className="w-10 h-10 rounded-xl flex items-center justify-center" aria-hidden="true"
+          style={{ background: 'var(--bg-input)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+          <Icon size={18} />
+        </span>
+      )}
+      <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</p>
+      {children && <p className="text-xs max-w-md leading-relaxed" style={{ color: 'var(--text-3)' }}>{children}</p>}
+      {action}
+    </div>
   )
 }
 

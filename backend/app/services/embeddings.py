@@ -58,8 +58,10 @@ async def is_pgvector_available() -> bool:
 
 async def get_embedding(text: str) -> Optional[list[float]]:
     """Call OpenRouter embeddings API; returns float list or None on failure."""
-    provider = (await gateway.get_config()).providers["openrouter"]
-    if not provider.ready:
+    # Embeddings are not a chat call and have no fallback chain: OpenRouter
+    # serves them when it is ready, and search falls back to lexical otherwise.
+    provider = (await gateway.get_config()).providers.get("openrouter")
+    if provider is None or not provider.ready:
         return None
     try:
         async with shared_client(timeout=20) as client:

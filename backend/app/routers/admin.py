@@ -1602,7 +1602,10 @@ async def deployment_health(_: str = Depends(require_admin)):
     # key or the env fallback. Item keys kept for the admin cards.
     gateway_cfg = await ai_gateway.get_config()
     for item, provider_key in (("openrouter", "openrouter"), ("groq_fallback", "groq")):
-        p = gateway_cfg.providers[provider_key]
+        p = gateway_cfg.providers.get(provider_key)
+        if p is None:
+            results[item] = _health_item(False, "Removed in Admin → AI gateway", key_source="none", models=[])
+            continue
         results[item] = _health_item(
             p.ready,
             _provider_health_detail(p),
@@ -1721,8 +1724,8 @@ async def deployment_health(_: str = Depends(require_admin)):
         "BREVOAPIKEY":   bool(s.brevoapikey),
         "FRONTEND_URL":  bool(s.frontend_url and s.frontend_url != "*"),
         # A key saved in Admin → AI gateway stands in for the env one.
-        "OPENROUTER_API_KEY": bool(gateway_cfg.providers["openrouter"].api_key),
-        "GROQ_API_KEY":  bool(gateway_cfg.providers["groq"].api_key),
+        "OPENROUTER_API_KEY": bool(getattr(gateway_cfg.providers.get("openrouter"), "api_key", None)),
+        "GROQ_API_KEY":  bool(getattr(gateway_cfg.providers.get("groq"), "api_key", None)),
         "GOOGLE_CLIENT_ID": bool(s.google_client_id),
         "GOOGLE_CLIENT_SECRET": bool(s.google_client_secret),
     }

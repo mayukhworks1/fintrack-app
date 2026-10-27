@@ -1,5 +1,6 @@
 """
-Admin → AI gateway: providers, tasks, prompts, caps and the call log.
+Admin → AI gateway: providers, models, fallback chains, limits, prompts and
+the call log.
 
 Superadmin only: every route depends on require_superadmin, which also refuses
 the legacy admin password. Keys go in as JSON bodies and never come back out —
@@ -7,24 +8,36 @@ responses and audit rows carry only the last four characters (key_hint).
 
 Endpoints (prefix /api/admin/ai-gateway)
 ─────────
-GET    ""                                  — providers, tasks and today's usage
-PATCH  /providers/{key}                    — on/off, base URL, timeout, caps
+GET    ""                                  — everything below, with usage and alerts
+POST   /providers                          — add a provider (preset or custom)
+PATCH  /providers/{key}                    — on/off, name, base URL, headers, timeout
+DELETE /providers/{key}                    — remove a provider
 PUT    /providers/{key}/key                — store a key (encrypted)
 DELETE /providers/{key}/key                — remove the stored key
 POST   /providers/{key}/test               — list the provider's models with its key
+POST   /providers/{key}/models/fetch       — the same, answering with the model list
 POST   /providers/test-all
-PATCH  /tasks/{key}                        — on/off, route, daily cap
+PUT    /models                             — add or change a catalogue model
+POST   /models/import                      — add models from a provider's list
+DELETE /models?provider=&model=            — remove a catalogue model
+GET    /models/stats                       — success rate and latency per model
+PUT    /routing/default                    — the global default chain (null = built-in)
+PATCH  /breaker                            — circuit breaker settings
+POST   /breaker/reset                      — take one (or every) provider/model off the bench
+PUT    /limits                             — every limit of one scope and target
+PATCH  /tasks/{key}                        — on/off, chain, default-chain fallback
 GET    /tasks/{key}/prompt                 — built-in, current and version history
 GET    /tasks/{key}/prompt/versions/{v}
 PUT    /tasks/{key}/prompt                 — save a new version (null = built-in)
-POST   /tasks/{key}/test                   — one real call through the task's route
-PATCH  /global                             — workspace daily caps
+POST   /tasks/{key}/test                   — one real call through the task's chain
+PATCH  /global                             — workspace daily caps (0003 shape)
 GET    /calls                              — the call log, by IST day
 GET    /calls/{id}
 
 Every write is audited in auth_events. A database the gateway migration has
 not reached still serves every read on the built-in defaults; writes answer
-503 until it has.
+503 until it has. Provider CRUD, the model catalogue and the limits table
+need migration 0008 as well; before it the 0003 settings keep serving.
 """
 
 import asyncio
@@ -72,18 +85,71 @@ class ProviderPatch(_Patch):
     timeout_s: Optional[StrictInt] = Field(default=None, ge=gw.TIMEOUT_MIN_S, le=gw.TIMEOUT_MAX_S)
     daily_request_cap: Optional[StrictInt] = Field(default=None, ge=1)
     daily_token_cap: Optional[StrictInt] = Field(default=None, ge=1)
+    label: Optional[StrictStr] = None
+    extra_headers: Optional[dict[str, StrictStr]] = None
 
 
 class RouteStepBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     provider: StrictStr
     model: StrictStr
+    timeout_s: Optional[StrictInt] = None
+    skip_over_limit: Optional[StrictBool] = None
 
 
 class TaskPatch(_Patch):
     enabled: Optional[StrictBool] = None
     route: Optional[list[RouteStepBody]] = None
     daily_cap: Optional[StrictInt] = Field(default=None, ge=1)
+    fallback_to_default: Optional[StrictBool] = None
+
+
+class DefaultRouteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    route: Optional[list[RouteStepBody]] = Field(...)
+
+
+class ModelBody(_Patch):
+    provider: StrictStr
+    model: StrictStr
+    label: Optional[StrictStr] = None
+    enabled: Optional[StrictBool] = None
+    context_window: Optional[StrictInt] = None
+    max_output_tokens: Optional[StrictInt] = None
+    request_token_limit: Optional[StrictInt] = None
+    input_cost_per_m: Optional[float] = None
+    output_cost_per_m: Optional[float] = None
+    vision: Optional[StrictBool] = None
+
+
+class ImportModelsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: StrictStr
+    models: list[StrictStr] = Field(..., min_length=1, max_length=gw.MAX_CATALOG_MODELS)
+
+
+class LimitItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    period: StrictStr
+    metric: StrictStr
+    cap: Optional[float] = None
+
+
+class LimitsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: StrictStr
+    target: StrictStr = ""
+    limits: list[LimitItem] = Field(default_factory=list, max_length=9)
+
+
+class BreakerPatch(_Patch):
+    failures: Optional[StrictInt] = None
+    minutes: Optional[StrictInt] = None
+
+
+class BenchResetBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target: Optional[StrictStr] = Field(default=None, max_length=200)
 
 
 class GlobalPatch(_Patch):
@@ -110,17 +176,20 @@ def _gateway_errors(handler):
     async def wrapper(*args, **kwargs):
         try:
             return await handler(*args, **kwargs)
-        except gw.StorageNotReady:
-            return JSONResponse(status_code=503, content={"detail": gw.STORAGE_NOT_READY})
+        except gw.StorageNotReady as exc:
+            return JSONResponse(status_code=503, content={"detail": str(exc) or gw.STORAGE_NOT_READY})
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Not found") from None
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
     return wrapper
 
 
-def _provider_def(key: str) -> gw.ProviderDef:
-    if key not in gw.PROVIDERS:
+async def _provider_def(key: str) -> gw.ProviderState:
+    p = (await gw.get_config()).providers.get(key)
+    if p is None:
         raise HTTPException(status_code=404, detail="Unknown AI provider")
-    return gw.PROVIDERS[key]
+    return p
 
 
 def _task_def(key: str) -> gw.TaskDef:
@@ -171,12 +240,20 @@ def _provider_out(p: gw.ProviderState, cfg: gw.GatewayConfig, usage: dict) -> di
                 tasks = used_by.setdefault(step["model"], [])
                 if task_key not in tasks:
                     tasks.append(task_key)
+    in_default = sorted({s["model"] for s in cfg.default_route if s["provider"] == p.key})
     spent = _usage_slot(usage["by_provider"], p.key)
     return {
         "key": p.key,
         "label": p.label,
         "base_url": p.base_url,
-        "default_base_url": gw.PROVIDERS[p.key].default_base_url,
+        "default_base_url": p.default_base_url,
+        "preset": p.preset,
+        "builtin": p.builtin,
+        "flavor": p.flavor,
+        "extra_headers": dict(p.extra_headers),
+        "in_default_route": in_default,
+        "benched": gw.bench_reason(p.key),
+        "catalog_count": sum(1 for (pk, _m) in cfg.catalog if pk == p.key),
         "enabled": p.enabled,
         "key_source": p.key_source,
         "key_hint": p.key_hint,
@@ -185,7 +262,7 @@ def _provider_out(p: gw.ProviderState, cfg: gw.GatewayConfig, usage: dict) -> di
         "key_unreadable": p.key_unreadable,
         "env_var": p.env_var,
         "timeout_s": p.timeout_s,
-        "default_timeout_s": gw.PROVIDERS[p.key].default_timeout_s,
+        "default_timeout_s": p.default_timeout_s,
         "daily_request_cap": p.daily_request_cap,
         "daily_token_cap": p.daily_token_cap,
         "requests_today": spent["calls"],
@@ -210,7 +287,10 @@ def _task_out(tdef: gw.TaskDef, cfg: gw.GatewayConfig, usage: dict) -> dict:
         "enabled": state.enabled,
         "route": [dict(s) for s in state.route],
         "route_custom": state.route_custom,
-        "default_route": [dict(s) for s in tdef.default_route],
+        "default_route": [dict(s) for s in (cfg.default_route if cfg.default_route_custom
+                                            else tdef.default_route)],
+        "fallback_to_default": state.fallback_to_default,
+        "effective_route": gw.effective_route(cfg, tdef.key),
         "daily_cap": state.daily_cap,
         "calls_today": spent["calls"],
         "tokens_today": spent["tokens"],
@@ -327,15 +407,158 @@ def _test_system_prompt(task: str, text: str, cfg: gw.GatewayConfig) -> str:
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
+def _label_of(cfg: gw.GatewayConfig, scope: str, target: str) -> str:
+    if scope == "global":
+        return "Workspace"
+    if scope == "provider":
+        p = cfg.providers.get(target)
+        return p.label if p else target
+    if scope == "model":
+        provider, _, model = target.partition("|")
+        entry = cfg.entry(provider, model)
+        p = cfg.providers.get(provider)
+        return f"{(p.label if p else provider)} · {(entry.label if entry and entry.label else model)}"
+    if scope == "task":
+        return gw.task_label(target)
+    return "Each user" if target == gw.EVERY_USER else f"User {target[:8]}"
+
+
+def _limit_rows(cfg: gw.GatewayConfig, views: dict) -> list[dict]:
+    """Every limit with what it has used this period, grouped by target."""
+    groups: dict[tuple, dict] = {}
+    for lim in cfg.limits:
+        group = groups.setdefault((lim.scope, lim.target), {
+            "scope": lim.scope, "target": lim.target, "label": _label_of(cfg, lim.scope, lim.target),
+            "limits": []})
+        if lim.scope == "user" and lim.target == gw.EVERY_USER:
+            # A limit for each user: the heaviest user this period is what is near it.
+            users = (views.get(lim.period) or {}).get("by_user") or {}
+            used = max((gw.used_of(slot, lim.metric) for slot in users.values()), default=0)
+        else:
+            used = gw.used_of(gw._slot(views, lim.period, lim.scope, lim.target), lim.metric)
+        group["limits"].append({
+            "period": lim.period, "metric": lim.metric, "cap": lim.cap,
+            "used": round(used, 4) if lim.metric == "spend" else int(used),
+            "pct": min(999, round(100 * used / lim.cap)) if lim.cap else 0,
+            "resets_at": gw.period_end(lim.period).isoformat(),
+        })
+    return list(groups.values())
+
+
+def _usage_out(views: dict) -> dict:
+    """Usage per period without the per-user breakdown (only its size)."""
+    out = {}
+    for period, view in views.items():
+        out[period] = {
+            "total": _rounded(view["total"]),
+            "by_task": {k: _rounded(v) for k, v in view["by_task"].items()},
+            "by_provider": {k: _rounded(v) for k, v in view["by_provider"].items()},
+            "by_model": {k: _rounded(v) for k, v in view["by_model"].items()},
+            "users": len(view["by_user"]),
+        }
+    return out
+
+
+def _rounded(slot: dict) -> dict:
+    return {"calls": int(slot["calls"]), "tokens": int(slot["tokens"]), "spend": round(slot["spend"], 4)}
+
+
+def _catalog_out(cfg: gw.GatewayConfig, views: dict) -> list[dict]:
+    out = []
+    for p in cfg.providers.values():
+        offered = {m["id"]: m for m in p.models}
+        for (provider, model), e in cfg.catalog.items():
+            if provider != p.key:
+                continue
+            tasks = [t for t, state in cfg.tasks.items() if any(
+                s["provider"] == provider and s["model"] == model for s in state.route)]
+            out.append({
+                "provider": provider, "model": model, "label": e.label, "enabled": e.enabled,
+                "context_window": e.context_window, "max_output_tokens": e.max_output_tokens,
+                "request_token_limit": e.request_token_limit,
+                "input_cost_per_m": e.input_cost_per_m, "output_cost_per_m": e.output_cost_per_m,
+                "vision": e.vision,
+                "offered": (model in offered) if p.last_test and p.last_test.get("ok") and offered else None,
+                "used_by": tasks,
+                "in_default_route": any(s["provider"] == provider and s["model"] == model
+                                        for s in cfg.default_route),
+                "benched": gw.bench_reason(provider, model),
+                "usage": {period: _rounded((views[period]["by_model"]).get(gw.model_target(provider, model))
+                                           or gw._tally()) for period in gw.PERIODS},
+            })
+    return out
+
+
+def _alerts(cfg: gw.GatewayConfig, limits: list[dict], benched: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    if not cfg.storage_ok:
+        out.append({"level": "warn", "message": "The gateway's tables are missing (migration 0003 has not run): "
+                                                "AI runs on the built-in chains and env keys, read-only."})
+    elif not cfg.v2:
+        out.append({"level": "info", "message": "Migration 0008 has not run yet: adding providers, the model "
+                                                "catalogue and weekly or monthly limits are read-only until it does."})
+    if not any(p.ready for p in cfg.providers.values()):
+        out.append({"level": "error", "message": "No provider is on with a usable key, so AI features can't answer."})
+    for group in limits:
+        for lim in group["limits"]:
+            word = {"day": "Today's", "week": "This week's", "month": "This month's"}[lim["period"]]
+            if lim["pct"] >= 100:
+                out.append({"level": "error", "message": f"{group['label']}: {word.lower()} {lim['metric']} limit "
+                                                         f"is reached ({lim['pct']}%)."})
+            elif lim["pct"] >= 80:
+                out.append({"level": "warn", "message": f"{group['label']}: {lim['pct']}% of {word.lower()} "
+                                                        f"{lim['metric']} limit used."})
+    for b in benched:
+        p = cfg.providers.get(b["provider"])
+        name = (p.label if p else b["provider"]) + (f" · {b['model']}" if b["model"] else "")
+        out.append({"level": "warn", "message": f"{name} is benched after {b['failures']} failures in a row; "
+                                                "it is tried last until the bench runs out."})
+    used = {s["provider"] for state in cfg.tasks.values() for s in state.route} | \
+        {s["provider"] for s in cfg.default_route}
+    for key in sorted(used):
+        p = cfg.providers.get(key)
+        if p is None:
+            out.append({"level": "warn", "message": f"A chain names the provider {key}, which no longer exists; "
+                                                    "those steps are skipped."})
+        elif p.enabled and not p.api_key:
+            out.append({"level": "warn", "message": f"{p.label} is in a chain but has no key; its steps are skipped."})
+    return out
+
+
+def _presets_out() -> list[dict]:
+    return [{"key": d.key, "label": d.label, "base_url": d.default_base_url, "note": d.note,
+             "timeout_s": d.default_timeout_s, "builtin": d.key in gw.PROVIDERS}
+            for d in gw.PRESETS.values()]
+
+
 @router.get("")
 async def gateway_state(_role: str = Depends(require_superadmin)):
     cfg, usage = await _current()
+    views = await gw.usage_views(cfg)
+    limits = _limit_rows(cfg, views)
+    benched = gw.bench_list()
+    default_state = gw.TaskState(key="", route=cfg.default_route)
     return {
         "storage_ok": cfg.storage_ok,
+        "v2": cfg.v2,
         "day": gw.today_ist().isoformat(),
+        "periods": {p: {"start": gw.period_start(p).isoformat(), "end": gw.period_end(p).isoformat()}
+                    for p in gw.PERIODS},
         "global": _global_out(cfg, usage),
-        "providers": [_provider_out(cfg.providers[k], cfg, usage) for k in gw.PROVIDERS],
+        "providers": [_provider_out(p, cfg, usage) for p in cfg.providers.values()],
+        "removed_builtins": list(cfg.removed),
+        "presets": _presets_out(),
         "tasks": [_task_out(t, cfg, usage) for t in gw.TASKS.values()],
+        "catalog": _catalog_out(cfg, views),
+        "default_route": [dict(s) for s in cfg.default_route],
+        "default_route_custom": cfg.default_route_custom,
+        "builtin_default_route": [dict(s) for s in gw.DEFAULT_ROUTE],
+        "default_route_warnings": gw.route_warnings(default_state, cfg),
+        "breaker": {**cfg.breaker, "benched": benched},
+        "limits": limits,
+        "usage": _usage_out(views),
+        "alerts": _alerts(cfg, limits, benched),
+        "max_route_steps": gw.MAX_ROUTE_STEPS,
     }
 
 
@@ -345,7 +568,7 @@ async def gateway_state(_role: str = Depends(require_superadmin)):
 @_gateway_errors
 async def save_provider(key: str, body: ProviderPatch, request: Request,
                         _role: str = Depends(require_superadmin)):
-    _provider_def(key)
+    await _provider_def(key)
     values = gw.validate_provider_patch(body.changes())
     if values:
         key_removed = await gw.save_provider(key, values, _actor(request))
@@ -362,7 +585,7 @@ async def set_provider_key(key: str, request: Request, payload: Any = Body(defau
                            _role: str = Depends(require_superadmin)):
     # The body is read untyped on purpose: a Pydantic validation error would
     # echo the rejected input, which here is the key.
-    _provider_def(key)
+    await _provider_def(key)
     api_key = gw.validate_api_key(payload.get("api_key") if isinstance(payload, dict) else None)
     hint = await gw.set_provider_key(key, api_key, _actor(request))
     await _audit(request, "ai_gateway_key_set", {"provider": key, "key_hint": hint})
@@ -372,8 +595,7 @@ async def set_provider_key(key: str, request: Request, payload: Any = Body(defau
 @router.delete("/providers/{key}/key")
 @_gateway_errors
 async def remove_provider_key(key: str, request: Request, _role: str = Depends(require_superadmin)):
-    _provider_def(key)
-    before = (await gw.get_config()).providers[key]
+    before = await _provider_def(key)
     # Without a stored key the hint names the env key, which stays.
     removed_hint = before.key_hint if before.key_source == "stored" or before.key_unreadable else None
     await gw.clear_provider_key(key, _actor(request))
@@ -383,7 +605,7 @@ async def remove_provider_key(key: str, request: Request, _role: str = Depends(r
 
 @router.post("/providers/test-all")
 async def test_all_providers(request: Request, _role: str = Depends(require_superadmin)):
-    keys = list(gw.PROVIDERS)
+    keys = list((await gw.get_config()).providers)
     results = await asyncio.gather(*(gw.test_provider(k, _actor(request)) for k in keys))
     cfg, usage = await _current(fresh=True)
     return {"results": {k: {**r, "provider": _provider_out(cfg.providers[k], cfg, usage)}
@@ -392,9 +614,176 @@ async def test_all_providers(request: Request, _role: str = Depends(require_supe
 
 @router.post("/providers/{key}/test")
 async def test_provider(key: str, request: Request, _role: str = Depends(require_superadmin)):
-    _provider_def(key)
+    await _provider_def(key)
     result = await gw.test_provider(key, _actor(request))
     return {**result, "provider": await _provider_response(key)}
+
+
+@router.post("/providers/{key}/models/fetch")
+async def fetch_provider_models(key: str, request: Request, _role: str = Depends(require_superadmin)):
+    """Ask the provider for its model list (a connection test) and answer
+    with it, each model marked when it is already in the catalogue."""
+    await _provider_def(key)
+    result = await gw.test_provider(key, _actor(request))
+    cfg = await gw.get_config(force=True)
+    p = cfg.providers[key]
+    return {**result, "models": [{**m, "in_catalog": (key, m["id"]) in cfg.catalog} for m in p.models]}
+
+
+@router.post("/providers")
+@_gateway_errors
+async def create_provider(request: Request, payload: Any = Body(default=None),
+                          _role: str = Depends(require_superadmin)):
+    # Untyped for the same reason as the key route: the body may hold a key,
+    # and a validation error must never echo it.
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="Expected an object describing the provider.")
+    key = await gw.create_provider(payload, _actor(request))
+    p = (await gw.get_config(force=True)).providers[key]
+    await _audit(request, "ai_gateway_provider_added", {
+        "provider": key, "preset": p.preset, "base_url": p.base_url,
+        "key_hint": p.key_hint if p.key_source == "stored" else None})
+    return await _provider_response(key)
+
+
+@router.delete("/providers/{key}")
+@_gateway_errors
+async def delete_provider(key: str, request: Request, _role: str = Depends(require_superadmin)):
+    p = await _provider_def(key)
+    used = await gw.delete_provider(key, _actor(request))
+    await _audit(request, "ai_gateway_provider_removed", {
+        "provider": key, "label": p.label, "builtin": p.builtin, "used_by": used})
+    return {"ok": True, "provider": key, "used_by": used}
+
+
+# ── Model catalogue ───────────────────────────────────────────────────────────
+
+@router.put("/models")
+@_gateway_errors
+async def save_model(body: ModelBody, request: Request, _role: str = Depends(require_superadmin)):
+    changes = body.changes()
+    provider, model = changes.pop("provider"), changes.pop("model")
+    await _provider_def(provider)
+    await gw.upsert_model(provider, model, changes, _actor(request))
+    await _audit(request, "ai_gateway_model_saved", {"provider": provider, "model": model, "changes": changes})
+    return {"ok": True}
+
+
+@router.post("/models/import")
+@_gateway_errors
+async def import_models(body: ImportModelsBody, request: Request, _role: str = Depends(require_superadmin)):
+    await _provider_def(body.provider)
+    added = await gw.import_models(body.provider, body.models, _actor(request))
+    await _audit(request, "ai_gateway_models_imported", {"provider": body.provider, "added": added})
+    return {"ok": True, "added": added}
+
+
+@router.delete("/models")
+@_gateway_errors
+async def delete_model(request: Request, provider: str = Query(..., max_length=20),
+                       model: str = Query(..., max_length=120), _role: str = Depends(require_superadmin)):
+    await gw.delete_model(provider, model, _actor(request))
+    await _audit(request, "ai_gateway_model_removed", {"provider": provider, "model": model})
+    return {"ok": True}
+
+
+_STATS_SQL = """
+    SELECT t.provider, t.model,
+           COUNT(*) AS requests,
+           COUNT(*) FILTER (WHERE t.status = 'ok') AS ok,
+           COUNT(*) FILTER (WHERE t.status = 'failed') AS failed,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY t.latency_ms) FILTER (WHERE t.status = 'ok') AS p50_ms,
+           percentile_cont(0.95) WITHIN GROUP (ORDER BY t.latency_ms) FILTER (WHERE t.status = 'ok') AS p95_ms,
+           COALESCE(SUM(t.prompt_tokens), 0) AS tokens_in,
+           COALESCE(SUM(t.answer_tokens), 0) AS tokens_out,
+           (ARRAY_AGG(t.extra->>'error' ORDER BY t.ts DESC) FILTER (WHERE t.status = 'failed'))[1] AS last_error,
+           (ARRAY_AGG(t.http_status ORDER BY t.ts DESC) FILTER (WHERE t.status = 'failed'))[1] AS last_status,
+           MAX(t.ts) AS last_at
+      FROM ai_traces t
+     WHERE t.ts >= $1 AND t.model IS NOT NULL AND t.status IN ('ok', 'failed')
+     GROUP BY t.provider, t.model
+     ORDER BY COUNT(*) DESC
+     LIMIT 200
+"""
+
+
+@router.get("/models/stats")
+async def model_stats(days: int = Query(7, ge=1, le=MAX_LOG_DAYS), _role: str = Depends(require_superadmin)):
+    """Per model over the last `days` IST days: requests, success rate, median
+    and p95 latency of answered calls, tokens, estimated spend and the most
+    recent failure in plain words."""
+    pool = get_pool()
+    if pool is None:
+        return _no_db()
+    cfg = await gw.get_config()
+    start = gw.day_start(gw.today_ist() - timedelta(days=days - 1))
+    try:
+        rows = await pool.fetch(_STATS_SQL, start)
+    except Exception as exc:
+        if not gw._schema_missing(exc):
+            raise
+        rows = []
+    out = []
+    for r in rows:
+        requests = _int(r["requests"])
+        entry = cfg.entry(r["provider"], r["model"]) if r["provider"] else None
+        tin, tout = _int(r["tokens_in"]), _int(r["tokens_out"])
+        out.append({
+            "provider": r["provider"], "model": r["model"],
+            "label": entry.label if entry else None,
+            "requests": requests, "ok": _int(r["ok"]), "failed": _int(r["failed"]),
+            "success_rate": round(_int(r["ok"]) / requests, 4) if requests else None,
+            "p50_ms": round(r["p50_ms"]) if r["p50_ms"] is not None else None,
+            "p95_ms": round(r["p95_ms"]) if r["p95_ms"] is not None else None,
+            "tokens_in": tin, "tokens_out": tout,
+            "spend": round(entry.cost(tin, tout), 4) if entry and entry.priced else None,
+            "last_error": r["last_error"],
+            "why": gw.explain_failure(r["last_error"], r["last_status"], "failed") if r["last_error"] else None,
+            "last_at": _iso(r["last_at"]),
+            "benched": gw.bench_reason(r["provider"], r["model"]) if r["provider"] else None,
+        })
+    return {"days": days, "models": out}
+
+
+# ── Routing, breaker, limits ──────────────────────────────────────────────────
+
+@router.put("/routing/default")
+@_gateway_errors
+async def save_default_route(body: DefaultRouteBody, request: Request, _role: str = Depends(require_superadmin)):
+    route = None if body.route is None else [s.model_dump(exclude_none=True) for s in body.route]
+    await gw.save_default_route(route, _actor(request))
+    cfg = await gw.get_config(force=True)
+    await _audit(request, "ai_gateway_default_route_saved", {"route": cfg.default_route if route else None})
+    return {"default_route": cfg.default_route, "default_route_custom": cfg.default_route_custom,
+            "default_route_warnings": gw.route_warnings(gw.TaskState(key="", route=cfg.default_route), cfg)}
+
+
+@router.patch("/breaker")
+@_gateway_errors
+async def save_breaker(body: BreakerPatch, request: Request, _role: str = Depends(require_superadmin)):
+    values = await gw.save_breaker(body.changes(), _actor(request))
+    if values:
+        await _audit(request, "ai_gateway_breaker_saved", {"changes": values})
+    cfg = await gw.get_config(force=True)
+    return {**cfg.breaker, "benched": gw.bench_list()}
+
+
+@router.post("/breaker/reset")
+async def reset_breaker(body: BenchResetBody, request: Request, _role: str = Depends(require_superadmin)):
+    cleared = gw.reset_bench(body.target)
+    await _audit(request, "ai_gateway_bench_reset", {"target": body.target or "all", "cleared": cleared})
+    return {"cleared": cleared, "benched": gw.bench_list()}
+
+
+@router.put("/limits")
+@_gateway_errors
+async def save_limits(body: LimitsBody, request: Request, _role: str = Depends(require_superadmin)):
+    rows = await gw.set_limits(body.scope, body.target, [i.model_dump() for i in body.limits], _actor(request))
+    await _audit(request, "ai_gateway_limits_saved", {
+        "scope": body.scope, "target": body.target,
+        "limits": [{"period": r.period, "metric": r.metric, "cap": r.cap} for r in rows]})
+    cfg = await gw.get_config(force=True)
+    return {"limits": _limit_rows(cfg, await gw.usage_views(cfg))}
 
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -404,7 +793,8 @@ async def test_provider(key: str, request: Request, _role: str = Depends(require
 async def save_task(key: str, body: TaskPatch, request: Request,
                     _role: str = Depends(require_superadmin)):
     _task_def(key)
-    values = gw.validate_task_patch(body.changes())
+    cfg = await gw.get_config()
+    values = gw.validate_task_patch(body.changes(), set(cfg.providers) if cfg.storage_ok else None)
     if values:
         await gw.save_task(key, values, _actor(request))
         await _audit(request, "ai_gateway_task_saved", {"task": key, "changes": values})
@@ -517,13 +907,19 @@ def _status_sql(cols: dict) -> str:
     return f"COALESCE({cols['status']}, CASE WHEN t.extra->>'ok' = 'false' THEN 'failed' ELSE 'ok' END)"
 
 
-def _log_filters(cols: dict, start, end, task, provider, status) -> tuple[str, list]:
+def _log_filters(cols: dict, start, end, task, provider, status, model=None,
+                 min_ms=None, max_ms=None) -> tuple[str, list]:
     where = ["t.ts >= $1", "t.ts < $2"]
     params: list = [start, end]
-    for expr, value in ((cols["task"], task), (cols["provider"], provider), (_status_sql(cols), status)):
+    for expr, value in ((cols["task"], task), (cols["provider"], provider), (_status_sql(cols), status),
+                        ("t.model", model)):
         if value:
             params.append(value)
             where.append(f"{expr} = ${len(params)}")
+    for op, value in ((">=", min_ms), ("<=", max_ms)):
+        if value is not None:
+            params.append(value)
+            where.append(f"t.latency_ms {op} ${len(params)}")
     return "WHERE " + " AND ".join(where), params
 
 
@@ -594,6 +990,10 @@ def _int(value: Any) -> int:
     return int(value or 0)
 
 
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
 def _summary(row: dict) -> dict:
     count = _int(row.get("ms_count"))
     return {
@@ -625,6 +1025,7 @@ def _call_out(r) -> dict:
         "user_email": r["user_email"],
         "endpoint": r["endpoint"] or None,
         "error": extra.get("error") or None,
+        "why": gw.explain_failure(extra.get("error"), r["http_status"], r["status"]),
         "attempt": extra.get("attempt"),
     }
 
@@ -636,6 +1037,9 @@ async def list_calls(
     task: Optional[str] = Query(default=None, max_length=40),
     provider: Optional[str] = Query(default=None, max_length=20),
     status: Optional[str] = Query(default=None, pattern="^(ok|failed|not_sent)$"),
+    model: Optional[str] = Query(default=None, max_length=120),
+    min_ms: Optional[int] = Query(default=None, ge=0, le=10_000_000),
+    max_ms: Optional[int] = Query(default=None, ge=0, le=10_000_000),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     _role: str = Depends(require_superadmin),
@@ -658,7 +1062,7 @@ async def list_calls(
     start, end = gw.day_start(from_day), gw.day_start(to_day + timedelta(days=1))
 
     async def run(cols):
-        where, params = _log_filters(cols, start, end, task, provider, status)
+        where, params = _log_filters(cols, start, end, task, provider, status, model, min_ms, max_ms)
         groups = await pool.fetch(_log_summary_sql(cols, where), *params)
         rows = await pool.fetch(_log_rows_sql(cols, where, len(params)), *params, limit, offset)
         return groups, rows

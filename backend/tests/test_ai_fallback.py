@@ -50,6 +50,10 @@ _real_sleep = asyncio.sleep
 
 # ── fakes ────────────────────────────────────────────────────────────────────
 
+class UndefinedTable(Exception):
+    sqlstate = "42P01"
+
+
 class FakeDB:
     """
     The gateway tables as overrides, and ai_traces, in memory. Empty means a
@@ -63,6 +67,9 @@ class FakeDB:
         self.traces: list[dict] = []
 
     async def fetch(self, sql, *args):
+        if "ai_gateway_models" in sql or "ai_gateway_limits" in sql:
+            # Migration 0008 has not run on this fake: the 0003 settings serve.
+            raise UndefinedTable('relation "ai_gateway_limits" does not exist')
         if "FROM ai_traces" in sql:
             by: dict = {}
             for t in self.traces:
@@ -266,9 +273,11 @@ class TestDefaultRoutes:
         for task in G.TASKS:
             if task != "invoice_parse":
                 assert ids(task) == default, task
+        # Its own route, then the default chain's step it does not already have.
         assert ids("invoice_parse") == [("openrouter", "google/gemma-4-31b-it:free"),
                                         ("groq", "openai/gpt-oss-120b"),
-                                        ("openrouter", "openrouter/free")]
+                                        ("openrouter", "openrouter/free"),
+                                        ("groq", "openai/gpt-oss-20b")]
 
     def test_the_built_in_route_also_serves_a_database_the_migration_never_reached(self, db, client, monkeypatch):
         async def missing(*_a, **_k):
@@ -566,7 +575,8 @@ class TestMetering:
         attempts = []
         chat(attempts=attempts)
         assert [c.model for c in fake.calls if c.provider == "groq"] == ["openai/gpt-oss-120b"] * 3
-        assert ("openai/gpt-oss-20b", "daily cap reached") in [(a["model"], a["error"]) for a in attempts]
+        assert ("openai/gpt-oss-20b", "provider daily request limit reached") in \
+            [(a["model"], a["error"]) for a in attempts]
 
     def test_a_429_retry_that_times_out_is_not_logged_as_429(self, db, client):
         import httpx

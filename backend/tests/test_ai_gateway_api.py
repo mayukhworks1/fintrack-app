@@ -195,6 +195,9 @@ class GatewayAdminDB:
     async def fetch(self, sql, *args):
         await asyncio.sleep(0)
         self._check(sql)
+        if "ai_gateway_models" in sql or "ai_gateway_limits" in sql:
+            # Migration 0008 has not run on this fake: the 0003 settings serve.
+            raise UndefinedTableError('relation "ai_gateway_limits" does not exist')
         if "FROM ai_traces t" in sql:
             self.log_queries.append((sql, args))
             return [dict(g) for g in self.call_groups] if "GROUP BY 1" in sql else [dict(r) for r in self.call_rows]
@@ -330,6 +333,17 @@ EVERY_ROUTE = [
     ("patch", "/global", {"daily_call_cap": 10}),
     ("get", "/calls", None),
     ("get", "/calls/1", None),
+    ("post", "/providers", {"preset": "openai", "api_key": "sk-proj-0123456789abcdef"}),
+    ("delete", "/providers/groq", None),
+    ("post", "/providers/groq/models/fetch", None),
+    ("put", "/models", {"provider": "groq", "model": "openai/gpt-oss-20b", "enabled": False}),
+    ("post", "/models/import", {"provider": "groq", "models": ["openai/gpt-oss-20b"]}),
+    ("delete", "/models", None),
+    ("get", "/models/stats", None),
+    ("put", "/routing/default", {"route": None}),
+    ("patch", "/breaker", {"failures": 2}),
+    ("post", "/breaker/reset", {}),
+    ("put", "/limits", {"scope": "global", "target": "", "limits": []}),
 ]
 
 
@@ -986,7 +1000,10 @@ class TestCallLog:
             "id": 41, "ts": "2026-10-15T05:30:00+00:00", "task": "chat", "task_label": "AI assistant chat",
             "provider": "groq", "model": "openai/gpt-oss-120b", "status": "failed", "http_status": 429,
             "latency_ms": 812, "prompt_tokens": None, "answer_tokens": None, "user_email": "a@b.c",
-            "endpoint": "/api/ai/chat/stream", "error": "rate-limited", "attempt": 2}]
+            "endpoint": "/api/ai/chat/stream", "error": "rate-limited",
+            "why": "Rate-limited by the provider: too many requests or tokens for this minute. "
+                   "The next step was tried.",
+            "attempt": 2}]
 
     def test_filters_become_parameters_in_order(self, gateway_api):
         client, db = gateway_api()

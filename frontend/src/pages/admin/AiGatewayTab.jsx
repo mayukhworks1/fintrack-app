@@ -1,23 +1,32 @@
-// AI gateway — providers, keys, task routes, prompts, caps and the call log.
-// Superadmin only; every endpoint behind it is require_superadmin.
+// AI gateway — providers, keys, the model catalogue, fallback chains, limits,
+// prompts and the call log. Superadmin only; every endpoint behind it is
+// require_superadmin.
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Cpu, RefreshCw, ListChecks, KeyRound, ScrollText, ShieldAlert } from 'lucide-react'
+import { Cpu, RefreshCw, LayoutDashboard, KeyRound, Boxes, Route, Gauge, ScrollText, ShieldAlert } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../context/ToastContext'
 import { Badge, Err, Skeleton, StatBox, SubTabBar } from './ui'
 import { Notice, num } from './AiGatewayShared'
-import { AiGatewayTasks } from './AiGatewayTasks'
+import { AiGatewayOverview } from './AiGatewayOverview'
 import { AiGatewayProviders } from './AiGatewayProviders'
+import { AiGatewayModels } from './AiGatewayModels'
+import { AiGatewayRouting } from './AiGatewayRouting'
+import { AiGatewayLimits } from './AiGatewayLimits'
 import { AiGatewayLog } from './AiGatewayLog'
 
 const SUBS = [
-  { id: 'tasks',     label: 'Tasks & prompts',  icon: ListChecks },
-  { id: 'providers', label: 'Providers & caps', icon: KeyRound   },
-  { id: 'log',       label: 'Call log',         icon: ScrollText },
+  { id: 'overview',  label: 'Overview',             icon: LayoutDashboard },
+  { id: 'providers', label: 'Providers',            icon: KeyRound },
+  { id: 'models',    label: 'Models',               icon: Boxes },
+  { id: 'routing',   label: 'Routing & Fallbacks',  icon: Route },
+  { id: 'limits',    label: 'Limits',               icon: Gauge },
+  { id: 'log',       label: 'Logs',                 icon: ScrollText },
 ]
+// Links from before the tabs were reorganised.
+const LEGACY_SUBS = { tasks: 'routing' }
 
-const DESCRIPTION = 'Groq and OpenRouter behind one client. Each task has a route tried in order, daily caps and a versioned prompt; every call is logged. Keys stay on the server.'
+const DESCRIPTION = 'Every AI feature goes through here: any OpenAI-compatible provider, a model catalogue, a fallback chain per task with a global default behind it, daily, weekly and monthly limits, and a circuit breaker. Every call is logged; keys stay on the server.'
 
 export function AiGatewayTab() {
   const toast = useToast()
@@ -28,8 +37,8 @@ export function AiGatewayTab() {
   const [error, setError] = useState(null)
   const seq = useRef(0)
 
-  const rawSub = searchParams.get('sub')
-  const sub = SUBS.some(s => s.id === rawSub) ? rawSub : 'tasks'
+  const rawSub = LEGACY_SUBS[searchParams.get('sub')] || searchParams.get('sub')
+  const sub = SUBS.some(s => s.id === rawSub) ? rawSub : 'overview'
   const setSub = useCallback((id) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
@@ -133,7 +142,7 @@ export function AiGatewayTab() {
         )}
         {readyCount === 0 && (
           <Notice tone="error">
-            No provider is on with a usable key, so AI features can't answer. Set a key under Providers &amp; caps.
+            No provider is on with a usable key, so AI features can't answer. Set a key under Providers.
           </Notice>
         )}
       </section>
@@ -154,14 +163,20 @@ export function AiGatewayTab() {
         <SubTabBar tabs={SUBS} active={sub} onSelect={setSub} />
       </div>
 
-      {sub === 'tasks' && (
-        <AiGatewayTasks tasks={tasks} providers={providers} labels={labels} readOnly={readOnly} onChanged={reload} />
-      )}
+      {sub === 'overview' && <AiGatewayOverview data={data} onOpen={setSub} />}
       {sub === 'providers' && (
-        <AiGatewayProviders global={g} providers={providers} tasks={tasks} readOnly={readOnly} onChanged={reload} />
+        <AiGatewayProviders providers={providers} tasks={tasks} presets={data.presets || []} catalog={data.catalog || []}
+          limits={data.limits || []} usage={data.usage || {}} v2={Boolean(data.v2)} removedBuiltins={data.removed_builtins || []}
+          readOnly={readOnly} onChanged={reload} />
       )}
+      {sub === 'models' && (
+        <AiGatewayModels providers={providers} catalog={data.catalog || []} tasks={tasks} limits={data.limits || []}
+          v2={Boolean(data.v2)} readOnly={readOnly} onChanged={reload} />
+      )}
+      {sub === 'routing' && <AiGatewayRouting data={data} labels={labels} readOnly={readOnly} onChanged={reload} />}
+      {sub === 'limits' && <AiGatewayLimits data={data} readOnly={readOnly} onChanged={reload} />}
       {sub === 'log' && (
-        <AiGatewayLog day={data.day} tasks={tasks} providers={providers} labels={labels} />
+        <AiGatewayLog day={data.day} tasks={tasks} providers={providers} labels={labels} catalog={data.catalog || []} />
       )}
     </div>
   )
