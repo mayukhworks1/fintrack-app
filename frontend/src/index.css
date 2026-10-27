@@ -3315,6 +3315,7 @@ h1 { letter-spacing: -0.03em; }
 @keyframes ft-grow-y   { from { transform: scaleY(0) }                    to { transform: scaleY(1) } }
 @keyframes ft-grow-x   { from { transform: scaleX(0) }                    to { transform: scaleX(1) } }
 @keyframes ft-caret   { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
+.artifact-caret { color: #7aa2ff; animation: ft-caret 1s steps(1) infinite; }
 
 /* Clean ambient texture — structured and minimal without distracting grids/spotlights */
 .ft-dotgrid {

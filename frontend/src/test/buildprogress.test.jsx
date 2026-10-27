@@ -48,7 +48,7 @@ describe('BuildProgress', () => {
     render(<BuildProgress title="Building your artifact" draft={HEAD} thought="" elapsed={4} onCancel={() => {}} />)
     const bar = screen.getByRole('progressbar', { name: 'Build progress' })
     expect(bar.getAttribute('aria-valuetext')).toMatch(/Designing the look/)
-    expect(screen.getByText(/written · 1 lines/)).toBeTruthy()
+    expect(screen.getByText(/characters · 1 lines/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
     expect(api.pages.preview).not.toHaveBeenCalled()
   })
@@ -62,7 +62,29 @@ describe('BuildProgress', () => {
 
   it('says so when a build is taking longer than usual', () => {
     render(<BuildProgress title="Building your artifact" draft="" thought="Planning the layout" elapsed={75} onCancel={() => {}} />)
-    expect(screen.getByText(/Taking a little longer than usual/)).toBeTruthy()
+    expect(screen.getByText(/Taking longer than usual/)).toBeTruthy()
     expect(screen.getByText('Planning the layout')).toBeTruthy()
+  })
+})
+
+describe('activity feed', () => {
+  it('names what has been written so far', async () => {
+    const { deriveMilestones } = await import('../components/artifacts/BuildProgress')
+    const doc = HEAD + '<body><h1>Team tasks</h1><form><label for=t>Task</label><button>Add task</button></form>'
+      + "<script>const tasks = window.fintrack.db.collection('tasks'); function addTask(){} tasks.subscribe(render)</script></body></html>"
+    const text = deriveMilestones(doc).map(m => m.text)
+    expect(text).toEqual(expect.arrayContaining([
+      'Started the stylesheet', 'Header: “Team tasks”', 'Built the input form', 'Field: Task',
+      'Button: Add task', 'Wrote addTask()', 'Connected cloud data: “tasks”', 'Turned on live sync', 'Closed the document',
+    ]))
+  })
+
+  it('shows which model is working and what it is thinking before code arrives', () => {
+    render(<BuildProgress title="Building your artifact" draft="" thought="" elapsed={7}
+      activity={[{ at: Date.now(), text: 'Sent your request to gpt-oss-120b.' }]}
+      reasoning="The user wants assignees, so each task needs an owner field." onCancel={() => {}} />)
+    expect(screen.getByText('Sent your request to gpt-oss-120b.')).toBeTruthy()
+    expect(screen.getByText('Thinking')).toBeTruthy()
+    expect(screen.getByText(/each task needs an owner field/)).toBeTruthy()
   })
 })

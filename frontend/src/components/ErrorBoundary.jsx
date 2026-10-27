@@ -14,6 +14,18 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('FinTrack caught error:', error, info)
+    // A release replaced the chunk this tab asked for: reload once on our own,
+    // so the person lands on the new version instead of an error. A second
+    // failure within a minute shows the screen below rather than looping.
+    if (isChunkLoadError(error)) {
+      try {
+        const last = Number(sessionStorage.getItem('ft-chunk-reload') || 0)
+        if (Date.now() - last > 60_000) {
+          sessionStorage.setItem('ft-chunk-reload', String(Date.now()))
+          window.location.reload()
+        }
+      } catch { /* storage unavailable: the Reload button still works */ }
+    }
   }
 
   render() {

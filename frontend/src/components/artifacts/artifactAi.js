@@ -31,7 +31,7 @@ export function friendlyAiError(message, fallback = 'Generation failed. Try agai
  *
  * Resolves to { content, model, warnings }.
  */
-export async function streamArtifact({ prompt, existing, style, signal, onThought, onDelta, onEdit }) {
+export async function streamArtifact({ prompt, existing, style, signal, onThought, onDelta, onEdit, onStatus, onReasoning }) {
   const res = await api.pages.aiStream({
     prompt,
     content_type: ARTIFACT_TYPE,
@@ -55,6 +55,8 @@ export async function streamArtifact({ prompt, existing, style, signal, onThough
     if (frame.type === 'thought') onThought?.(frame.text || '', frame.mode)
     else if (frame.type === 'delta') { streamed += frame.delta || ''; onDelta?.(streamed) }
     else if (frame.type === 'edit') onEdit?.(frame)
+    else if (frame.type === 'status') onStatus?.(frame.text || '', frame.model)
+    else if (frame.type === 'reasoning') onReasoning?.(frame.delta || '')
     else if (frame.type === 'done') done = frame
     else if (frame.type === 'error') throw new Error(frame.message || 'Generation failed.')
   }

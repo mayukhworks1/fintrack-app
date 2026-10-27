@@ -164,6 +164,8 @@ export default function ArtifactStudio({
   const [thought, setThought] = useState('')
   const [draft, setDraft] = useState('')
   const [edits, setEdits] = useState([])
+  const [activity, setActivity] = useState([])
+  const [reasoning, setReasoning] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [err, setErr] = useState(null)           // { title, message, retry }
   const [note, setNote] = useState(null)         // { kind, text, warnings }
@@ -271,7 +273,7 @@ export default function ArtifactStudio({
     const p = (text || '').trim()
     if (!p || busy) return
     const editing = !!existing
-    setBusy(true); setErr(null); setNote(null); setDraft(''); setThought(''); setEdits([])
+    setBusy(true); setErr(null); setNote(null); setDraft(''); setThought(''); setEdits([]); setActivity([]); setReasoning('')
     setMode(editing ? 'edit' : 'create')
     setAnnounce(editing ? 'Making your changes. This usually takes under a minute.' : 'Building your artifact. This usually takes under a minute.')
     const controller = new AbortController()
@@ -285,6 +287,8 @@ export default function ArtifactStudio({
         onThought: (t) => setThought(t),
         onDelta: (s) => setDraft(s),
         onEdit: (f) => setEdits(list => [...list, f]),
+        onStatus: (text) => setActivity(list => [...list, { at: Date.now(), text }]),
+        onReasoning: (d) => setReasoning(r => (r + d).slice(-4000)),
       })
       apply(res.content, { kind: 'built', text: editing ? 'Your changes are in.' : 'Your artifact is ready.' })
       setNote({ kind: 'built', text: editing ? 'Your changes are in.' : 'Your artifact is ready.', warnings: res.warnings })
@@ -470,6 +474,8 @@ export default function ArtifactStudio({
       title={stepLabel}
       draft={draft}
       thought={thought}
+      activity={activity}
+      reasoning={reasoning}
       elapsed={elapsed}
       storeKey={storeKey}
       btnStyle={btn}
