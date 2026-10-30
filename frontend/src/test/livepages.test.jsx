@@ -102,6 +102,15 @@ vi.mock('../services/api', () => {
       summary:      ok(summary),
       list:         ok(list([invoiceRecord('i1'), invoiceRecord('i2', 'Paid')])),
       agingBuckets: ok({ buckets: [] }),
+      // GET /api/invoices/query: a page plus the scope and workspace totals.
+      query: ok({
+        data: {
+          records: [invoiceRecord('i1'), invoiceRecord('i2', 'Paid')], total: 2, next_cursor: null,
+          aggregates: { count: 2, raised: 4820000, with_tax: 5687600, collected: 3900000, outstanding: 920000, collection_rate: 80.9, paid_count: 1, pending_count: 1, active_count: 2, totals: {}, aging: {}, by_project: [], raised_months: [], cleared_months: [] },
+          workspace: { count: 2, raised: 4820000, with_tax: 5687600, collected: 3900000, outstanding: 920000, collection_rate: 80.9, totals: {}, aging: {}, by_status: { Paid: { count: 1, amount: 120000 }, Pending: { count: 1, amount: 120000 } }, by_project: [], raised_months: [], cleared_months: [], facets: { months: [] }, recent_projects: [], overdue_top: [] },
+        },
+        etag: '"t"',
+      }),
     }),
     webInvoices: ns({
       summary:      ok(summary),

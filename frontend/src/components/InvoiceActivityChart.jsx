@@ -60,7 +60,9 @@ const UID = 'iac2'
 // Accepts either:
 //   days={60}          → last N days ending today
 //   from="…" to="…"   → explicit date range
-export default function InvoiceActivityChart({ records = [], days = 60, from, to, className = '', avatarMap = {}, onInvoiceClick }) {
+// `baseline` is the amount raised before the range starts, when the caller
+// holds only the range's records; without it that is added up from `records`.
+export default function InvoiceActivityChart({ records = [], days = 60, from, to, baseline, className = '', avatarMap = {}, onInvoiceClick }) {
   const containerRef    = useRef(null)
   const svgRef          = useRef(null)
   const tooltipHovered  = useRef(false)
@@ -115,11 +117,11 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
         aging:     Number(f['Agening (Days)'] || 0),
       })
     }
-    let cum = 0
+    let cum = Number.isFinite(baseline) ? baseline : 0
     for (const r of records) {
       const f = r.fields || {}
       const dt = parseDate(f['Raised Date'])
-      if (dt && dt < start) cum += Number(f['Amount Raised'] || 0)
+      if (dt && dt < start && !Number.isFinite(baseline)) cum += Number(f['Amount Raised'] || 0)
     }
     const allDays = []
     for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
@@ -130,7 +132,7 @@ export default function InvoiceActivityChart({ records = [], days = 60, from, to
       allDays.push({ date: new Date(d), key, invoices, dayAmt, cum })
     }
     return allDays
-  }, [records, days, from, to])
+  }, [records, days, from, to, baseline])
 
   const maxCum    = Math.max(...data.map(d => d.cum),    1)
   const maxDayAmt = Math.max(...data.map(d => d.dayAmt), 1)

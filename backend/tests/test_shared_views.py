@@ -343,9 +343,15 @@ class TestLiveViewFilters:
         base = dict(INVOICE_FIELDS)
         ids = _live(public, "invoices", [
             {**base, "Description": "Pending milestone"},           # page searches Description
-            {**base, "Remark": "pending signoff"},                  # page does not search Remark …
-            {**base, "Payment Status": "Pending"},                  # … or Payment Status
+            {**base, "Remark": "pending signoff"},                  # … and Remark
+            {**base, "Payment Status": "Pending"},                  # … but not Payment Status
         ], search="pending")
+        assert ids == ["r0", "r1"]
+        # Every word has to match, each in any searched field.
+        ids = _live(public, "invoices", [
+            {**base, "Description": "Pending milestone", "Remark": "client signoff"},
+            {**base, "Description": "Pending milestone"},
+        ], search="pending signoff")
         assert ids == ["r0"]
 
     def test_invoice_advanced_rules_are_applied(self, public):

@@ -10,6 +10,7 @@ import httpx
 from ..utils.http import shared_client
 from ..config import settings
 from ..db.attribution import empty_actor
+from ..db.sync import fields_with_lmt
 from ..db import valkey as vk
 from ..utils.cache import cache
 from ..utils.sorting import cell_sort_key
@@ -70,6 +71,30 @@ logger = logging.getLogger("fintrack.invoices")
 def _bust_invoice_cache() -> None:
     """Invalidate every cached invoice entry after a write."""
     cache.bust(prefix="invoice:")
+
+
+async def _mirror_write_through(teable_id: str | None, fields: dict | None, *, deleted: bool = False) -> None:
+    """Apply a just-committed Teable write to invoices_mirror immediately.
+
+    The invoice list (GET /api/invoices/query) reads the mirror, which
+    otherwise catches up only through the webhook or the 30 s incremental
+    sync, so a save could be missing from the list the user lands back on.
+    Best-effort, as in web_invoice: Teable is the source of truth and the next
+    sync pass reconciles anything this misses.
+    """
+    pool = get_pool()
+    if not pool or not teable_id:
+        return
+    try:
+        if deleted:
+            await pool.execute("UPDATE invoices_mirror SET deleted_at = NOW() WHERE teable_id = $1", teable_id)
+            return
+        if fields is None:
+            return
+        from ..db.sync import upsert_record, _extract_invoice
+        await upsert_record(pool, "invoices", "invoices_mirror", teable_id, fields, _extract_invoice)
+    except Exception as exc:
+        logger.warning("invoice mirror write-through failed for %s (sync will reconcile): %s", teable_id, exc)
 
 
 class InvoiceService:
@@ -492,6 +517,7 @@ class InvoiceService:
             _bust_invoice_cache()
             data = res.json()
             created = data.get("records", [{}])[0]
+            await _mirror_write_through(created.get("id"), fields_with_lmt(created))
             if created.get("id"):
                 await self.touch_aging_for_record(
                     created["id"],
@@ -521,7 +547,9 @@ class InvoiceService:
                 safe_fields = sorted((body.get("record") or {}).get("fields", {}).keys())
                 raise RuntimeError(f"{_teable_error(res)}; fields={safe_fields}") from exc
             _bust_invoice_cache()
-            updated = _apply_runtime_invoice_derivatives(res.json())
+            raw = res.json()
+            await _mirror_write_through(record_id, fields_with_lmt(raw))
+            updated = _apply_runtime_invoice_derivatives(raw)
             await self.touch_aging_for_record(
                 record_id,
                 record_fields=updated.get("fields") or {},
@@ -537,6 +565,7 @@ class InvoiceService:
             res = await client.delete(url, headers=self._headers)
             res.raise_for_status()
             _bust_invoice_cache()
+            await _mirror_write_through(record_id, None, deleted=True)
 
     async def upload_attachment_to_field(
         self,

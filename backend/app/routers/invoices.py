@@ -4,14 +4,23 @@ GET endpoints: require any valid token (editor or viewer).
 POST / PATCH / DELETE: require editor token — viewers get 403.
 """
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Request
+from fastapi.responses import StreamingResponse
 from typing import Optional, Iterable
 from pydantic import BaseModel
+import csv
 import httpx
+import io
 import logging
 import re
-from datetime import date as _date
+from datetime import date as _date, datetime, timezone
+from ..db import postgres as _pg
 from ..models import InvoiceFieldsBase
+from ..services import invoice_query as iq
 from ..services.invoice import InvoiceService
+from ..services.invoice_query import InvoiceQuery, QueryError, build_query
+from ..services.shared_views import _js_string
+from ..utils.csv_safe import csv_safe_cell
+from ..utils.fast_json import json_response
 from ..services.openrouter import parse_invoice_document
 from ..db.attribution import record_user_attribution
 from ..db.valkey import rate_check
@@ -248,6 +257,176 @@ async def list_invoices(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Server-side list: search, filters, sort, paging, totals ──────────────────
+
+def _scope_params(
+    q:            Optional[str] = Query(None, max_length=200),
+    status:       Optional[str] = Query(None, max_length=255),
+    project:      Optional[str] = Query(None, max_length=255),
+    client:       Optional[str] = Query(None, max_length=255),
+    category:     Optional[str] = Query(None, max_length=255),
+    raised_by:    Optional[str] = Query(None, max_length=255),
+    billing:      Optional[str] = Query(None, max_length=20),
+    month:        Optional[str] = Query(None, max_length=7),
+    aging:        Optional[str] = Query(None, max_length=10),
+    date_field:   Optional[str] = Query(None, max_length=30),
+    date_from:    Optional[str] = Query(None, max_length=10),
+    date_to:      Optional[str] = Query(None, max_length=10),
+    overdue:      bool          = Query(False),
+    has_docs:     bool          = Query(False),
+    followup_due: bool          = Query(False),
+    conditions:   Optional[str] = Query(None, max_length=8000),
+    sort:         Optional[str] = Query(None, max_length=60),
+    order:        Optional[str] = Query(None, max_length=4),
+    tz:           int           = Query(0, ge=-900, le=900),
+) -> InvoiceQuery:
+    """The filters every invoice-list read takes, validated (400 on anything unknown)."""
+    try:
+        return build_query(
+            q=q, status=status, project=project, client=client, category=category, raised_by=raised_by,
+            billing=billing, month=month, aging=aging, date_field=date_field, date_from=date_from,
+            date_to=date_to, overdue=overdue, has_docs=has_docs, followup_due=followup_due,
+            conditions=conditions, sort=sort, order=order, tz=tz,
+        )
+    except QueryError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+async def _all_from_teable(scoped_email: Optional[str]) -> list[dict]:
+    try:
+        return list(await InvoiceService().get_all_invoices(raised_by=scoped_email))
+    except Exception as exc:
+        logger.warning("invoice query: Teable fallback failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Invoices are temporarily unavailable")
+
+
+@router.get("/query")
+async def query_invoices(
+    request:    Request,
+    qry:        InvoiceQuery  = Depends(_scope_params),
+    limit:      int           = Query(iq.DEFAULT_LIMIT, ge=1, le=iq.MAX_LIMIT),
+    cursor:     Optional[str] = Query(None, max_length=2000),
+    offset:     int           = Query(0, ge=0, le=1_000_000),
+    aggregates: bool          = Query(True),
+    _role:      str           = Depends(require_auth),
+    _perm:      str           = Depends(require_permission("module.invoices.view")),
+):
+    """One page of invoices for the current search and filters, plus totals.
+
+    `records` is the page (`limit`, default 50, at most 200) in `sort` /
+    `order`; pass `next_cursor` back as `cursor` for the next one (or use
+    `offset`). `total` counts every match. With `aggregates` (the default),
+    `aggregates` holds the totals of the whole filtered scope — the KPI
+    cards, project snapshot, aging bands, months and column totals — and
+    `workspace` the same for everything the caller may see, with the filter
+    options (`facets`) and the overdue list.
+
+    Answered from invoices_mirror with indexed SQL; from Teable through the
+    same rules when the mirror cannot answer. Carries an ETag: a poll with
+    If-None-Match gets a bodiless 304 when nothing changed.
+    """
+    try:
+        cur = iq.decode_cursor(qry, cursor) if cursor else None
+    except QueryError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    scoped_email = owner_scope_email(request)
+    now = datetime.now(timezone.utc)
+    result, source = None, "mirror"
+    pool = _pg.get_pool()
+    if pool is not None:
+        try:
+            result = await iq.query_mirror(pool, qry, scoped_email, limit=limit, cursor=cur, offset=offset,
+                                           aggregates=aggregates, now=now)
+        except Exception as exc:
+            logger.warning("invoice query via PG mirror failed, falling back to Teable: %s", exc)
+    if result is None:
+        source = "teable"
+        result = iq.query_records(await _all_from_teable(scoped_email), qry, scoped_email, limit=limit,
+                                  cursor=cur, offset=offset, aggregates=aggregates, now=now)
+    payload: dict = {
+        "records": [iq.public_record(r) for r in result["records"]],
+        "total": result["total"],
+        "next_cursor": iq.encode_cursor(qry, *result["next"]) if result["next"] else None,
+        "limit": limit,
+        "sort": qry.sort,
+        "order": qry.order,
+        "filtered": qry.filtered,
+        "source": source,
+    }
+    if aggregates:
+        payload["aggregates"] = result["aggregates"]
+        payload["workspace"] = result["workspace"]
+    return json_response(request, payload)
+
+
+# Columns of the CSV export, as the page's export has always written them.
+EXPORT_FIELDS = (
+    "Invoice Number", "Raised Date", "Project", "Client", "Category", "Payment Status",
+    "Raised By", "Milestone", "Currency", "Amount Raised", "Amount with Tax",
+    "Amount Received", "Outstanding Amount", "Cleared Date", "Remark",
+)
+
+
+def _export_cell(fields: dict, key: str) -> str:
+    value = (fields.get("Client Name") or fields.get("Client")) if key == "Client" else fields.get(key)
+    if value is None or isinstance(value, (list, dict)):
+        return ""
+    # Text that a spreadsheet would run as a formula gets a leading quote;
+    # numbers, negative ones included, stay numbers.
+    value = csv_safe_cell(value)
+    return value if isinstance(value, str) else _js_string(value)
+
+
+def _csv_lines(rows: list[list[str]]) -> str:
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="\n").writerows(rows)
+    return buf.getvalue()
+
+
+@router.get("/export")
+async def export_invoices(
+    request: Request,
+    qry:     InvoiceQuery = Depends(_scope_params),
+    _role:   str          = Depends(require_auth),
+    _perm:   str          = Depends(require_permission("module.invoices.view")),
+):
+    """Every invoice in the current search and filters as CSV, in list order.
+
+    Streams from the mirror a batch at a time, so the full filtered set is
+    exported whatever the page has loaded."""
+    scoped_email = owner_scope_email(request)
+    now = datetime.now(timezone.utc)
+    pool = _pg.get_pool()
+    batches = None
+    if pool is not None:
+        try:
+            probe = await iq.query_mirror(pool, qry, scoped_email, limit=1, cursor=None, offset=0,
+                                          aggregates=False, now=now)
+            if probe is not None:
+                batches = iq.iter_export(pool, qry, scoped_email, now)
+        except Exception as exc:
+            logger.warning("invoice export via PG mirror failed, falling back to Teable: %s", exc)
+    if batches is None:
+        records = iq.query_records(await _all_from_teable(scoped_email), qry, scoped_email,
+                                   limit=10_000_000, cursor=None, offset=0, aggregates=False, now=now)["records"]
+
+        async def _memory():
+            for i in range(0, len(records), iq.EXPORT_BATCH):
+                yield records[i:i + iq.EXPORT_BATCH]
+        batches = _memory()
+
+    async def body():
+        yield _csv_lines([list(EXPORT_FIELDS)])
+        async for batch in batches:
+            yield _csv_lines([[_export_cell(r.get("fields") or {}, k) for k in EXPORT_FIELDS] for r in batch])
+
+    name = f"invoices_{'filtered_' if qry.filtered else ''}{now.date().isoformat()}.csv"
+    return StreamingResponse(body(), media_type="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f'attachment; filename="{name}"',
+        "Cache-Control": "private, no-store",
+    })
 
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────

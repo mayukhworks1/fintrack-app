@@ -1563,6 +1563,99 @@ html.dark .theme-preview[data-palette="emerald"] {
     letter-spacing: 0;
   }
 
+  /* Search and filters stay at the top of the scrolling page. The bar keeps
+     its own card look; the strip behind it is the page background, so rows
+     scrolling underneath never show through the gaps. */
+  .invoice-sticky-filters {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    display: grid;
+    gap: 0.5rem;
+    margin-inline: -0.25rem;
+    padding: 0.5rem 0.25rem;
+    background: color-mix(in srgb, var(--bg-base) 92%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .invoice-sticky-filters .executive-filter-bar {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .invoice-sticky-filters .executive-filter-bar-toolbar > * {
+    min-height: 2.4rem;
+  }
+
+  .invoice-sticky-filters .filter-expanded-panel {
+    max-height: min(60vh, 30rem);
+    overflow-y: auto;
+  }
+
+  /* On a phone the bar keeps to two short lines: the search, then the
+     buttons and count; the chips scroll sideways instead of wrapping. */
+  @media (max-width: 640px) {
+    .invoice-sticky-filters {
+      gap: 0.35rem;
+      padding-block: 0.35rem;
+    }
+
+    .invoice-sticky-filters .executive-filter-bar {
+      padding: 0.4rem;
+      gap: 0.4rem;
+    }
+
+    .invoice-sticky-filters .executive-filter-bar-toolbar > * {
+      min-height: 2.2rem;
+    }
+
+    .invoice-sticky-filters .executive-search {
+      flex-basis: 100%;
+    }
+
+    .invoice-sticky-filters .invoice-active-filters {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .invoice-sticky-filters .invoice-filter-chip {
+      flex-shrink: 0;
+    }
+  }
+
+  .invoice-kpi-of-all {
+    margin-top: 0.3rem;
+    color: var(--text-3);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .invoice-results-anchor {
+    padding: 0.75rem;
+  }
+
+  .invoice-show-more {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--card-border);
+    color: var(--text-3);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .invoice-mobile-stack .invoice-show-more {
+    border: 1px solid var(--card-border);
+    border-radius: 1rem;
+    background: var(--card-bg);
+  }
+
   .invoice-runey-widgets {
     display: grid;
     grid-template-columns: minmax(18rem, 0.9fr) minmax(24rem, 1.1fr);
