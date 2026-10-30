@@ -145,7 +145,11 @@ class TestGenerateValidation:
 
     async def test_rejects_oversized_existing_document(self):
         with pytest.raises(ValueError, match="too large to revise"):
-            await generate_page("make it blue", existing="x" * 25000)
+            await generate_page("make it blue", existing="x" * 200_001)
+
+    async def test_a_built_app_is_not_too_large_to_revise(self):
+        from app.services import page_ai
+        assert page_ai.MAX_EXISTING_CHARS >= 120_000
 
 
 class TestTruncationDetection:

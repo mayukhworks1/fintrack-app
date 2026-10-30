@@ -61,7 +61,10 @@ def max_tokens_for(content_type: str) -> int:
 TEMPERATURE = 0.6
 
 MAX_PROMPT_CHARS = 4000
-MAX_EXISTING_CHARS = 24000
+# The whole document travels with a revision request. Built apps run to
+# 30-40k characters, so the cap leaves room for them; a model whose
+# per-request limit cannot take the document is skipped for the next one.
+MAX_EXISTING_CHARS = 200_000
 
 # The browser allows a page build, section edit or script fix 120 s
 # (services/api.js), so its route may run longer than the usual AI budget.
