@@ -635,6 +635,19 @@ async def _stream_post_with_retries(payload: dict, *, provider: gateway.Provider
     raise RuntimeError("Unreachable")
 
 
+def _size_refusal(error: str) -> bool:
+    e = error.lower()
+    return any(w in e for w in ("too large", "per-request token limit", "413"))
+
+
+def _too_large(error: str) -> bool:
+    """A step that failed only because the request was over the model's size
+    limit; a stalled free router alongside such steps counts the same, since
+    the request would have been too big for the models that refused it."""
+    e = error.lower()
+    return any(w in e for w in ("too large", "per-request token limit", "413", "no response in"))
+
+
 class _Cascade:
     """
     One walk down a task's route: which steps can be tried, what each attempt
@@ -723,6 +736,11 @@ class _Cascade:
     def give_up(self) -> NoReturn:
         if not self.contacted:
             gateway.refuse(self.task, gateway.no_provider_message(self.task))
+        if any(_size_refusal(e) for e in self.errors) and all(_too_large(e) for e in self.errors):
+            raise ValueError(
+                "This request is too big for every AI model set up for it. Add a model with a "
+                "larger limit (Google Gemini works well) in Admin → AI gateway → Providers, "
+                "then try again. Tried: " + "; ".join(self.errors))
         raise ValueError("All AI models are unavailable right now. Tried: " + "; ".join(self.errors))
 
 

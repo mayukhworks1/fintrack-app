@@ -1563,6 +1563,40 @@ def is_vision_model(p: ProviderState, model: str, entry: ModelEntry | None = Non
     return _vision_hint(model)
 
 
+# A model to try for a ready provider whose catalogue is still empty, so a
+# key that was just added already helps before any model is picked for it.
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4.1-mini",
+    "deepseek": "deepseek-chat",
+    "mistral": "mistral-small-latest",
+}
+MAX_LAST_RESORT = 4
+
+
+def _last_resort_steps(cfg: GatewayConfig, steps: list) -> list:
+    """
+    After the chain: models switched on in the catalogue of a ready provider
+    that the chain does not name, largest per-request limit first, then a
+    default model for a ready provider with an empty catalogue. A key added
+    in Admin -> AI gateway is used even before it is put into a chain.
+    """
+    seen = {(p.key, s["model"]) for p, s, _ in steps}
+    extras = []
+    for (pk, mid), entry in cfg.catalog.items():
+        p = cfg.providers.get(pk)
+        if p is None or not p.ready or not entry.enabled or (pk, mid) in seen:
+            continue
+        extras.append((p, {"provider": pk, "model": mid, "fallback": True}, entry))
+    extras.sort(key=lambda x: -(x[2].request_token_limit or x[2].context_window or 0))
+    with_models = {pk for pk, _m in cfg.catalog} | {p.key for p, _s, _e in steps}
+    for pk, p in cfg.providers.items():
+        model = DEFAULT_MODELS.get(p.preset or "")
+        if p.ready and model and pk not in with_models and (pk, model) not in seen:
+            extras.append((p, {"provider": pk, "model": model, "fallback": True}, None))
+    return extras[:MAX_LAST_RESORT]
+
+
 async def route_specs(task: str, *, vision: bool = False) -> list[RouteStep]:
     """
     The steps to try for `task`, in order. Every step whose provider is known
@@ -1578,6 +1612,7 @@ async def route_specs(task: str, *, vision: bool = False) -> list[RouteStep]:
         if p is None:
             continue
         steps.append((p, s, cfg.entry(p.key, s["model"])))
+    steps += _last_resort_steps(cfg, steps)
     if vision:
         steps = ([x for x in steps if is_vision_model(x[0], x[1]["model"], x[2])]
                  + [x for x in steps if not is_vision_model(x[0], x[1]["model"], x[2])])
