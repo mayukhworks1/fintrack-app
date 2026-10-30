@@ -5,6 +5,7 @@ Routes accept 'web' OR 'all' role (require_web_access).
 'all'  — invoice tracker + project tracker (APP_ALL_PASSWORD)
 """
 import httpx
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Request
 from typing import Optional
 from pydantic import BaseModel, field_validator
@@ -17,6 +18,11 @@ from ..utils.teable_errors import translate_teable_error
 from ..utils.uploads import read_upload, upload_limit
 from .deps import require_auth, require_web_access, owner_scope_email, require_permission, get_effective_permissions
 from .ai import _ai_quota
+from .invoices import _given, _scope_params, answer_query, export_response
+from ..services import invoice_query as iq
+from ..services.invoice_query import InvoiceQuery
+
+logger = logging.getLogger("fintrack.web_invoices")
 
 router = APIRouter(prefix="/api/web-invoices", tags=["web-invoices"])
 
@@ -255,6 +261,54 @@ async def list_web_invoices(
         # Teable unreachable — attempt PG mirror fallback for web invoices
         # (no formal mirror table for web invoices, so surface the error with a stale flag hint)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Server-side list: search, filters, sort, paging, totals ──────────────────
+# The invoice list's query, over web_invoices_mirror (the same generated
+# columns, migration 0010), with each currency's totals beside the RS ones.
+
+async def _web_all_from_teable(scoped_email: Optional[str]) -> list[dict]:
+    try:
+        return list(await WebInvoiceService().get_all_invoices(raised_by=scoped_email))
+    except Exception as exc:
+        logger.warning("web invoice query: Teable fallback failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Invoices are temporarily unavailable")
+
+
+@router.get("/query")
+async def query_web_invoices(
+    request:    Request,
+    qry:        InvoiceQuery  = Depends(_scope_params),
+    limit:      int           = Query(iq.DEFAULT_LIMIT, ge=1, le=iq.MAX_LIMIT),
+    cursor:     Optional[str] = Query(None, max_length=2000),
+    offset:     int           = Query(0, ge=0, le=1_000_000),
+    aggregates: bool          = Query(True),
+    _role:      str           = Depends(require_web_access),
+    _perm:      str           = Depends(require_permission("module.invoices.view")),
+):
+    """One page of web invoices plus the totals of the filtered scope and of
+    everything the caller may see — GET /api/invoices/query's contract, with
+    `by_currency` and each project's per-currency split in the totals."""
+    scoped_email = owner_scope_email(request)
+    return await answer_query(request, qry, src=iq.WEB_INVOICES, scoped_email=scoped_email,
+                              load_all=lambda: _web_all_from_teable(scoped_email), limit=limit, cursor=cursor,
+                              offset=offset, aggregates=aggregates)
+
+
+@router.get("/export")
+async def export_web_invoices(
+    request: Request,
+    qry:     InvoiceQuery  = Depends(_scope_params),
+    columns: Optional[str] = Query(None, max_length=10),
+    _role:   str           = Depends(require_web_access),
+    _perm:   str           = Depends(require_permission("module.invoices.view")),
+):
+    """Every web invoice in the current search and filters as CSV, in list order."""
+    scoped_email = owner_scope_email(request)
+    columns = _given(columns)
+    return await export_response(qry, src=iq.WEB_INVOICES, scoped_email=scoped_email,
+                                 load_all=lambda: _web_all_from_teable(scoped_email), columns=columns,
+                                 prefix="tax-ledger" if columns == "tax" else "invoices")
 
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────

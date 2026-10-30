@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-const { api, retainerRecord, toastFn } = vi.hoisted(() => {
+const { api, retainerRecord, toastFn, answer } = vi.hoisted(() => {
   // Last month's retainer invoice: the template, with this month "Missing".
   const d = new Date()
   const lastMonth = new Date(d.getFullYear(), d.getMonth() - 1, 15)
@@ -59,6 +59,14 @@ const { api, retainerRecord, toastFn } = vi.hoisted(() => {
     })
   }
   const ok = (v) => vi.fn().mockResolvedValue(v)
+  // An answer of GET /api/{web-,}invoices/query with these records.
+  const answer = (records) => ({
+    data: {
+      records, total: records.length, next_cursor: null,
+      aggregates: { count: records.length, raised: 50000, totals: {}, aging: {}, by_project: [], raised_months: [], cleared_months: [], by_currency: {}, by_status: {} },
+      workspace: { count: records.length, raised: 50000, totals: {}, aging: {}, by_status: { Paid: { count: 1, amount: 50000 } }, by_project: [], raised_months: [], cleared_months: [], facets: { months: [] }, recent_projects: [], overdue_top: [], by_currency: {} },
+    },
+  })
   const summary = { total_raised: 50000, total_received: 59000, total_outstanding: 0, collection_rate: 100, by_status: { Paid: 1 } }
   const api = ns({
     invoices: ns({
@@ -86,10 +94,13 @@ const { api, retainerRecord, toastFn } = vi.hoisted(() => {
       avatarMap: ok({}),
       picklists: ns({ get: ok({}) }),
       create: ok({ id: 'recWebPaused' }),
+      // The Web Invoices page reads GET /api/web-invoices/query.
+      query: vi.fn().mockResolvedValue(answer([retainerRecord])),
+      exportCsv: ok({ blob: new Blob(['Invoice Number\n']), filename: 'invoices_2026-10-30.csv' }),
     }),
   })
   const toastFn = Object.assign(vi.fn(), { showToast: vi.fn() })
-  return { api, retainerRecord, toastFn }
+  return { api, retainerRecord, toastFn, answer }
 })
 
 vi.mock('../services/api', () => ({
@@ -121,9 +132,11 @@ vi.mock('../context/ConfirmContext', () => ({
 import Invoices from '../pages/Invoices'
 import WebInvoices from '../pages/WebInvoices'
 import TaxLedger from '../pages/TaxLedger'
+import { resetServerListCache } from '../hooks/useServerList'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetServerListCache()
   vi.stubGlobal('IntersectionObserver', class {
     constructor(cb) { this.cb = cb }
     observe(el) { this.cb([{ isIntersecting: true, target: el }]) }
@@ -187,13 +200,14 @@ describe('Print views', () => {
   const hostile = { ...retainerRecord, id: 'recHostile', fields: { ...retainerRecord.fields, 'Project': HOSTILE, 'Client Name': HOSTILE, 'Invoice Number': '<b>INV-9</b>' } }
 
   it.each([
-    ['WebInvoices', WebInvoices, '/?tab=invoices', () => api.webInvoices.list, 'Print invoice list'],
-    ['TaxLedger', TaxLedger, '/', () => api.invoices.list, /^Print$/],
+    ['WebInvoices', WebInvoices, '/?tab=invoices', () => api.webInvoices.query, 'Print invoice list'],
+    ['TaxLedger', TaxLedger, '/', () => api.invoices.query, /^Print$/],
   ])('%s escapes record text in the printed HTML', async (name, Page, url, list, button) => {
     const written = []
     const win = { document: { write: (h) => written.push(h), close: vi.fn() }, focus: vi.fn(), print: vi.fn(), close: vi.fn() }
     vi.stubGlobal('open', vi.fn(() => win))
-    list().mockResolvedValue({ records: [hostile], total: 1 })
+    const before = list().getMockImplementation()
+    list().mockResolvedValue(answer([hostile]))
     try {
       render(<MemoryRouter initialEntries={[url]}><Page /></MemoryRouter>)
       const btn = typeof button === 'string'
@@ -209,7 +223,7 @@ describe('Print views', () => {
       expect(html).not.toContain('<img')
       expect(html).not.toContain('<b>INV-9')
     } finally {
-      list().mockResolvedValue({ records: [retainerRecord], total: 1 })
+      list().mockImplementation(before)
     }
   })
 })

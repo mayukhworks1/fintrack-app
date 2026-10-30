@@ -1593,6 +1593,11 @@ html.dark .theme-preview[data-palette="emerald"] {
     overflow-y: auto;
   }
 
+  /* A grid item would otherwise refuse to shrink below its widest row. */
+  .invoice-sticky-filters > * {
+    min-width: 0;
+  }
+
   /* On a phone the bar keeps to two short lines: the search, then the
      buttons and count; the chips scroll sideways instead of wrapping. */
   @media (max-width: 640px) {
@@ -1612,6 +1617,10 @@ html.dark .theme-preview[data-palette="emerald"] {
 
     .invoice-sticky-filters .executive-search {
       flex-basis: 100%;
+    }
+
+    .invoice-sticky-filters .filter-expanded-panel {
+      max-height: 45vh;
     }
 
     .invoice-sticky-filters .invoice-active-filters {

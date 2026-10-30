@@ -24,7 +24,9 @@ export function AgingBadge({ days, status }) {
   )
 }
 
-export function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
+// `ofAll`: while a search or filter narrows the cards, the same figure for
+// every invoice, as a quiet line underneath.
+export function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0, ofAll }) {
   const palette = KPI_PALETTE[tone % KPI_PALETTE.length]
   const color = semantic === 'positive' ? 'var(--fin-positive)' : semantic === 'warning' ? 'var(--fin-warning)' : semantic === 'negative' ? 'var(--fin-negative)' : 'var(--text-1)'
   return (
@@ -42,6 +44,7 @@ export function KpiCard({ label, value, sub, icon: Icon, semantic, tone = 0 }) {
         </p>
         <p className="text-[11px] mt-1 leading-tight" style={{ color: 'var(--text-3)' }}>{label}</p>
         {sub && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+        {ofAll && <p className="invoice-kpi-of-all">{ofAll}</p>}
       </div>
     </div>
   )

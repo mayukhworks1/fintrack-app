@@ -378,6 +378,9 @@ export const api = {
     search:  (q, limit = 20) => request(`/api/projects/search?q=${encodeURIComponent(q)}&limit=${limit}`, { fresh: true, cacheTtl: 0 }),
     summary: (opts = {})         => request('/api/projects/summary', { fresh: true, cacheTtl: 0, ...opts }),
     names:   (opts = {})         => request('/api/projects/names', { fresh: true, cacheTtl: 0, ...opts }),
+    // Server-side list: one page plus the totals of the filtered scope and the
+    // whole portfolio. With the ETag of the copy held, an unchanged answer is a 304.
+    query: (params = {}, { etag, signal } = {}) => conditionalGet(`/api/projects/query?${queryString(params)}`, etag, signal),
   },
   ai: {
     chatStream: async (message, history = [], opts = {}) => {
@@ -556,6 +559,9 @@ export const api = {
       Object.entries(queryParams).forEach(([k, v]) => v != null && v !== '' && q.set(k, v))
       return request(`/api/web-invoices?${q}`, { fresh, cacheTtl })
     },
+    // Server-side list, as api.invoices.query, with totals per currency.
+    query: (params = {}, { etag, signal } = {}) => conditionalGet(`/api/web-invoices/query?${queryString(params)}`, etag, signal),
+    exportCsv: (params = {}) => requestBlob(`/api/web-invoices/export?${queryString(params)}`, { timeout: 120_000 }),
     summary:  (opts = {})          => request('/api/web-invoices/summary', opts),
     create:   async (data) => {
       const result = await request('/api/web-invoices', { method: 'POST', body: JSON.stringify(data) })

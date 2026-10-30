@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, useEffect, useMemo, useDeferredValue, Fragment } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Filter, AlertOctagon, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, Receipt, Briefcase, Repeat2, Users, BookOpen, LayoutDashboard, Activity, ArrowRight, ShieldAlert, Download, WifiOff, Printer } from 'lucide-react'
 import { api } from '../services/api'
 import AgingRunway from '../components/AgingRunway'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { useChangeCount } from '../hooks/useServerList'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { useRecordMotion } from '../hooks/useRecordMotion'
 
@@ -15,10 +15,10 @@ import { ProjectsWorkspace } from './WebProjects'
 import TaxLedger from './TaxLedger'
 import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
-import { FilterBuilder, applyConditions } from '../components/FilterBuilder'
+import { FilterBuilder } from '../components/FilterBuilder'
+import { activeConditions as activeRules, invoiceQueryParams, useInvoiceFilters, useWebInvoiceQuery, webInvoiceList } from './invoices/useInvoiceQuery'
 
 import clsx from 'clsx'
-import { csvCell } from '../utils/csv'
 import { downloadBlob } from '../utils/download'
 import { escapeHtml } from '../utils/sanitize'
 import EmptyState from '../components/EmptyState'
@@ -36,6 +36,32 @@ import { tint } from '../utils/color'
 
 /* ── Constants ── */
 // All picklist options are loaded live from Teable — no hardcoded fallbacks
+const CHART_PRESET_DAYS = { '30d': 30, '60d': 60, '3m': 90, '6m': 180, '1y': 365, custom: null }
+const PRINT_MAX_ROWS = 2000
+const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** GET /api/web-invoices/query totals in the shape the old /summary had:
+ *  RS-primary figures, counts by status, per-currency and per-project maps. */
+function webSummary(x) {
+  if (!x) return null
+  const rs = x.by_currency?.RS
+  return {
+    total_raised: rs?.raised || 0,
+    total_with_tax: rs?.with_tax || 0,
+    total_gst: rs?.gst || 0,
+    total_tds: rs?.tds || 0,
+    total_received: rs?.received || 0,
+    total_outstanding: rs?.outstanding || 0,
+    collection_rate: rs?.collection_rate || 0,
+    total_invoices: x.count || 0,
+    active_invoices: x.active_count || 0,
+    overdue_count: x.overdue_count || 0,
+    by_status: Object.fromEntries(Object.entries(x.by_status || {}).map(([k, v]) => [k, v.count])),
+    by_currency: x.by_currency || {},
+    by_project: Object.fromEntries((x.by_project || []).map(p => [p.project, p])),
+  }
+}
+
 export default function WebInvoices() {
   const confirm = useConfirm()
   const toast = useToast()
@@ -51,11 +77,7 @@ export default function WebInvoices() {
   const { dark } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // URL-synced filters — bookmark-able and shareable
   const initialWorkspace = searchParams.get('tab') || 'dashboard'
-  const initialStatus    = searchParams.get('status') || ''
-  const initialProject   = searchParams.get('project') || ''
-  const initialSearch    = searchParams.get('q') || ''
 
   const updateUrlParam = useCallback((key, value) => {
     setSearchParams(prev => {
@@ -74,39 +96,52 @@ export default function WebInvoices() {
   // ── Invoice-workspace-only filters ────────────────────────────────────────
   // These ONLY apply inside the 'invoices' workspace. Dashboard, retainers,
   // and projects are completely isolated — they never read these values.
-  const [statusFilter,   setStatusFilter]   = useState(initialStatus)
-  const [projectFilter,  setProjectFilter]  = useState(initialProject)
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [raisedByFilter, setRaisedByFilter] = useState('')
-  const [billingFilter,  setBillingFilter]  = useState('all')
-  const [monthFilter,    setMonthFilter]    = useState('')
-  const [agingBandFilter,setAgingBandFilter]= useState('')
-  const [dateFieldFilter,setDateFieldFilter]= useState('Raised Date')
-  const [dateFrom,       setDateFrom]       = useState('')
-  const [dateTo,         setDateTo]         = useState('')
+  // Search, filters, sort and loaded pages live in the URL while the
+  // invoices workspace is open, so a link reopens the same view.
+  const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch, clearAll } = useInvoiceFilters()
+  const {
+    status: statusFilter, project: projectFilter, category: categoryFilter, raisedBy: raisedByFilter,
+    billing: billingFilter, month: monthFilter, aging: agingBandFilter, dateField: dateFieldFilter,
+    dateFrom, dateTo, overdue: overdueOnly, hasDocs: hasDocsOnly, followupDue: followupDueOnly,
+    conditions: filterConditions, sort: sortCol, order: sortDir,
+  } = filters
+  const search = filters.q
+  const {
+    setStatusFilter, setProjectFilter, setCategoryFilter, setRaisedByFilter, setBillingFilter, setMonthFilter,
+    setAgingBandFilter, setDateFieldFilter, setDateFrom, setDateTo, setOverdueOnly, setHasDocsOnly,
+    setFollowupDueOnly, setFilterConditions,
+  } = useMemo(() => {
+    const make = (key, opts) => (value) => setFilters(prev => ({
+      [key]: typeof value === 'function' ? value(prev[key]) : value,
+    }), opts)
+    return {
+      setStatusFilter: make('status'), setProjectFilter: make('project'), setCategoryFilter: make('category'),
+      setRaisedByFilter: make('raisedBy'), setBillingFilter: make('billing'), setMonthFilter: make('month'),
+      setAgingBandFilter: make('aging'), setDateFieldFilter: make('dateField'), setDateFrom: make('dateFrom'),
+      setDateTo: make('dateTo'), setOverdueOnly: make('overdue'), setHasDocsOnly: make('hasDocs'),
+      setFollowupDueOnly: make('followupDue'),
+      // Rules are edited a keystroke at a time; one history entry, not one per key.
+      setFilterConditions: make('conditions', { replace: true }),
+    }
+  }, [setFilters])
+  const setSearch = useCallback((q) => { setSearchInput(q); setFilters({ q: q.trim() }, { replace: true }) }, [setFilters, setSearchInput])
   const [retainerMonth,  setRetainerMonth]  = useState(currentMonthKey())
-  const [search,         setSearch]         = useState(initialSearch)
-  const [overdueOnly,    setOverdueOnly]    = useState(false)
-  const [hasDocsOnly,    setHasDocsOnly]    = useState(false)
-  const [followupDueOnly,setFollowupDueOnly]= useState(false)
-  const [showFilters,    setShowFilters]    = useState(true)
+  // Open by default, except on a phone, where the bar stays in view and an
+  // open panel would cover the list.
+  const [showFilters,    setShowFilters]    = useState(() => {
+    try { return !window.matchMedia('(max-width: 640px)').matches } catch { return true }
+  })
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [filterConditions, setFilterConditions] = useState([])
-  const [sortCol,        setSortCol]        = useState('Raised Date')
-  const [sortDir,        setSortDir]        = useState('desc')
 
   // switchWorkspace: clears invoice-list filters when moving AWAY from invoices
   // so switching back starts fresh, and drilldowns from dashboard explicitly set what they need.
   const switchWorkspace = useCallback((next) => {
     if (next !== 'invoices') {
-      setStatusFilter(''); setProjectFilter(''); setCategoryFilter('')
-      setRaisedByFilter(''); setBillingFilter('all'); setMonthFilter('')
-      setAgingBandFilter(''); setDateFrom(''); setDateTo(''); setSearch('')
-      setOverdueOnly(false); setHasDocsOnly(false); setFollowupDueOnly(false)
-      setFilterConditions([]); setSortCol('Raised Date'); setSortDir('desc')
+      clearAll()
+      setFilters({ sort: 'Raised Date', order: 'desc' })
     }
     setWorkspace(next)
-  }, [])
+  }, [clearAll, setFilters])
   const [drawer,         setDrawer]         = useState(null)
   const [drawerKey,      setDrawerKey]      = useState(0)
   const [picklists,      setPicklists]      = useState(DEFAULT_PICKLISTS)
@@ -114,7 +149,6 @@ export default function WebInvoices() {
   const [picklistPermissionMsg, setPicklistPermissionMsg] = useState('')
   const [retainerActionBusy, setRetainerActionBusy] = useState('')
   const [previewDocs, setPreviewDocs] = useState(null)
-  const deferredSearch = useDeferredValue(search)
 
   useEffect(() => {
     // Load ALL picklist fields (Project, Category, Milestone, Raised By, Currency)
@@ -149,8 +183,8 @@ export default function WebInvoices() {
   const [balanceMonths, setBalanceMonths] = useState(3)
   const hoverTimerRef = useRef(null)
 
-  // Only persist the active tab in the URL — filter state is session-only
-  // (persisting filters caused stale filters to bleed across workspaces on reload)
+  // Only the active tab is written by the page itself; the invoice filters
+  // are cleared whenever the invoices workspace is left.
   useEffect(() => { updateUrlParam('tab', workspace === 'dashboard' ? '' : workspace) }, [workspace])
 
   useEffect(() => {
@@ -161,47 +195,24 @@ export default function WebInvoices() {
     api.webInvoices.avatarMap().then(setAvatarMap).catch(() => {})
   }, [])
 
-  const fetchSummary = useCallback((opts = {}) => api.webInvoices.summary(opts), [])
-  const { data: summary, loading: sumLoading, changeCount: summaryChanges } = useAutoRefresh(fetchSummary, 10_000)
+  /* ── The list, its totals and the workspace's, from the server ──
+   * One request per scope: a page of rows, the totals of everything the
+   * search and filters match (`agg`) and of every invoice the user may see
+   * (`ws`), each per currency. The projects and tax workspaces do not need it. */
+  const listWanted = workspace === 'dashboard' || workspace === 'invoices' || workspace === 'retainers'
+  const {
+    records, total: scopeTotal, nextCursor, aggregates: agg, workspace: ws, hasData,
+    loading: firstLoad, refreshing: syncing, loadingMore, error, errorStatus, loadMore, refresh: refreshList,
+    patchRecord, removeRecord,
+  } = useWebInvoiceQuery(filters, { pages, onPagesChange: setPages, enabled: listWanted })
+  const loading = syncing
+  const listData = hasData ? true : null
+  const isStaleData = !!error && hasData
+  const summaryChanges = useChangeCount(ws ? [ws.raised, ws.collected, ws.outstanding, ws.count] : null)
+  const sumLoading = !hasData
+  const allCount = ws?.count ?? 0
 
-  const fetchRecords = useCallback((opts = {}) =>
-    api.webInvoices.list({
-      // overdueOnly is purely a client-side filter — never pass status='Pending'
-      // server-side or it silently drops invoices with Outstanding > 0 but non-Pending status.
-      status:   statusFilter || undefined,
-      project:  projectFilter || undefined,
-      limit:    500,
-      order_by: sortCol,
-      order:    sortDir,
-      ...opts,
-    }), [statusFilter, projectFilter, sortCol, sortDir])
-
-  const { data: listData, loading, error, errorStatus, refresh, syncing } = useAutoRefresh(fetchRecords, 10_000)
-  const isStaleData = listData?._stale === true
-  const [recordsState, setRecordsState] = useState([])
-  // The dependency is `listData?.records`, not a `|| []` fallback hoisted into
-  // a variable. The fallback builds a fresh array on every render, so the
-  // effect saw a new dependency each time, set state, and re-rendered — an
-  // infinite render loop for as long as listData was undefined. That is every
-  // initial load until the first fetch resolves, and forever if it fails.
-  useEffect(() => {
-    setRecordsState(listData?.records || [])
-  }, [listData?.records])
-  const allRecords = recordsState
-
-  const monthOptions = useMemo(() => (
-    [...new Set(
-      allRecords
-        .map(r => monthKey(r.fields?.['Raised Date']))
-        .filter(Boolean)
-    )].sort().reverse()
-  ), [allRecords])
-
-  const retainerMonthOptions = useMemo(() => (
-    [...new Set([currentMonthKey(), ...monthOptions])].sort().reverse()
-  ), [monthOptions])
-
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const monthOptions = useMemo(() => ws?.facets?.months || [], [ws])
 
   // Compute effective aging — only meaningful for Pending invoices
   function effectiveAging(f) {
@@ -213,53 +224,12 @@ export default function WebInvoices() {
     return Math.floor((Date.now() - raised.getTime()) / 86_400_000)
   }
 
-  const baseRecords = allRecords.filter(r => {
-    const f = r.fields || {}
-    const retainer = isRetainerCategory(f['Category'])
-    if (billingFilter === 'retainer' && !retainer) return false
-    if (billingFilter === 'project' && retainer) return false
-    if (categoryFilter && f['Category'] !== categoryFilter) return false
-    if (raisedByFilter && f['Raised By'] !== raisedByFilter) return false
-    if (monthFilter && monthKey(f['Raised Date']) !== monthFilter) return false
-    if (dateFrom || dateTo) {
-      const candidate = dateOnlyValue(f[dateFieldFilter])
-      if (!candidate) return false
-      if (dateFrom && candidate < dateFrom) return false
-      if (dateTo && candidate > dateTo) return false
-    }
-    // "Overdue only" = Pending status OR has an outstanding balance
-    if (overdueOnly && !(f['Payment Status'] === 'Pending' || Number(f['Outstanding Amount'] || 0) > 0)) return false
-    if (followupDueOnly) {
-      const raw = f['Next followup']
-      if (!raw) return false
-      if (String(raw).slice(0, 10) > todayIso) return false
-    }
-    if (hasDocsOnly) {
-      const refs = parseAttachments(f['Reference'])
-      const pdfs = parseAttachments(f['Invoice PDF'])
-      if (refs.length + pdfs.length === 0) return false
-    }
-    if (agingBandFilter) {
-      if (f['Payment Status'] !== 'Pending') return false
-      if (classifyAgingBand(effectiveAging(f)) !== agingBandFilter) return false
-    }
-    if (deferredSearch.trim()) {
-      const q = deferredSearch.toLowerCase()
-      return (
-        (f['Invoice Number'] || '').toLowerCase().includes(q) ||
-        (f['Project']        || '').toLowerCase().includes(q) ||
-        (f['Description']    || '').toLowerCase().includes(q) ||
-        (f['Category']       || '').toLowerCase().includes(q) ||
-        (f['Milestone']      || '').toLowerCase().includes(q)
-      )
-    }
-    return true
-  })
-  const records = applyConditions(baseRecords, filterConditions, r => r.fields ?? {})
-  // Fed the full server set, not the filtered view: an invoice that arrives is
-  // news whatever the reader has filtered to, and a filter change then cannot
-  // masquerade as rows arriving.
-  const rowMotion = useRecordMotion(allRecords, {
+  const retainerMonthOptions = useMemo(() => (
+    [...new Set([currentMonthKey(), ...monthOptions])].sort().reverse()
+  ), [monthOptions])
+
+  // Which rows a poll brought in or altered.
+  const rowMotion = useRecordMotion(records, {
     watch: r => `${r.fields?.['Payment Status'] || ''}|${r.fields?.['Outstanding Amount'] || ''}|${r.fields?.['Amount'] || ''}`,
   })
 
@@ -268,38 +238,46 @@ export default function WebInvoices() {
   // its own Currency, so a single summed figure across a mixed view would be
   // meaningless. Grouping keeps it honest: one currency gives one line, a mixed
   // view lists each. Outstanding is clamped per row to match its cell, which
-  // shows an em dash for anything not positive.
-  const currencyTotals = useMemo(() => {
-    const byCurrency = new Map()
-    for (const r of records) {
-      const f = r.fields || {}
-      const cur = f['Currency'] || 'RS'
-      const t = byCurrency.get(cur) || { currency: cur, count: 0, raised: 0, withTax: 0, received: 0, outstanding: 0 }
-      t.count       += 1
-      t.raised      += Number(f['Amount Raised']   || 0)
-      t.withTax     += Number(f['Amount with Tax'] || 0)
-      t.received    += Number(f['Amount Received'] || 0)
-      t.outstanding += Math.max(0, Number(f['Outstanding Amount'] || 0))
-      byCurrency.set(cur, t)
-    }
-    return [...byCurrency.values()].sort((a, b) => b.count - a.count)
-  }, [records])
+  // shows an em dash for anything not positive. The server sums the whole
+  // filtered scope, not just the rows loaded.
+  const currencyTotals = useMemo(() => Object.entries(agg?.by_currency || {}).map(([cur, t]) => ({
+    currency: cur, count: t.count, raised: t.totals?.amount_raised || 0, withTax: t.totals?.amount_with_tax || 0,
+    received: t.totals?.amount_received || 0, outstanding: t.totals?.outstanding || 0,
+  })).sort((a, b) => b.count - a.count), [agg])
 
-  const s        = summary
-  const overdue  = s?.overdue_invoices || []
-  const activeConditions = filterConditions.filter(c => c.field && c.op && (c.value !== '' || ['is_empty','is_not_empty'].includes(c.op)))
+  // The cards follow the search and filters (`sc`); `s` is every invoice.
+  const s        = useMemo(() => webSummary(ws), [ws])
+  const sc       = useMemo(() => webSummary(agg), [agg])
+  const overdue  = useMemo(() => (ws?.overdue_top || []).filter(inv => inv.aging > 30), [ws])
+  const overdueCount = s?.overdue_count || 0
+  const activeConditions = activeRules(filterConditions)
   const hasFilters = statusFilter || projectFilter || categoryFilter || raisedByFilter || billingFilter !== 'all' || monthFilter || agingBandFilter || dateFrom || dateTo || overdueOnly || hasDocsOnly || followupDueOnly || search || activeConditions.length > 0
+  // Under each card while the view is narrowed: the figure for every invoice.
+  const ofAll = (value) => (hasFilters && s && value != null ? `of ${fmt(value)} across all ${allCount}` : null)
+
   const projectSummaryCards = useMemo(() => {
-    const entries = Object.entries(s?.by_project || {})
+    const entries = Object.entries(sc?.by_project || {})
       // Sort by total invoice count (universal — not RS-only raised)
       .sort(([, a], [, b]) => (b?.count || 0) - (a?.count || 0))
       .slice(0, 8)
     return entries.map(([project, metrics]) => ({ project, metrics }))
-  }, [s])
+  }, [sc])
+
+  /* ── Retainer records: fetched for the dashboard and the Retainers workspace ── */
+  const [retainerRecords, setRetainerRecords] = useState([])
+  const loadRetainers = useCallback(async () => {
+    try {
+      const data = await webInvoiceList.fetchOnce({ billing: 'retainer', limit: 200, aggregates: '0' })
+      if (data?.records) setRetainerRecords(data.records)
+    } catch { /* the workspace shows its empty state */ }
+  }, [])
+  useEffect(() => {
+    if (workspace === 'retainers' || workspace === 'dashboard') loadRetainers()
+  }, [workspace, loadRetainers, summaryChanges])
 
   const retainerGroups = useMemo(
-    () => buildRetainerGroups(allRecords, retainerMonth),
-    [allRecords, retainerMonth],
+    () => buildRetainerGroups(retainerRecords, retainerMonth),
+    [retainerRecords, retainerMonth],
   )
 
   useEffect(() => {
@@ -325,21 +303,22 @@ export default function WebInvoices() {
     glow: 'var(--card-shadow)',
   }), [])
 
-  const visibleClientCount = useMemo(() => (
-    new Set(records.map(r => String(r.fields?.['Project'] || '').trim()).filter(Boolean)).size
-  ), [records])
+  const visibleClientCount = agg?.project_count || 0
 
-  const upcomingFollowups = useMemo(() => (
-    [...records]
-      .filter(r => r.fields?.['Next followup'])
-      .sort((a, b) => {
-        const da = parseIsoDate(a.fields?.['Next followup'])?.getTime() || 0
-        const db = parseIsoDate(b.fields?.['Next followup'])?.getTime() || 0
-        return da - db
+  /* ── Dashboard: the next follow-ups, oldest first, across every invoice ── */
+  const [upcomingFollowups, setUpcomingFollowups] = useState([])
+  useEffect(() => {
+    if (workspace !== 'dashboard') return undefined
+    let cancelled = false
+    webInvoiceList.fetchOnce({ sort: 'Next followup', order: 'asc', limit: 5, aggregates: '0' })
+      .then((data) => {
+        if (!cancelled && data) setUpcomingFollowups((data.records || []).filter(r => r.fields?.['Next followup']))
       })
-      .slice(0, 5)
-  ), [records])
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [workspace, summaryChanges])
 
+  // The list's own order is newest raised first, so its first rows are the latest.
   const latestInvoices = useMemo(() => sortByRaisedDateDesc(records).slice(0, 6), [records])
   const topOutstandingProject = useMemo(() => {
     return projectSummaryCards
@@ -368,30 +347,8 @@ export default function WebInvoices() {
   }, [s])
   // Dashboard overview widgets always use the full unfiltered set so search/status
   // filters active in the invoice list view don't blank out the dashboard.
-  const raisedTimeline = useMemo(() => {
-    const buckets = new Map()
-    for (const record of allRecords) {
-      const key = monthKey(record.fields?.['Raised Date'])
-      if (!key) continue
-      const current = buckets.get(key) || { key, count: 0, amount: 0 }
-      current.count += 1
-      current.amount += Number(record.fields?.['Amount Raised'] || 0)
-      buckets.set(key, current)
-    }
-    return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
-  }, [allRecords])
-  const clearedTimeline = useMemo(() => {
-    const buckets = new Map()
-    for (const record of allRecords) {
-      const key = monthKey(record.fields?.['Cleared Date'])
-      if (!key) continue
-      const current = buckets.get(key) || { key, count: 0, amount: 0 }
-      current.count += 1
-      current.amount += Number(record.fields?.['Amount Received'] || record.fields?.['Amount Raised'] || 0)
-      buckets.set(key, current)
-    }
-    return [...buckets.values()].sort((a, b) => b.key.localeCompare(a.key)).slice(0, 6)
-  }, [allRecords])
+  const raisedTimeline = useMemo(() => (ws?.raised_months || []).slice(0, 6), [ws])
+  const clearedTimeline = useMemo(() => (ws?.cleared_months || []).slice(0, 6), [ws])
   // Counts AND amounts. The panel used to show counts alone, which answers the
   // wrong question: ten small invoices at 90 days matter less than one large
   // one, and a count cannot tell you which you have.
@@ -403,68 +360,89 @@ export default function WebInvoices() {
   // dashboard — it counts TDS on paid invoices as money still owed.
   //
   // Band keys are unchanged: agingBandFilter matches on these exact labels.
-  const dashboardAgingBuckets = useMemo(() => {
-    const buckets = {
-      '0-14d':  { count: 0, amount: 0 },
-      '15-30d': { count: 0, amount: 0 },
-      '31-60d': { count: 0, amount: 0 },
-      '60d+':   { count: 0, amount: 0 },
-    }
-    for (const record of allRecords) {
-      const f = record.fields || {}
-      if (f['Payment Status'] !== 'Pending') continue
-      const band = buckets[classifyAgingBand(effectiveAging(f))]
-      if (!band) continue
-      band.count += 1
-      band.amount += Number(f['Amount Raised'] || 0)
-    }
-    return buckets
-  }, [allRecords])
+  const dashboardAgingBuckets = useMemo(() => Object.fromEntries(
+    ['0-14d', '15-30d', '31-60d', '60d+'].map(band => [band, {
+      count: ws?.aging?.[band]?.count || 0, amount: ws?.aging?.[band]?.amount || 0,
+    }]),
+  ), [ws])
 
   const agingRunwayRows = useMemo(
     () => Object.entries(dashboardAgingBuckets).map(([label, v]) => ({ label, ...v })),
     [dashboardAgingBuckets]
   )
   const applyDashboardMonthDrilldown = useCallback((field, key) => {
-    setDateFieldFilter(field)
-    setDateFrom(`${key}-01`)
-    setDateTo(endOfMonthIso(key))
-    setMonthFilter(field === 'Raised Date' ? key : '')
-    switchWorkspace('invoices')
-  }, [])
+    setFilters({
+      dateField: field,
+      dateFrom: `${key}-01`,
+      dateTo: endOfMonthIso(key),
+      month: field === 'Raised Date' ? key : '',
+    })
+    setWorkspace('invoices')
+  }, [setFilters])
 
   const lastThreeMonthBalance = useMemo(() => {
     const current = currentMonthKey()
     const keys = Array.from({ length: balanceMonths }, (_, i) => shiftMonthKey(current, -(balanceMonths - 1 - i)))
+    const byMonth = new Map((ws?.raised_months || []).map(m => [m.key, m]))
     return keys.map((key, index) => {
-      let base = 0, gross = 0, gst = 0, received = 0, deduction = 0, outstanding = 0, invoiceCount = 0
-      for (const record of allRecords) {
-        const fields = record.fields || {}
-        if (monthKey(fields['Raised Date']) === key) {
-          const parts = invoiceAmountParts(fields)
-          base += parts.base; gross += parts.gross; gst += parts.gst
-          received += parts.received; deduction += parts.deduction
-          outstanding += parts.outstanding; invoiceCount += 1
-        }
-      }
+      const m = byMonth.get(key) || {}
+      const gross = m.gross || 0
+      const received = m.received || 0
       const previous = index > 0 ? keys[index - 1] : ''
-      let previousGross = 0
-      if (previous) {
-        for (const record of allRecords) {
-          const fields = record.fields || {}
-          if (monthKey(fields['Raised Date']) === previous) previousGross += invoiceAmountParts(fields).gross
-        }
-      }
+      const previousGross = previous ? byMonth.get(previous)?.gross || 0 : 0
       const change = previous && previousGross ? ((gross - previousGross) / Math.abs(previousGross)) * 100 : null
       const collectionRate = gross > 0 ? Math.min(100, Math.max(0, (received / gross) * 100)) : 0
-      return { key, label: shortMonthLabel(key), base, gross, gst, received, deduction, outstanding, invoiceCount, collectionRate, change }
+      return {
+        key, label: shortMonthLabel(key), base: m.base || 0, gross, gst: m.gst || 0, received,
+        deduction: m.deduction || 0, outstanding: m.outstanding || 0, invoiceCount: m.count || 0, collectionRate, change,
+      }
     })
-  }, [allRecords, balanceMonths])
+  }, [ws, balanceMonths])
 
   const maxMonthlyBalanceMagnitude = useMemo(
     () => Math.max(1, ...lastThreeMonthBalance.map(e => e.gross)),
     [lastThreeMonthBalance]
   )
+
+  /* ── Activity chart: the range's own invoices, plus what came before it ── */
+  const chartWindow = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    if (chartPreset === 'custom') {
+      if (!chartFrom) return null
+      const start = new Date(chartFrom); start.setHours(0, 0, 0, 0)
+      return { start }
+    }
+    const start = new Date(today); start.setDate(start.getDate() - ((CHART_PRESET_DAYS[chartPreset] || 60) - 1))
+    return { start }
+  }, [chartPreset, chartFrom])
+  const [chartData, setChartData] = useState({ records: [], baseline: undefined })
+  useEffect(() => {
+    if (workspace !== 'dashboard' || !allCount || !chartWindow) return undefined
+    let cancelled = false
+    // A day early: "Raised Date" is a UTC day on the server and a local one here.
+    const from = new Date(chartWindow.start); from.setDate(from.getDate() - 1)
+    webInvoiceList.fetchOnce({ date_from: isoDay(from), limit: 200, tz: -new Date().getTimezoneOffset() || undefined })
+      .then((d) => {
+        if (cancelled || !d) return
+        // Everything raised before the range: all dated invoices, less those
+        // from the day before the range on, plus the ones of that extra day.
+        const allDated = (ws?.raised_months || []).reduce((sum, m) => sum + (m.amount || 0), 0)
+        const early = d.records.reduce((sum, r) => {
+          const raised = new Date(r.fields?.['Raised Date'] || '')
+          return !Number.isNaN(raised.getTime()) && raised < chartWindow.start ? sum + Number(r.fields?.['Amount Raised'] || 0) : sum
+        }, 0)
+        setChartData({ records: d.records, baseline: allDated - (d.aggregates?.totals?.amount_raised || 0) + early })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // Refetched when the range changes or the workspace's totals move.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartWindow, allCount, summaryChanges, workspace])
+
+  const refresh = useCallback(() => {
+    refreshList()
+    if (workspace === 'retainers' || workspace === 'dashboard') loadRetainers()
+  }, [refreshList, loadRetainers, workspace])
 
   async function createRetainerMonth(group, mode) {
     if (!canCreateInvoice) return
@@ -557,9 +535,21 @@ export default function WebInvoices() {
   const openNew     = ()  => { if (!canCreateInvoice) return; setDrawerKey(k => k + 1); setDrawer({ mode: 'new',  invoice: null, draft: null }) }
   const openView    = r   => { setDrawerKey(k => k + 1); setDrawer({ mode: 'view', invoice: r   }) }
 
-  function handlePrintInvoices() {
+  // Print the whole filtered list: the pages not yet on screen are fetched first.
+  async function handlePrintInvoices() {
+    // Opened inside the click, while the gesture still allows a popup.
+    const w = window.open('', '_blank', 'width=1200,height=860')
+    if (!w) return
+    let rows = [...records]
+    let cursor = nextCursor
+    while (cursor && rows.length < PRINT_MAX_ROWS) {
+      const more = await webInvoiceList.fetchOnce({ ...invoiceQueryParams(filters), cursor, limit: 200, aggregates: '0' })
+      if (!more) break
+      rows = rows.concat(more.records || [])
+      cursor = more.next_cursor
+    }
     const INR = (n) => n != null ? '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
-    const printRows = records.map(r => {
+    const printRows = rows.map(r => {
       const f = r.fields || {}
       return {
         no: f['Invoice Number'] || '—',
@@ -591,7 +581,7 @@ export default function WebInvoices() {
       @media print{body{padding:0}}
     </style></head><body>
     <h1>Invoices</h1>
-    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${printRows.length} invoice${printRows.length !== 1 ? 's' : ''}</p>
+    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${printRows.length} invoice${printRows.length !== 1 ? 's' : ''}${cursor ? ` (first ${printRows.length} of ${scopeTotal}; export CSV for all of them)` : ''}</p>
     <table>
       <colgroup>
         <col style="width:11%"><col style="width:7%"><col style="width:18%"><col style="width:9%"><col style="width:8%">
@@ -607,28 +597,22 @@ export default function WebInvoices() {
       </tr>`).join('')}</tbody>
     </table>
     </body></html>`
-    const w = window.open('', '_blank', 'width=1200,height=860')
     w.document.write(html)
     w.document.close()
     w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close() }
   }
 
-  function exportCsv(useFiltered) {
-    const CSV_FIELDS = [
-      'Invoice Number', 'Raised Date', 'Project', 'Category', 'Payment Status',
-      'Raised By', 'Milestone', 'Currency', 'Amount Raised', 'Amount with Tax',
-      'Amount Received', 'Outstanding Amount', 'Cleared Date', 'Remark',
-    ]
-    const data = useFiltered ? records : allRecords
-    const header = CSV_FIELDS.join(',')
-    const body = data.map(r => {
-      const f = r.fields || {}
-      // csvCell also neutralises formula-looking text (=, +, -, @ …).
-      return CSV_FIELDS.map(k => csvCell(f[k])).join(',')
-    }).join('\n')
-    const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' })
-    downloadBlob(blob, `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0,10)}.csv`)
+  // The whole filtered scope (or every invoice), built on the server and
+  // streamed, whatever the list has loaded.
+  async function exportCsv(useFiltered) {
     setShowExportMenu(false)
+    try {
+      const params = useFiltered ? invoiceQueryParams(filters) : {}
+      const { blob, filename } = await api.webInvoices.exportCsv(params)
+      downloadBlob(blob, filename || `invoices_${useFiltered ? 'filtered_' : ''}${new Date().toISOString().slice(0,10)}.csv`)
+    } catch (e) {
+      toast(e?.message || 'Export failed', 'error')
+    }
   }
 
   // Auto-open new invoice drawer when navigated with ?new=1 (e.g. from sidebar button)
@@ -654,30 +638,37 @@ export default function WebInvoices() {
     })
   }
   const closeDrawer = () => setDrawer(null)
+  // A save or delete shows at once; the refresh confirms it (writes go
+  // through to the mirror the list reads).
   const handleSaved = (savedRecord) => {
-    if (savedRecord?.id) {
-      setRecordsState((prev) => {
-        const idx = prev.findIndex((row) => row.id === savedRecord.id)
-        if (idx >= 0) {
-          const next = [...prev]
-          next[idx] = savedRecord
-          return next
-        }
-        return [savedRecord, ...prev]
-      })
-    }
+    if (savedRecord?.id) patchRecord(savedRecord)
     refresh()
     closeDrawer()
   }
   const handleDeleted = (deletedId) => {
-    if (deletedId) setRecordsState((prev) => prev.filter((row) => row.id !== deletedId))
+    if (deletedId) removeRecord(deletedId)
     refresh()
     closeDrawer()
   }
 
+  // Show more: the next page of this scope. A button, not infinite scroll, so
+  // the totals row stays reachable and the count is clear.
+  const showMore = hasData && records.length > 0 && (
+    <div className="invoice-show-more" aria-live="polite">
+      <span>Showing {records.length.toLocaleString('en-IN')} of {scopeTotal.toLocaleString('en-IN')}</span>
+      {nextCursor && (
+        <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-ghost"
+          style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+          {loadingMore ? <RefreshCw size={12} className="animate-spin" /> : <ChevronDown size={12} />}
+          {loadingMore ? 'Loading…' : `Show ${Math.min(50, scopeTotal - records.length)} more`}
+        </button>
+      )}
+    </div>
+  )
+
   function handleSort(col) {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortCol(col); setSortDir('desc') }
+    if (sortCol === col) setFilters({ order: sortDir === 'asc' ? 'desc' : 'asc' })
+    else setFilters({ sort: col, order: 'desc' })
   }
 
   function SortLabel({ col, children }) {
@@ -787,7 +778,7 @@ export default function WebInvoices() {
                     value={sumLoading && !s ? '—' : undefined}
                     amount={sumLoading && !s ? undefined : Number(s?.total_raised)}
                     format={fmt}
-                    sub={`${allRecords.length} invoices across all workspaces`}
+                    sub={`${allCount} invoices across all workspaces`}
                     icon={null}
                     iconSlot={false}
                     tone={'var(--glass-bg)'}
@@ -809,7 +800,7 @@ export default function WebInvoices() {
                     value={sumLoading && !s ? '—' : undefined}
                     amount={sumLoading && !s ? undefined : Number(s?.total_outstanding)}
                     format={fmt}
-                    sub={`${overdue.length} invoice${overdue.length === 1 ? '' : 's'} beyond 30 days`}
+                    sub={`${overdueCount} invoice${overdueCount === 1 ? '' : 's'} beyond 30 days`}
                     icon={AlertOctagon}
                     tone={dashboardStyles.warnPanel}
                     accent={Number(s?.total_outstanding || 0) > 0 ? 'var(--fin-warning)' : 'var(--fin-positive)'}
@@ -840,7 +831,7 @@ export default function WebInvoices() {
                 />
                 <DashboardSignal
                   eyebrow="Visible scope"
-                  title={`${records.length} live invoices · ${visibleClientCount} projects`}
+                  title={`${scopeTotal} live invoices · ${visibleClientCount} projects`}
                   body={hasFilters ? 'Dashboard is currently respecting active invoice filters.' : 'No extra filters applied. This is your full live billing picture.'}
                   icon={Users}
                   tone={dashboardStyles.panelSoft}
@@ -884,7 +875,7 @@ export default function WebInvoices() {
             )}
 
             {/* ── Invoice Activity Chart ── */}
-            {allRecords.length > 0 && (() => {
+            {allCount > 0 && (() => {
               const CHART_PRESETS = [
                 { key: '30d',    label: '30d',   days: 30 },
                 { key: '60d',    label: '60d',   days: 60 },
@@ -942,14 +933,15 @@ export default function WebInvoices() {
                     </div>
                   </div>
                   <InvoiceActivityChart
-                    records={allRecords}
+                    records={chartData.records}
+                    baseline={chartData.baseline}
                     days={chartDaysProp}
                     from={chartFromProp}
                     to={chartToProp}
                     className="px-2 pb-1"
                     avatarMap={avatarMap}
                     onInvoiceClick={id => {
-                      const rec = allRecords.find(r => r.id === id)
+                      const rec = chartData.records.find(r => r.id === id)
                       if (rec) openView(rec)
                     }}
                   />
@@ -958,7 +950,7 @@ export default function WebInvoices() {
             })()}
 
             {/* ── Monthly Receivables + Recent Projects (side by side) ── */}
-            {allRecords.length > 0 && (
+            {allCount > 0 && (
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
               {/* Left: compact pill widget */}
               <div className="rounded-[26px] p-4 sm:p-5 flex flex-col" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
@@ -1073,9 +1065,9 @@ export default function WebInvoices() {
             )}
 
             {/* ── Monthly Collections Chart (bars=raised, line=collected) ── */}
-            {allRecords.length > 0 && (
+            {allCount > 0 && (
               <div className="rounded-[26px] p-4 sm:p-5" style={{ background: dashboardStyles.panel, border: `1px solid ${dashboardStyles.line}` }}>
-                <MonthlyCollectionsChart records={allRecords} />
+                <MonthlyCollectionsChart months={ws?.raised_months || []} />
               </div>
             )}
 
@@ -1406,7 +1398,7 @@ export default function WebInvoices() {
               <h1 className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.025em' }}>Invoices</h1>
               <p className="text-xs mt-1 flex items-center gap-2" style={{ color: 'var(--text-3)' }}>
                 <span className="live-dot" />
-                <span>Live sync · {allRecords.length} invoice{allRecords.length !== 1 ? 's' : ''}</span>
+                <span>Live sync · {allCount} invoice{allCount !== 1 ? 's' : ''}</span>
                 {syncing && <span style={{ color: 'var(--fin-warning)' }}>· syncing…</span>}
               </p>
             </div>
@@ -1425,12 +1417,12 @@ export default function WebInvoices() {
                       <button onClick={() => exportCsv(true)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
                         <Download size={13} />
-                        <span>Filtered ({records.length})</span>
+                        <span>Filtered ({scopeTotal})</span>
                       </button>
                       <button onClick={() => exportCsv(false)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-2)] text-left">
                         <Download size={13} />
-                        <span>All records ({allRecords.length})</span>
+                        <span>All records ({allCount})</span>
                       </button>
                     </div>
                   </>
@@ -1459,7 +1451,7 @@ export default function WebInvoices() {
           {isStaleData && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm" style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 30%, transparent)', color: 'var(--fin-warning)' }}>
               <WifiOff size={14} />
-              <span>Live data unavailable — showing cached records. Some changes may not appear.</span>
+              <span>Live data unavailable — showing the last records loaded. Some changes may not appear.</span>
             </div>
           )}
           </>
@@ -1487,22 +1479,24 @@ export default function WebInvoices() {
             <>
               {/* ── RS Primary KPIs ── */}
               <section aria-label="Invoice metrics (₹)" className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-                <KpiCard tone={0} label="Total Raised (₹)"   value={sumLoading && !s ? null : <LiveValue value={s?.total_raised} format={fmt} />}    icon={IndianRupee} />
-                <KpiCard tone={1} label="Incl. GST (₹)"      value={sumLoading && !s ? null : <LiveValue value={s?.total_with_tax} format={fmt} />}  icon={Receipt} />
-                <KpiCard tone={2} label="Collected (₹)"      value={sumLoading && !s ? null : <LiveValue value={s?.total_received} format={fmt} />}  icon={TrendingUp} semantic="positive" />
+                <KpiCard tone={0} label="Total Raised (₹)"   value={sumLoading && !sc ? null : <LiveValue value={sc?.total_raised} format={fmt} />}    icon={IndianRupee} ofAll={ofAll(s?.total_raised)} />
+                <KpiCard tone={1} label="Incl. GST (₹)"      value={sumLoading && !sc ? null : <LiveValue value={sc?.total_with_tax} format={fmt} />}  icon={Receipt} ofAll={ofAll(s?.total_with_tax)} />
+                <KpiCard tone={2} label="Collected (₹)"      value={sumLoading && !sc ? null : <LiveValue value={sc?.total_received} format={fmt} />}  icon={TrendingUp} semantic="positive" ofAll={ofAll(s?.total_received)} />
                 <KpiCard tone={3} label="Outstanding (₹)"
-                  value={sumLoading && !s ? null : <LiveValue value={s?.total_outstanding} format={fmt} />}
+                  value={sumLoading && !sc ? null : <LiveValue value={sc?.total_outstanding} format={fmt} />}
                   icon={CalendarClock}
-                  semantic={(s?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
-                  sub={(s?.total_outstanding || 0) > 0 ? `${s?.by_currency?.RS?.pending_count || s?.by_status?.Pending || 0} pending` : 'Fully collected'} />
+                  semantic={(sc?.total_outstanding || 0) > 0 ? 'warning' : 'positive'}
+                  sub={(sc?.total_outstanding || 0) > 0 ? `${sc?.by_currency?.RS?.pending_count || sc?.by_status?.Pending || 0} pending` : 'Fully collected'}
+                  ofAll={ofAll(s?.total_outstanding)} />
                 <KpiCard tone={4} label="Collection Rate (₹)"
-                  value={sumLoading && !s ? null : s ? `${(s.collection_rate ?? 0).toFixed(1)}%` : '—'}
+                  value={sumLoading && !sc ? null : sc ? `${(sc.collection_rate ?? 0).toFixed(1)}%` : '—'}
                   icon={Percent}
-                  semantic={(s?.collection_rate || 0) >= 90 ? 'positive' : (s?.collection_rate || 0) >= 70 ? 'warning' : 'negative'} />
+                  semantic={(sc?.collection_rate || 0) >= 90 ? 'positive' : (sc?.collection_rate || 0) >= 70 ? 'warning' : 'negative'}
+                  ofAll={hasFilters && s ? `${(s.collection_rate ?? 0).toFixed(1)}% across all ${allCount}` : null} />
               </section>
 
               {/* ── Foreign Currency KPI rows (auto-appear when non-RS invoices exist) ── */}
-              {s?.by_currency && Object.entries(s.by_currency)
+              {sc?.by_currency && Object.entries(sc.by_currency)
                 .filter(([cur]) => cur !== 'RS')
                 .map(([cur, data]) => (
                   <section key={cur} aria-label={`Invoice metrics (${cur})`}
@@ -1526,17 +1520,17 @@ export default function WebInvoices() {
                 ))}
 
               {/* ── Status chips ── */}
-              {s?.by_status && Object.keys(s.by_status).length > 0 && (
+              {sc?.by_status && Object.keys(sc.by_status).length > 0 && (
                 <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {Object.entries(s.by_status).map(([status, count]) => {
+                  {Object.entries(sc.by_status).map(([status, count]) => {
                     const m = STATUS_META[status] || { color: 'var(--text-2)', bg: 'var(--fin-pos-bg)', border: 'var(--fin-pos-border)', icon: CheckCircle2 }
                     const Icon = m.icon
                     const active = statusFilter === status
                     // Show RS amount for this status from by_currency
                     const rsAmt = (() => {
-                      if (!s?.by_currency?.RS) return null
-                      if (status === 'Paid') return s.by_currency.RS.received
-                      if (status === 'Pending') return s.by_currency.RS.outstanding
+                      if (!sc?.by_currency?.RS) return null
+                      if (status === 'Paid') return sc.by_currency.RS.received
+                      if (status === 'Pending') return sc.by_currency.RS.outstanding
                       return null
                     })()
                     return (
@@ -1573,7 +1567,7 @@ export default function WebInvoices() {
                   <div className="flex items-center gap-2 mb-3">
                     <AlertOctagon size={14} style={{ color: 'var(--fin-negative)' }} />
                     <p className="text-sm font-semibold" style={{ color: 'var(--fin-negative)' }}>
-                      {overdue.length} Overdue — pending more than 30 days
+                      {overdueCount} Overdue — pending more than 30 days
                     </p>
                   </div>
                   <div className="space-y-1.5">
@@ -1954,13 +1948,15 @@ export default function WebInvoices() {
             </section>
           )}
 
-          {/* Filter bar + invoice table — only on invoices / retainers tabs */}
-          {(workspace === 'invoices' || workspace === 'retainers') && <div className="card space-y-3">
+          {/* Filter bar + invoice table — only on invoices / retainers tabs.
+              The bar stays at the top of the page while the table scrolls. */}
+          {(workspace === 'invoices' || workspace === 'retainers') && <div className="invoice-sticky-filters" role="search" aria-label="Search and filter invoices"><div className="card space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex-1 min-w-0">
                 <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>Invoice Filters</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  {records.length} result{records.length !== 1 ? 's' : ''}
+                <p className="text-xs mt-0.5 inline-flex items-center gap-1.5" style={{ color: 'var(--text-3)' }} aria-live="polite">
+                  {!hasData ? 'Loading…' : `${scopeTotal.toLocaleString('en-IN')} result${scopeTotal !== 1 ? 's' : ''}`}
+                  {syncing && hasData && <RefreshCw size={10} className="animate-spin" aria-hidden="true" />}
                 </p>
               </div>
               {/* Billing type filter pills */}
@@ -1979,7 +1975,9 @@ export default function WebInvoices() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[140px] sm:min-w-[180px]">
                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-                <input value={search} onChange={e => setSearch(e.target.value)}
+                <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitSearch() } }}
+                  aria-label="Search invoices"
                   placeholder="Search invoice #, project, description…"
                   className="input pl-8 py-1.5 text-xs" />
               </div>
@@ -1997,23 +1995,7 @@ export default function WebInvoices() {
                 </button>
               )}
               {hasFilters && (
-                <button onClick={() => {
-                  setStatusFilter('')
-                  setProjectFilter('')
-                  setCategoryFilter('')
-                  setRaisedByFilter('')
-                  setBillingFilter('all')
-                  setMonthFilter('')
-                  setAgingBandFilter('')
-                  setDateFieldFilter('Raised Date')
-                  setDateFrom('')
-                  setDateTo('')
-                  setOverdueOnly(false)
-                  setHasDocsOnly(false)
-                  setFollowupDueOnly(false)
-                  setSearch('')
-                  setFilterConditions([])
-                }}
+                <button onClick={clearAll}
                   className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.625rem' }}>
                   <X size={11} />Clear
                 </button>
@@ -2021,7 +2003,7 @@ export default function WebInvoices() {
             </div>
 
             {showFilters && (
-              <div className="flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
+              <div className="filter-expanded-panel flex flex-wrap gap-2 p-3 rounded-xl animate-slide-down"
                 style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)' }}>
                 <FilterSelect
                   value={projectFilter}
@@ -2129,7 +2111,7 @@ export default function WebInvoices() {
                   </p>
                   <FilterBuilder
                     fields={INVOICE_FIELDS}
-                    records={allRecords}
+                    records={records}
                     getFieldValue={r => r.fields ?? {}}
                     conditions={filterConditions}
                     onChange={setFilterConditions}
@@ -2138,7 +2120,7 @@ export default function WebInvoices() {
                 </div>
               </div>
             )}
-          </div>}
+          </div></div>}
 
           {(workspace === 'invoices' || workspace === 'retainers') && <>
           {/* Error */}
@@ -2202,9 +2184,11 @@ export default function WebInvoices() {
               : records.length === 0
                 ? <EmptyState
                     icon={<Receipt size={22} />}
-                    title="No invoices found"
-                    subtitle="Try adjusting your filters, or create a new invoice to get started."
-                    action={canCreateInvoice ? <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button> : null}
+                    title={hasFilters ? 'No invoices match' : 'No invoices found'}
+                    subtitle={hasFilters ? 'Nothing matches this search and these filters.' : 'Try adjusting your filters, or create a new invoice to get started.'}
+                    action={hasFilters
+                      ? <button onClick={clearAll} className="btn-ghost"><X size={13} />Clear filters</button>
+                      : canCreateInvoice ? <button onClick={openNew} className="btn-primary"><Plus size={13} />New invoice</button> : null}
                     compact
                   />
                 : records.map(r => {
@@ -2304,6 +2288,7 @@ export default function WebInvoices() {
                     )
                   })
             }
+            {showMore && <div className="invoice-mobile-stack">{showMore}</div>}
           </div>
 
           {/* Desktop table */}
@@ -2338,11 +2323,14 @@ export default function WebInvoices() {
                       ? <tr><td colSpan={15} className="px-4 py-14 text-center" style={{ color: 'var(--text-3)' }}>
                           <div className="flex flex-col items-center gap-2">
                             <Receipt size={28} style={{ opacity: 0.3 }} />
-                            <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No invoices found</p>
-                            <p className="text-xs">Adjust your filters or{' '}
-                              {canCreateInvoice && (
-                                <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
-                              )}
+                            <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>{hasFilters ? 'No invoices match' : 'No invoices found'}</p>
+                            <p className="text-xs">
+                              {hasFilters
+                                ? <button onClick={clearAll} style={{ color: 'var(--accent)' }} className="underline">Clear the search and filters</button>
+                                : <>Adjust your filters or{' '}
+                                  {canCreateInvoice && (
+                                    <button onClick={openNew} style={{ color: 'var(--accent)' }} className="underline">create one</button>
+                                  )}</>}
                             </p>
                           </div>
                         </td></tr>
@@ -2649,6 +2637,7 @@ export default function WebInvoices() {
                 )}
               </table>
             </div>
+            {showMore}
           </div>
           </>}
 

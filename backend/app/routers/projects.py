@@ -1,3 +1,5 @@
+import logging
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..services.teable import TeableService
@@ -6,6 +8,12 @@ from ..db.attribution import record_user_attribution
 from ..db.valkey import cache_bust, rate_check
 from ..utils.client_ip import client_ip
 from .deps import require_auth, require_editor, require_permission
+from ..db import postgres as _pg
+from ..services import project_query as pq
+from ..services.list_query import QueryError
+from ..utils.fast_json import json_response
+
+logger = logging.getLogger("fintrack.projects")
 
 
 async def _check_project_rate(request: Request) -> None:
@@ -76,8 +84,7 @@ async def list_project_names(_role: str = Depends(require_auth)):
     Reads from PG mirror so it's ~2 ms. Falls back to full Teable list.
     Used by the invoice form to populate the Project dropdown in real time.
     """
-    from ..db.postgres import get_pool
-    pool = get_pool()
+    pool = _pg.get_pool()
     if pool:
         try:
             rows = await pool.fetch(
@@ -103,6 +110,76 @@ async def list_project_names(_role: str = Depends(require_auth)):
         for r in records
         if r.get("fields", {}).get("Project Name")
     ]
+
+
+def _project_scope(
+    q:      Optional[str] = Query(None, max_length=200),
+    status: Optional[str] = Query(None, max_length=255),
+    client: Optional[str] = Query(None, max_length=255),
+    sort:   Optional[str] = Query(None, max_length=60),
+    order:  Optional[str] = Query(None, max_length=4),
+) -> pq.ProjectQuery:
+    try:
+        return pq.build_project_query(q=q, status=status, client=client, sort=sort, order=order)
+    except QueryError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/query")
+async def query_projects(
+    request:    Request,
+    qry:        pq.ProjectQuery = Depends(_project_scope),
+    limit:      int             = Query(pq.DEFAULT_LIMIT, ge=1, le=pq.MAX_LIMIT),
+    cursor:     Optional[str]   = Query(None, max_length=2000),
+    offset:     int             = Query(0, ge=0, le=1_000_000),
+    aggregates: bool            = Query(True),
+    _role:      str             = Depends(require_auth),
+    _perm:      str             = Depends(require_permission("module.projects.view")),
+):
+    """One page of projects for the search and filters, plus totals.
+
+    `q` matches every word in Project Name, Client, Project Status or Health;
+    `status` and `client` filter; `sort` / `order` are whitelisted; pass
+    `next_cursor` back as `cursor` for the next page. `aggregates` holds the
+    filtered scope's totals (billed, profit, margin, needs-action, blind
+    spots, the action queue…) and `workspace` the whole portfolio's, with the
+    filter options. Answered from projects_mirror, from Teable through the
+    same rules when the mirror cannot answer; carries an ETag."""
+    try:
+        cur = pq.decode_cursor(qry, cursor) if cursor else None
+    except QueryError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    now = datetime.now(timezone.utc)
+    result, source = None, "mirror"
+    pool = _pg.get_pool()
+    if pool is not None:
+        try:
+            result = await pq.query_mirror(pool, qry, limit=limit, cursor=cur, offset=offset,
+                                           aggregates=aggregates, now=now)
+        except Exception as exc:
+            logger.warning("project query via PG mirror failed, falling back to Teable: %s", exc)
+    if result is None:
+        source = "teable"
+        try:
+            records = await get_teable().get_all_records()
+        except Exception as exc:
+            logger.warning("project query: Teable fallback failed: %s", exc)
+            raise HTTPException(status_code=503, detail="Projects are temporarily unavailable")
+        result = pq.query_records(records, qry, limit=limit, cursor=cur, offset=offset, aggregates=aggregates)
+    payload: dict = {
+        "records": [{"id": r["id"], "fields": r["fields"]} for r in result["records"]],
+        "total": result["total"],
+        "next_cursor": pq.encode_cursor(qry, *result["next"]) if result["next"] else None,
+        "limit": limit,
+        "sort": qry.sort,
+        "order": qry.order,
+        "filtered": qry.filtered,
+        "source": source,
+    }
+    if aggregates:
+        payload["aggregates"] = result["aggregates"]
+        payload["workspace"] = result["workspace"]
+    return json_response(request, payload)
 
 
 @router.get("/search")

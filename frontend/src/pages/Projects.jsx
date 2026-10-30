@@ -1,9 +1,9 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal, FolderKanban, Activity, IndianRupee, Link2, ArrowRight, AlertTriangle } from 'lucide-react'
+import { memo, useCallback, useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal, FolderKanban, Activity, IndianRupee, Link2, ArrowRight, AlertTriangle, ChevronDown } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
-import { api } from '../services/api'
-import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
+import { useRelativeTime } from '../hooks/useAutoRefresh'
+import { useChangeCount } from '../hooks/useServerList'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { useAuth } from '../context/AuthContext'
 import clsx from 'clsx'
@@ -11,6 +11,7 @@ import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLink
 import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, ExecutivePanel, ExecutiveFilterBar, ExecutiveChip } from '../components/ExecutiveUI'
 import EmptyState from '../components/EmptyState'
 import { formatInr, formatPct } from '../utils/format'
+import { PROJECT_PAGE_SIZE, useProjectFilters, useProjectQuery } from './projects/useProjectQuery'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -48,58 +49,33 @@ function SelectFilter({ value, onChange, label, children }) {
   )
 }
 
+// A card re-renders only when its record changes, not on every poll or
+// keystroke elsewhere on the page.
+const MemoProjectCard = memo(ProjectCard)
+
 export default function Projects() {
-  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { isEditor } = useAuth()
-  const query = searchParams.get('q') || ''
+  // Search, status, client, sort and loaded pages live in the URL.
+  const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch, clearAll } = useProjectFilters()
+  const { status, client, sort: sortBy } = filters
+  const search = filters.q
+  const {
+    records, total, nextCursor, aggregates: agg, workspace: ws, hasData, loading, refreshing,
+    loadingMore, error, loadMore, refresh,
+  } = useProjectQuery(filters, { pages, onPagesChange: setPages })
 
-  const [search, setSearch]           = useState(query)
-  const [searching, setSearching]     = useState(false)
-  const [searchResults, setSearchResults] = useState(null)
-  const [sortBy, setSortBy]           = useState('Amount Billed So far')
   const [showFilters, setShowFilters] = useState(false)
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
-  const searchTimer = useRef(null)
   const searchInputRef = useRef(null)
 
-  const status = searchParams.get('status') || ''
-  const client = searchParams.get('client') || ''
-
-  useEffect(() => {
-    setSearch(query)
-  }, [query])
-
-  const fetchProjects = useCallback((opts = {}) =>
-    api.projects.list({ status: status || undefined, client: client || undefined, order_by: sortBy, ...opts })
-      .then(d => d.records || [])
-  , [status, client, sortBy])
-
-  const { data: _data, loading, error, refresh, lastUpdated, changedAt, changeCount, syncing } =
-    useAutoRefresh(fetchProjects, 5_000)
-  const fetchSummary = useCallback((opts = {}) => api.projects.summary(opts), [])
-  const { data: summary } = useAutoRefresh(fetchSummary, 10_000)
-  const records = _data ?? []
-  // The changed time, not the polled time: this chip used to read
-  // "live · just now" on a five-second loop regardless of whether the project
-  // list had moved.
+  // The changed time, not the polled time: the chip says when the portfolio
+  // last moved, not when it was last asked.
+  const changeCount = useChangeCount(ws ? [ws.count, ws.total_billed, ws.total_profit, ws.needs_action] : null)
+  const [changedAt, setChangedAt] = useState(null)
+  useEffect(() => { if (changeCount) setChangedAt(new Date()) }, [changeCount])
   const changedLabel = useRelativeTime(changedAt)
-
-  // Debounced search
-  useEffect(() => {
-    if (!search.trim()) { setSearchResults(null); return }
-    setSearching(true)
-    clearTimeout(searchTimer.current)
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const d = await api.projects.search(search)
-        setSearchResults(d.records || [])
-      } catch { setSearchResults([]) }
-      finally  { setSearching(false) }
-    }, 350)
-    return () => clearTimeout(searchTimer.current)
-  }, [search])
 
   // Cmd/Ctrl+K focuses search
   useEffect(() => {
@@ -113,55 +89,35 @@ export default function Projects() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const displayed = searchResults ?? records
+  const displayed = records
+  const hasFilters = !!(status || client || search)
   const activeFilters = [status && `Status: ${status}`, client && `Client: ${client}`].filter(Boolean)
-  const visibleCount = displayed.length
-  const topClients = Object.entries(summary?.by_client || {})
+  const statusOptions = useMemo(() => [...new Set([...STATUSES, ...(ws?.facets?.statuses || [])])], [ws])
+  const clientOptions = useMemo(() => [...new Set([...CLIENTS, ...(ws?.facets?.clients || [])])], [ws])
+  // Client concentration of the current scope (the search and filters).
+  const topClients = Object.entries(agg?.by_client || {})
+    .filter(([name]) => name !== 'Unknown')
     .sort(([, a], [, b]) => Number(b) - Number(a))
     .slice(0, 4)
-  const actionQueue = [...displayed]
-    .map((row) => {
-      const profit = Number(row.fields?.['Profit percentage'] || 0)
-      const health = row.fields?.['Health'] || ''
-      const severity = profit < 0 || health === 'Critical' ? 'danger' : health === 'At Risk' ? 'warning' : 'muted'
-      const rank = severity === 'danger' ? 3 : severity === 'warning' ? 2 : severity === 'positive' ? 1 : 0
-      return { row, rank }
-    })
-    .filter(item => item.rank > 0)
-    .sort((a, b) => b.rank - a.rank)
-    .slice(0, 4)
-  const margin = Number(summary?.total_billed || 0) > 0
-    ? (Number(summary?.total_profit || 0) / Number(summary?.total_billed || 1)) * 100
-    : 0
-  const projectsNeedingAction = displayed.filter((row) => {
-    const profit = Number(row.fields?.['Profit percentage'] || 0)
-    const health = row.fields?.['Health'] || ''
-    return health === 'Critical' || health === 'At Risk' || profit < 0
-  })
-  const blockedProjects = projectsNeedingAction
+  const actionQueue = agg?.action_queue || []
+  const needsAction = agg?.needs_action || 0
+  const blindSpots = agg?.blind_spots || 0
+  const margin = agg?.margin || 0
   const outstandingTotal = 0
-  const blindSpots = displayed.filter((row) => {
-    const f = row.fields || {}
-    return !f['Health'] && !f['Project Status']
-  })
-  const highestExposure = [...displayed]
-    .sort((a, b) => Number(b.fields?.['Amount Billed So far'] || 0) - Number(a.fields?.['Amount Billed So far'] || 0))[0]
+  const highestExposure = agg?.highest_exposure || null
+  const allCount = ws?.count ?? 0
 
-  const setFilter = (key, val) => {
-    const p = new URLSearchParams(searchParams)
-    if (val) p.set(key, val); else p.delete(key)
-    setSearchParams(p)
-  }
-
+  const setFilter = (key, val) => setFilters({ [key]: val || '' })
+  const setSortBy = (val) => setFilters({ sort: val })
   const setSearchQuery = (val) => {
-    setSearch(val)
-    const p = new URLSearchParams(searchParams)
-    if (val.trim()) p.set('q', val)
-    else p.delete('q')
-    setSearchParams(p, { replace: true })
+    setSearchInput(val)
+    setFilters({ q: val.trim() }, { replace: true })
   }
+  const clearSearch = () => { setSearchQuery(''); searchInputRef.current?.focus() }
+  const clearEverything = () => { clearAll(); setShowFilters(false) }
 
-  const clearSearch = () => { setSearch(''); setSearchResults(null); searchInputRef.current?.focus() }
+  // Under each card, while a search or filter narrows the view: the portfolio figure.
+  const ofAll = (text) => hasFilters && ws ? <p className="invoice-kpi-of-all">{text}</p> : null
 
   return (
     <ExecutiveShell>
@@ -173,10 +129,10 @@ export default function Projects() {
         icon={FolderKanban}
         meta={
           <div className="flex flex-wrap items-center gap-2">
-            <ExecutiveChip accent>{visibleCount} visible project{visibleCount !== 1 ? 's' : ''}</ExecutiveChip>
-            {lastUpdated && (
+            <ExecutiveChip accent>{total} visible project{total !== 1 ? 's' : ''}</ExecutiveChip>
+            {hasData && (
               <ExecutiveChip>
-                <LiveDot changeCount={changeCount} loading={syncing && !_data} /> {changedAt ? `changed ${changedLabel}` : 'live'}
+                <LiveDot changeCount={changeCount} loading={refreshing && !hasData} /> {changedAt ? `changed ${changedLabel}` : 'live'}
               </ExecutiveChip>
             )}
             {activeFilters.length > 0 && <ExecutiveChip>{activeFilters.length} active filter{activeFilters.length !== 1 ? 's' : ''}</ExecutiveChip>}
@@ -194,8 +150,8 @@ export default function Projects() {
                 </button>
               </>
             )}
-            <button onClick={refresh} disabled={loading} aria-label="Refresh" className="btn-ghost">
-              <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+            <button onClick={refresh} disabled={refreshing} aria-label="Refresh" className="btn-ghost">
+              <RefreshCw size={14} className={clsx(refreshing && 'animate-spin')} />
               Refresh
             </button>
             {isEditor && (
@@ -206,66 +162,54 @@ export default function Projects() {
           </>
         }
       >
+        {/* The cards follow the search and filters; while either narrows the
+            view, a quiet line under each gives the whole portfolio's figure. */}
         <ExecutiveStatGrid className="mt-5">
           <ExecutiveStatCard
             label="Needs action"
-            value={<LiveValue value={projectsNeedingAction.length} format={v => String(Math.round(v))} />}
-            sub={projectsNeedingAction.length
-              ? `${projectsNeedingAction[0]?.fields?.['Project Name'] || 'Top project'} is the first review candidate`
+            value={<LiveValue value={needsAction} format={v => String(Math.round(v))} />}
+            sub={needsAction
+              ? `${actionQueue[0]?.name || 'Top project'} is the first review candidate`
               : 'No urgent collections or delivery blockers in the visible scope'}
-            accent={projectsNeedingAction.length ? 'warning' : 'positive'}
+            accent={needsAction ? 'warning' : 'positive'}
             icon={AlertTriangle}
-          />
+          >
+            {ofAll(`of ${ws?.needs_action ?? 0} across all ${allCount}`)}
+          </ExecutiveStatCard>
           <ExecutiveStatCard
             label="Cashflow summary"
-            value={summary ? <LiveValue value={summary.total_billed || 0} format={formatInr} /> : '—'}
-            sub={summary ? `${formatInr(summary.total_profit || 0)} profit · ${formatPct(margin, 2)} margin` : 'Loading billing health'}
+            value={agg ? <LiveValue value={agg.total_billed || 0} format={formatInr} /> : '—'}
+            sub={agg ? `${formatInr(agg.total_profit || 0)} profit · ${formatPct(margin, 2)} margin` : 'Loading billing health'}
             icon={IndianRupee}
-          />
+          >
+            {ofAll(`of ${formatInr(ws?.total_billed || 0)} across all ${allCount}`)}
+          </ExecutiveStatCard>
           <ExecutiveStatCard
             label="Open receivables"
             value={<LiveValue value={outstandingTotal} format={formatInr} />}
             sub={highestExposure
-              ? `${highestExposure.fields?.['Project Name'] || 'Highest billed project'} has the largest billed exposure`
+              ? `${highestExposure.name || 'Highest billed project'} has the largest billed exposure`
               : 'No billing exposure visible in this scope'}
             accent={outstandingTotal > 0 ? 'warning' : 'positive'}
             icon={Link2}
           />
           <ExecutiveStatCard
             label="Delivery blockers"
-            value={<LiveValue value={blockedProjects.length} format={v => String(Math.round(v))} />}
-            sub={blindSpots.length
-              ? `${blindSpots.length} project${blindSpots.length !== 1 ? 's' : ''} still missing health or status`
+            value={<LiveValue value={needsAction} format={v => String(Math.round(v))} />}
+            sub={blindSpots
+              ? `${blindSpots} project${blindSpots !== 1 ? 's' : ''} still missing health or status`
               : 'Project health and status are available on the visible projects'}
-            accent={blockedProjects.length ? 'warning' : 'positive'}
+            accent={needsAction ? 'warning' : 'positive'}
             icon={Activity}
-          />
+          >
+            {ofAll(`of ${ws?.needs_action ?? 0} across all ${allCount}`)}
+          </ExecutiveStatCard>
         </ExecutiveStatGrid>
       </ExecutiveHero>
 
-      {/* Error */}
-      {error && (
-        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
-          <AlertCircle size={15} aria-hidden="true" /> {error}
-          <button onClick={refresh} className="underline ml-1">retry</button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)] gap-4">
-        <ExecutivePanel
-          title="Delivery and finance lens"
-          subtitle="Search, filter, and sort projects with the same control rhythm used across the main app."
-          action={
-            activeFilters.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {activeFilters.map(f => <ExecutiveChip key={f} accent>{f}</ExecutiveChip>)}
-              </div>
-            )
-          }
-        >
-          <div className="space-y-3">
-            <ExecutiveFilterBar role="search" className="executive-filter-bar-toolbar">
+      {/* ── Search and filters: one compact bar that stays in view ── */}
+      <div className="invoice-sticky-filters" role="search" aria-label="Search and filter projects">
+        <ExecutiveFilterBar className="executive-filter-bar-toolbar">
           {/* Search */}
           <div className="executive-search relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
@@ -274,23 +218,24 @@ export default function Projects() {
               ref={searchInputRef}
               className="w-full rounded-xl pl-9 pr-16 py-2.5 text-sm outline-none transition-all"
               placeholder="Search projects…"
-              value={search}
-              onChange={e => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitSearch() } }}
               aria-label="Search projects"
               autoComplete="off"
               style={{ background: 'transparent', border: 'none', color: 'var(--text-1)' }}
             />
             {/* Right side of search */}
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {searching && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)' }} aria-hidden="true" />}
-              {search && !searching && (
+              {refreshing && searchInput && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)' }} aria-hidden="true" />}
+              {searchInput && !refreshing && (
                 <button onClick={clearSearch} aria-label="Clear search"
                   className="w-5 h-5 rounded flex items-center justify-center"
                   style={{ color: 'var(--text-3)' }}>
                   <X size={12} />
                 </button>
               )}
-              {!search && (
+              {!searchInput && (
                 <kbd className="hidden sm:inline-flex items-center px-1.5 rounded text-xs font-mono"
                   style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-3)' }}>
                   ⌘K
@@ -316,19 +261,25 @@ export default function Projects() {
                 style={{ background: 'var(--accent-btn)', color: 'var(--accent-fg)' }}>{activeFilters.length}</span>
             )}
           </button>
-            </ExecutiveFilterBar>
+          <span aria-live="polite" className="inline-flex items-center">
+            <ExecutiveChip accent>
+              {!hasData ? 'Loading…' : `${total.toLocaleString('en-IN')} result${total !== 1 ? 's' : ''}`}
+              {refreshing && hasData && <RefreshCw size={10} className="animate-spin" aria-hidden="true" />}
+            </ExecutiveChip>
+          </span>
+        </ExecutiveFilterBar>
 
         {/* Expanded filter row */}
         {showFilters && (
           <div className="project-filter-grid filter-expanded-panel animate-slide-up">
             <SelectFilter value={status} onChange={v => setFilter('status', v)} label="Filter by status">
               <option value="">All statuses</option>
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </SelectFilter>
 
             <SelectFilter value={client} onChange={v => setFilter('client', v)} label="Filter by client">
               <option value="">All clients</option>
-              {CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
+              {clientOptions.map(c => <option key={c} value={c}>{c}</option>)}
             </SelectFilter>
 
             <SelectFilter value={sortBy} onChange={setSortBy} label="Sort by">
@@ -337,7 +288,7 @@ export default function Projects() {
 
             {(status || client) && (
               <button
-                onClick={() => { setSearchParams({}); setShowFilters(false) }}
+                onClick={clearEverything}
                 className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm transition-all sm:min-w-[11rem]"
                 style={{ color: 'var(--fin-negative)', border: '1px solid var(--fin-neg-border)', background: 'var(--fin-neg-bg)' }}
                 aria-label="Clear all filters">
@@ -346,6 +297,48 @@ export default function Projects() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
+          <AlertCircle size={15} aria-hidden="true" /> {error}
+          <button onClick={refresh} className="underline ml-1">retry</button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)] gap-4">
+        <ExecutivePanel
+          title="Delivery and finance lens"
+          subtitle="Search, filter, and sort projects with the same control rhythm used across the main app."
+          action={
+            activeFilters.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {activeFilters.map(f => <ExecutiveChip key={f} accent>{f}</ExecutiveChip>)}
+              </div>
+            )
+          }
+        >
+          {/* The scope by status: each count narrows the list to it. */}
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(agg?.by_status || {}).map(([name, count]) => (
+              <button
+                key={name}
+                type="button"
+                disabled={name === 'Unknown'}
+                onClick={() => setFilter('status', status === name ? '' : name)}
+                className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold"
+                style={{
+                  background: status === name ? 'var(--accent-dim)' : 'var(--bg-input)',
+                  border: '1px solid var(--border)', color: 'var(--text-2)',
+                }}
+              >
+                <span>{name}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-1)' }}>{count}</span>
+              </button>
+            ))}
+            {!agg && <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading the portfolio…</p>}
           </div>
         </ExecutivePanel>
 
@@ -355,7 +348,7 @@ export default function Projects() {
         >
           {actionQueue.length > 0 ? (
             <div className="signal-list">
-              {actionQueue.map(({ row }, index) => (
+              {actionQueue.map((row, index) => (
                 <button
                   key={row.id}
                   onClick={() => navigate(`/projects/${row.id}`)}
@@ -364,12 +357,12 @@ export default function Projects() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="signal-list-kicker">Priority {index + 1}</p>
-                      <p className="signal-list-title truncate">{row.fields?.['Project Name'] || 'Project'}</p>
+                      <p className="signal-list-title truncate">{row.name || 'Project'}</p>
                     </div>
                     <ExecutiveChip accent>Review</ExecutiveChip>
                   </div>
                   <p className="signal-list-copy">
-                    {row.fields?.['Health'] || 'Review project health, margin, and delivery status'}
+                    {row.health || 'Review project health, margin, and delivery status'}
                   </p>
                 </button>
               ))}
@@ -414,11 +407,18 @@ export default function Projects() {
           <EmptyState
             icon={<FolderKanban size={22} />}
             title={search ? 'No results found' : 'No projects match these filters'}
-            subtitle={search ? 'Try a different search term or clear the search.' : 'Clear your filters or add a new project to get started.'}
+            subtitle={search
+              ? (status || client ? 'Nothing matches this search with the status or client filter on. Search everything, or try another term.' : 'Try a different search term or clear the search.')
+              : 'Clear your filters or add a new project to get started.'}
             action={
               <>
+                {search && (status || client) && (
+                  <button onClick={() => setFilters({ status: '', client: '' })} className="btn-ghost">
+                    Search all projects
+                  </button>
+                )}
                 {(search || status || client) && (
-                  <button onClick={() => { clearSearch(); setSearchParams({}) }} className="btn-ghost">
+                  <button onClick={clearEverything} className="btn-ghost">
                     Clear filters
                   </button>
                 )}
@@ -434,7 +434,18 @@ export default function Projects() {
       ) : (
         <ExecutivePanel title="Project stream" subtitle="Live project cards with direct finance and delivery context.">
           <div className="project-stream-grid">
-            {displayed.map(r => <ProjectCard key={r.id} record={r} onRefresh={refresh} />)}
+            {displayed.map(r => <MemoProjectCard key={r.id} record={r} onRefresh={refresh} />)}
+          </div>
+          {/* Show more: the next page of this scope through the cursor. */}
+          <div className="invoice-show-more mt-4" aria-live="polite">
+            <span>Showing {displayed.length.toLocaleString('en-IN')} of {total.toLocaleString('en-IN')}</span>
+            {nextCursor && (
+              <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-ghost"
+                style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                {loadingMore ? <RefreshCw size={12} className="animate-spin" /> : <ChevronDown size={12} />}
+                {loadingMore ? 'Loading…' : `Show ${Math.min(PROJECT_PAGE_SIZE, total - displayed.length)} more`}
+              </button>
+            )}
           </div>
         </ExecutivePanel>
       )}

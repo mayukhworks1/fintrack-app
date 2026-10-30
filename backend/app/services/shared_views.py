@@ -22,7 +22,7 @@ from ..db.audit import build_device_label, parse_client_hint, parse_ua
 from ..db.geo import lookup as geo_lookup
 from ..db.postgres import get_pool
 from ..utils.client_ip import client_ip
-from .invoice_common import invoice_matches_search
+from .invoice_common import invoice_matches_search, project_matches_search
 
 logger = logging.getLogger("fintrack.shared_views")
 
@@ -117,8 +117,6 @@ _PUBLIC_EDIT_FIELDS = {
 }
 # Search fields of the page each live link is made from.
 _STATUS_SEARCH_FIELDS = ("Client", "Project", "Short Status", "Current Status (Detailed)", "Status")  # StatusBoard.jsx
-_PROJECT_SEARCH_FIELDS = ("Client", "Project Name", "Project Status", "Health")
-_TAX_SEARCH_FIELDS = ("Invoice Number", "Project", "Client Name", "Client", "Payment Status")  # TaxLedger.jsx
 
 
 def _new_token() -> str:
@@ -357,11 +355,10 @@ def _sanitize_filter_conditions(raw: Any) -> tuple[list[dict[str, Any]], bool]:
 def _live_unsupported(resource_type: str, cfg: Optional[dict]) -> bool:
     """Whether a live link with this config would show more than the owner's page did."""
     cfg = cfg or {}
-    if cfg.get("liveUnsupported"):
-        return True
-    # The Projects page searches with Teable's full-text search, capped at 20
-    # results and ignoring its client/status filters: the server cannot replay it.
-    return resource_type == "projects" and bool(str(cfg.get("search") or "").strip())
+    # The Projects page used to search with Teable's full-text search (capped
+    # at 20, blind to its filters), which no link could replay. It now asks
+    # GET /api/projects/query, whose rule _record_matches_view applies too.
+    return bool(cfg.get("liveUnsupported"))
 
 
 def _parse_view_config(view: dict) -> Optional[dict]:
@@ -1192,8 +1189,8 @@ def _record_matches_view(resource_type: str, cfg: dict, record: dict, now: Optio
             return False
         if filter_status and f.get("Project Status") != filter_status:
             return False
-        q = search.strip().lower()
-        if q and q not in " ".join(_js_string(f.get(k)) for k in _PROJECT_SEARCH_FIELDS).lower():
+        if not project_matches_search(f, search):
+            # Every word, in any searched field: the Projects page's rule.
             return False
 
     elif resource_type in ("invoices", "tax-ledger"):
@@ -1252,14 +1249,9 @@ def _record_matches_view(resource_type: str, cfg: dict, record: dict, now: Optio
                 return False
             if scope == "open" and status in ("Paid", "Cancelled"):
                 return False
-            q = search.strip().lower()
-            if q and not any(
-                q in ("" if _js_falsy(f.get(k)) else _js_string(f.get(k))).lower() for k in _TAX_SEARCH_FIELDS
-            ):
-                return False
-        elif not invoice_matches_search(f, search):
+        if not invoice_matches_search(f, search):
             # Every word of the search, in any of the searched fields: the
-            # rule the invoices page and GET /api/invoices/query apply.
+            # rule the invoices page, the tax ledger and the query endpoints apply.
             return False
 
     else:

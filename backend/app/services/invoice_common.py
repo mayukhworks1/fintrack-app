@@ -120,3 +120,22 @@ def invoice_matches_search(fields: dict[str, Any], q: str | None) -> bool:
         return True
     text = invoice_search_text(fields)
     return all(t in text for t in tokens)
+
+
+# The project search looks through these fields. projects_mirror keeps the
+# same text in search_text (ft_prj_search, migration 0010).
+PROJECT_SEARCH_FIELDS = ("Project Name", "Client", "Project Status", "Health")
+
+
+def project_search_text(fields: dict[str, Any]) -> str:
+    """Lower-cased search text of a project, one field per line."""
+    parts = [cell_text(fields.get(k)) for k in PROJECT_SEARCH_FIELDS]
+    return "\n".join(p for p in parts if p is not None).lower()
+
+
+def project_matches_search(fields: dict[str, Any], q: str | None) -> bool:
+    tokens = search_tokens(q)
+    if not tokens:
+        return True
+    text = project_search_text(fields)
+    return all(t in text for t in tokens)

@@ -21,13 +21,11 @@ once as SQL and once as Python, side by side, so the two paths cannot drift.
 """
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import logging
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional
 
@@ -36,6 +34,20 @@ from .invoice_common import (
     cell_text,
     invoice_search_text,
     search_tokens,
+)
+from .list_query import (
+    PARAMS_PREAMBLE,
+    TOP_CHAR,
+    QueryError,
+    SqlParams,
+    clean_text,
+    decode_cursor as _decode_cursor,
+    encode_cursor as _encode_cursor,
+    group_rows_from_sql,
+    group_rows_py as _group_rows_py,
+    keyset_sql,
+    like_pattern,
+    py_keyset_page,
 )
 
 logger = logging.getLogger("fintrack.invoice_query")
@@ -93,11 +105,27 @@ NUMBER_OPS = {"eq", "neq", "gt", "gte", "lt", "lte"}
 DATE_OPS = {"date_is", "date_is_not", "date_before", "date_after"}
 MAX_CONDITIONS = 20
 
-_TOP_CHAR = "\U0010ffff"   # sorts after any text, in Python and under COLLATE "C"
+_TOP_CHAR = TOP_CHAR
+TAX_SCOPES = ("tax", "open", "all")
+_PERIOD_RE = re.compile(r"^(fy|cy|h[12]|q[1-4])-(\d{4})$|^m-(\d{4})-(0[1-9]|1[0-2])$")
 
 
-class QueryError(ValueError):
-    """A request the endpoint refuses (400)."""
+@dataclass(frozen=True)
+class Source:
+    """A mirror the invoice list can be answered from.
+
+    invoices_mirror and web_invoices_mirror carry the same generated columns
+    (migrations 0009 and 0010), so one set of SQL serves both; only the table,
+    the cache namespace (busted by that source's writes and sync) and the
+    per-currency totals the web module shows differ."""
+    name: str
+    table: str
+    cache: str
+    currency: bool = False
+
+
+INVOICES = Source("invoices", "invoices_mirror", "invoice:")
+WEB_INVOICES = Source("web_invoices", "web_invoices_mirror", "webinv:", currency=True)
 
 
 # ── Request ────────────────────────────────────────────────────────────────
@@ -123,6 +151,11 @@ class InvoiceQuery:
     sort: str = "Raised Date"
     order: str = "desc"
     tz: int = 0
+    # Tax ledger: its scope (paid register / open / both, never cancelled, INR
+    # only), a client row of its breakdown, and the period it was asked for.
+    tax_scope: Optional[str] = None
+    tax_client: Optional[str] = None
+    period: Optional[str] = None
 
     @property
     def tokens(self) -> list[str]:
@@ -134,6 +167,7 @@ class InvoiceQuery:
             self.tokens or self.status or self.project or self.client or self.category or self.raised_by
             or self.billing != "all" or self.month or self.aging or self.date_from or self.date_to
             or self.overdue or self.has_docs or self.followup_due or self.conditions
+            or self.tax_scope or self.tax_client
         )
 
     def filter_key(self) -> str:
@@ -142,6 +176,7 @@ class InvoiceQuery:
             self.tokens, self.status, self.project, self.client, self.category, self.raised_by,
             self.billing, self.month, self.aging, self.date_field if (self.date_from or self.date_to) else None,
             self.date_from, self.date_to, self.overdue, self.has_docs, self.followup_due, self.conditions, self.tz,
+            self.tax_scope, self.tax_client,
         ], separators=(",", ":"), sort_keys=True)
 
     def view_config(self) -> dict[str, Any]:
@@ -160,12 +195,36 @@ class InvoiceQuery:
 
 
 def _clean_text(value: Optional[str], name: str) -> Optional[str]:
-    if value is None:
-        return None
-    value = str(value)
-    if len(value) > _TEXT_MAX:
-        raise QueryError(f"{name} is too long")
-    return value or None
+    return clean_text(value, name, _TEXT_MAX)
+
+
+def period_range(period: str) -> tuple[str, str]:
+    """The days a tax-ledger period covers, as the page's period picker names them.
+
+    fy-2025: April 2025 to March 2026 · cy-2026: the calendar year · h1-2026 /
+    h2-2026: January-June / July-December · q1-2026 … q4-2026: calendar
+    quarters · m-2026-10: one month."""
+    m = _PERIOD_RE.match(period or "")
+    if not m:
+        raise QueryError("period must be fy-YYYY, cy-YYYY, h1-YYYY, h2-YYYY, q1-YYYY … q4-YYYY or m-YYYY-MM")
+    if m.group(3):
+        y, mo = int(m.group(3)), int(m.group(4))
+        start = date(y, mo, 1)
+        end = (date(y + (mo == 12), mo % 12 + 1, 1) - timedelta(days=1))
+        return start.isoformat(), end.isoformat()
+    kind, y = m.group(1), int(m.group(2))
+    if kind == "fy":
+        return f"{y}-04-01", f"{y + 1}-03-31"
+    if kind == "cy":
+        return f"{y}-01-01", f"{y}-12-31"
+    if kind == "h1":
+        return f"{y}-01-01", f"{y}-06-30"
+    if kind == "h2":
+        return f"{y}-07-01", f"{y}-12-31"
+    q = int(kind[1])
+    start = date(y, 3 * q - 2, 1)
+    end = date(y + (q == 4), (3 * q) % 12 + 1, 1) - timedelta(days=1)
+    return start.isoformat(), end.isoformat()
 
 
 def _clean_date(value: Optional[str], name: str) -> Optional[str]:
@@ -225,10 +284,20 @@ def build_query(
     date_field: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None,
     overdue: bool = False, has_docs: bool = False, followup_due: bool = False,
     conditions: Any = None, sort: Optional[str] = None, order: Optional[str] = None, tz: int = 0,
+    tax_scope: Optional[str] = None, tax_client: Optional[str] = None, period: Optional[str] = None,
 ) -> InvoiceQuery:
     """Validate request parameters into an InvoiceQuery; QueryError on anything unknown."""
     if q is not None and len(q) > 200:
         raise QueryError("q is too long")
+    if tax_scope and tax_scope not in TAX_SCOPES:
+        raise QueryError("tax_scope must be tax, open or all")
+    if tax_client and not tax_scope:
+        raise QueryError("tax_client needs a tax_scope")
+    if period:
+        # A named period is a Raised Date range; an explicit range wins.
+        lo, hi = period_range(period)
+        if not (date_from or date_to):
+            date_field, date_from, date_to = "Raised Date", lo, hi
     billing = billing or "all"
     if billing not in BILLING:
         raise QueryError("billing must be all, project or retainer")
@@ -255,44 +324,18 @@ def build_query(
         date_from=_clean_date(date_from, "date_from"), date_to=_clean_date(date_to, "date_to"),
         overdue=bool(overdue), has_docs=bool(has_docs), followup_due=bool(followup_due),
         conditions=_parse_conditions(conditions), sort=sort, order=order, tz=int(tz),
+        tax_scope=tax_scope or None, tax_client=_clean_text(tax_client, "tax_client"), period=period or None,
     )
 
 
 # ── Cursor ─────────────────────────────────────────────────────────────────
 
 def encode_cursor(qry: InvoiceQuery, key: Any, record_id: str) -> str:
-    if isinstance(key, float) and math.isinf(key):
-        key = "+inf" if key > 0 else "-inf"
-        kind = "inf"
-    else:
-        kind = "f" if isinstance(key, (int, float)) else "s"
-    raw = json.dumps({"s": qry.sort, "o": qry.order, "t": kind, "k": key, "i": record_id}, separators=(",", ":"))
-    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+    return _encode_cursor(qry.sort, qry.order, key, record_id)
 
 
 def decode_cursor(qry: InvoiceQuery, cursor: str) -> tuple[Any, str]:
-    try:
-        if len(cursor) > 2000:
-            raise ValueError
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise ValueError
-    except (ValueError, binascii.Error, UnicodeDecodeError):
-        raise QueryError("invalid cursor") from None
-    if data.get("s") != qry.sort or data.get("o") != qry.order:
-        raise QueryError("cursor belongs to a different sort")
-    rid, kind, key = data.get("i"), data.get("t"), data.get("k")
-    if not isinstance(rid, str) or not 0 < len(rid) <= 60:
-        raise QueryError("invalid cursor")
-    text_sort = SORTS[qry.sort][0] == "text"
-    if kind == "s" and text_sort and isinstance(key, str) and len(key) <= 1000:
-        return key, rid
-    if kind == "f" and not text_sort and isinstance(key, (int, float)) and not isinstance(key, bool):
-        return float(key), rid
-    if kind == "inf" and not text_sort and key in ("+inf", "-inf"):
-        return (math.inf if key == "+inf" else -math.inf), rid
-    raise QueryError("invalid cursor")
+    return _decode_cursor(qry.sort, qry.order, SORTS[qry.sort][0] == "text", cursor)
 
 
 # ── Measures: one definition, SQL and Python ───────────────────────────────
@@ -368,13 +411,7 @@ def _band(days: float) -> str:
 
 # ── SQL ────────────────────────────────────────────────────────────────────
 
-class _Params:
-    def __init__(self, now: datetime, tz: int):
-        self.values: list[Any] = [now, now.astimezone(timezone.utc).date(), tz]
-
-    def add(self, value: Any) -> str:
-        self.values.append(value)
-        return f"${len(self.values)}"
+_Params = SqlParams
 
 
 # $1 = now, $2 = today (UTC), $3 = tz offset minutes: every query starts with these.
@@ -462,15 +499,16 @@ def _date_value(value: Any) -> Optional[date]:
         return None
 
 
-def _like(token: str) -> str:
-    return "%" + token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+_like = like_pattern
 
 
 def where_sql(qry: InvoiceQuery, owner: Optional[str], p: _Params) -> str:
-    """WHERE clause (live rows, owner scope, filters) over invoices_mirror columns."""
+    """WHERE clause (live rows, owner scope, filters) over the mirror's columns."""
     # $1-$3 are bound on every query, so each statement has to name them for
     # Postgres to know their types; this states them once as a constant test.
-    w = ["($1::timestamptz, $2::date, $3::int) IS NOT NULL", "deleted_at IS NULL"]
+    w = [PARAMS_PREAMBLE, "deleted_at IS NULL"]
     if owner:
         w.append(f"lower(raised_by) = lower({p.add(owner)})")
     for tok in qry.tokens:
@@ -513,12 +551,31 @@ def where_sql(qry: InvoiceQuery, owner: Optional[str], p: _Params) -> str:
             w.append(f"{AGING_SQL} > {lo}")
         if hi is not None:
             w.append(f"{AGING_SQL} <= {hi}")
+    if qry.tax_scope:
+        # TaxLedger.jsx: INR invoices only, never cancelled; the register is
+        # the paid ones, "open" everything else.
+        w.append("payment_status IS DISTINCT FROM 'Cancelled'")
+        w.append("upper(btrim(currency_code)) IN ('RS', 'INR')")
+        if qry.tax_scope == "tax":
+            w.append("payment_status = 'Paid'")
+        elif qry.tax_scope == "open":
+            w.append("payment_status IS DISTINCT FROM 'Paid'")
+    if qry.tax_client:
+        w.append(f"tax_client = {p.add(qry.tax_client)}")
     for cond in qry.conditions:
         w.append(_condition_sql(cond, p))
     return " AND ".join(w)
 
 
-def _base_cte(where: str) -> str:
+_CURRENCY_SQL = "COALESCE(NULLIF(btrim(currency_code), ''), 'RS')"
+_PCUR_SEP = "\x1f"
+
+
+def _base_cte(where: str, src: Source = INVOICES) -> str:
+    extra = ""
+    if src.currency:
+        extra = (f",\n          {_CURRENCY_SQL} AS currency,"
+                 f"\n          COALESCE(project, 'Unassigned') || chr(31) || {_CURRENCY_SQL} AS pcur")
     return f"""
         SELECT
           payment_status AS st,
@@ -533,8 +590,8 @@ def _base_cte(where: str) -> str:
           {_utc_day('followup_at')} AS fday,
           {AGING_SQL} AS aging,
           {_local_month('raised_at')} AS rmonth,
-          {_local_month('cleared_at')} AS cmonth
-        FROM invoices_mirror
+          {_local_month('cleared_at')} AS cmonth{extra}
+        FROM {src.table}
         WHERE {where}
     """
 
@@ -545,13 +602,13 @@ _BAND_SQL = (
 )
 
 
-def aggregate_sql(where: str, groups: Iterable[str]) -> str:
+def aggregate_sql(where: str, groups: Iterable[str], src: Source = INVOICES) -> str:
     groups = list(groups)
     sums = ",\n          ".join(f"sum({expr})::float8 AS {name}" for name, expr, _ in MEASURES)
     sets = ", ".join(["()"] + [f"({g})" for g in groups])
     keys = ", ".join(groups)
     return f"""
-        WITH src AS ({_base_cte(where)}),
+        WITH src AS ({_base_cte(where, src)}),
         base AS (SELECT src.*, {_BAND_SQL} AS band FROM src)
         SELECT GROUPING({keys}) AS g, {keys},
           {sums}
@@ -562,21 +619,11 @@ def aggregate_sql(where: str, groups: Iterable[str]) -> str:
 
 def _group_rows_from_sql(rows, groups: list[str]) -> dict[str, dict[Any, dict]]:
     """{group name or "total": {key: {measure: value}}} from the GROUPING SETS rows."""
-    out: dict[str, dict[Any, dict]] = {"total": {}}
-    for g in groups:
-        out[g] = {}
-    width = len(groups)
-    for row in rows:
-        mask = row["g"]
-        measures = {name: float(row[name] or 0) for name, _, _ in MEASURES}
-        if mask == (1 << width) - 1:
-            out["total"][None] = measures
-            continue
-        for i, g in enumerate(groups):
-            if not mask & (1 << (width - 1 - i)):
-                out[g][row[g]] = measures
-                break
-    return out
+    return group_rows_from_sql(rows, groups, MEASURES)
+
+
+def _groups_for(src: Source, workspace: bool) -> tuple[str, ...]:
+    return GROUPS_SCOPE + (GROUPS_FACETS if workspace else ()) + (("currency", "pcur") if src.currency else ())
 
 
 # ── Python path (Teable fallback, and the reference the tests compare with) ──
@@ -667,17 +714,29 @@ def py_aging(fields: dict, now: datetime) -> float:
     return float(days) if days is not None else 0.0
 
 
+def currency_code(fields: dict) -> str:
+    """The generated currency_code column: the cell's text, RS when blank."""
+    return cell_text(fields.get("Currency")) or "RS"
+
+
+def tax_client(fields: dict) -> str:
+    """The generated tax_client column: TaxLedger.jsx groups by Client Name, else Project."""
+    return cell_text(fields.get("Client Name")) or cell_text(fields.get("Project")) or "Unknown"
+
+
 def _row(record: dict, now: datetime, tz: int) -> dict:
     f = record.get("fields") or {}
     st = _short(f.get("Payment Status"), 60)
     aging = py_aging(f, now)
     followup = parse_instant(f.get("Next followup"))
+    project = _short(f.get("Project"), 255) or "Unassigned"
+    currency = currency_code(f).strip() or "RS"
     return {
         "id": record.get("id"), "fields": f,
         "st": st, "status": st or "Unknown",
         "raised": _amount(f.get("Amount Raised")), "wt": _amount(f.get("Amount with Tax")),
         "rec": _amount(f.get("Amount Received")), "outa": _num(f.get("Outstanding Amount")) or 0.0,
-        "project": _short(f.get("Project"), 255) or "Unassigned",
+        "project": project,
         "client": cell_text(f.get("Client Name")) or cell_text(f.get("Client")),
         "category": _short(f.get("Category"), 120), "milestone": cell_text(f.get("Milestone")),
         "raised_by": cell_text(f.get("Raised By")),
@@ -687,24 +746,14 @@ def _row(record: dict, now: datetime, tz: int) -> dict:
         "band": _band(aging) if st == "Pending" else None,
         "rmonth": _month(parse_instant(f.get("Raised Date")), tz),
         "cmonth": _month(parse_instant(f.get("Cleared Date")), tz),
+        "currency": currency,
+        "pcur": f"{project}{_PCUR_SEP}{currency}",
         "_today": now.astimezone(timezone.utc).date(),
     }
 
 
 def group_rows_py(rows: list[dict], groups: Iterable[str]) -> dict[str, dict[Any, dict]]:
-    groups = list(groups)
-    out: dict[str, dict[Any, dict]] = {"total": {None: {name: 0.0 for name, _, _ in MEASURES}}}
-    for g in groups:
-        out[g] = {}
-    for r in rows:
-        contrib = {name: float(fn(r)) for name, _, fn in MEASURES}
-        targets = [out["total"][None]]
-        for g in groups:
-            targets.append(out[g].setdefault(r[g], {name: 0.0 for name, _, _ in MEASURES}))
-        for t in targets:
-            for k, v in contrib.items():
-                t[k] += v
-    return out
+    return _group_rows_py(rows, groups, MEASURES)
 
 
 def py_sort_key(qry: InvoiceQuery, record: dict, now: datetime) -> Any:
@@ -778,6 +827,21 @@ def _project_entry(name: str, m: dict) -> dict:
     }
 
 
+def _currency_entry(m: dict) -> dict:
+    """One currency of WebInvoiceService.get_summary's by_currency, plus the
+    table-footer sums (every row, cancelled included) of that currency."""
+    return {
+        "count": int(m["n"]), "pending_count": int(m["pending"]),
+        "raised": _r(m["raised"]), "with_tax": _r(m["with_tax"]), "gst": _r(m["gst"]), "tds": _r(m["tds"]),
+        "received": _r(m["collected"]), "outstanding": _r(m["outstanding"]),
+        "collection_rate": round(m["collected"] / m["with_tax"] * 100, 2) if m["with_tax"] > 0 else 0.0,
+        "totals": {
+            "amount_raised": _r(m["sum_raised"]), "amount_with_tax": _r(m["sum_wt"]),
+            "amount_received": _r(m["sum_rec"]), "outstanding": _r(m["open_pos"]),
+        },
+    }
+
+
 def shape(groups: dict[str, dict[Any, dict]], *, workspace: bool = False) -> dict:
     out = _summary(groups["total"][None])
     out["by_status"] = {
@@ -787,6 +851,26 @@ def shape(groups: dict[str, dict[Any, dict]], *, workspace: bool = False) -> dic
     projects = sorted(groups["project"].items(), key=lambda kv: (-kv[1]["n"], -kv[1]["raised"], str(kv[0])))
     out["by_project"] = [_project_entry(k, m) for k, m in projects[:MAX_PROJECTS]]
     out["project_count"] = len(projects)
+    if "currency" in groups:
+        # Web invoices are kept in their own currency: totals per currency, and
+        # each project's split (currencies with a live, not cancelled, invoice).
+        out["by_currency"] = {
+            k: _currency_entry(m)
+            for k, m in sorted(groups["currency"].items(), key=lambda kv: (-kv[1]["n"], str(kv[0])))
+        }
+        split: dict[str, dict[str, dict]] = {}
+        for key, m in groups["pcur"].items():
+            if m["n"] - m["cancelled"] <= 0:
+                continue
+            project, _, cur = str(key).partition(_PCUR_SEP)
+            split.setdefault(project, {})[cur] = {
+                "raised": _r(m["raised"]), "with_tax": _r(m["with_tax"]), "gst": _r(m["gst"]),
+                "tds": _r(m["tds"]), "received": _r(m["collected"]), "outstanding": _r(m["outstanding"]),
+            }
+        for entry in out["by_project"]:
+            per = split.get(entry["project"], {})
+            entry["by_currency"] = dict(sorted(per.items()))
+            entry["currencies"] = sorted(per)
     out["aging"] = {
         b: {"count": int(groups["band"].get(b, {}).get("n", 0)), "amount": _r(groups["band"].get(b, {}).get("raised", 0))}
         for b in AGING_BANDS
@@ -829,8 +913,142 @@ def overdue_entry(record_id: str, f: dict, aging: float) -> dict:
         "aging": aging,
         "amount": _amount(f.get("Amount Raised")),
         "outstanding": _num(f.get("Outstanding Amount")),
+        "currency": currency_code(f).strip() or "RS",
         "raised_date": f.get("Raised Date"),
         "followup": f.get("Next followup"),
+    }
+
+
+# ── Tax ledger ─────────────────────────────────────────────────────────────
+# TaxLedger.jsx used to download every invoice and work these out in the
+# browser (taxParts and the memos over it). The same arithmetic, per row:
+#   base = Amount Raised · gross = Amount with Tax, else base
+#   GST = max(0, gross - base) · TDS (paid only) = max(0, gross - received)
+#   outstanding (open only) = max(0, gross - received)
+# summed for the paid register and for the open invoices, by month raised (in
+# the viewer's time zone) and by client (Client Name, else Project).
+
+_TAX_GROSS = "(CASE WHEN wt <> 0 THEN wt ELSE raised END)"
+TAX_MEASURES: list[tuple[str, str, Callable[[dict], float]]] = [
+    ("n", "1", lambda r: 1),
+    ("taxable", "raised", lambda r: r["raised"]),
+    ("gst", f"GREATEST(0, {_TAX_GROSS} - raised)", lambda r: max(0.0, _gross(r) - r["raised"])),
+    ("tds", f"CASE WHEN st = 'Paid' THEN GREATEST(0, {_TAX_GROSS} - rec) ELSE 0 END",
+     lambda r: max(0.0, _gross(r) - r["rec"]) if r["st"] == "Paid" else 0.0),
+    ("gross", _TAX_GROSS, _gross),
+    ("received", "rec", lambda r: r["rec"]),
+    ("outstanding", f"CASE WHEN st IN ('Paid', 'Cancelled') THEN 0 ELSE GREATEST(0, {_TAX_GROSS} - rec) END",
+     lambda r: 0.0 if r["st"] in ("Paid", "Cancelled") else max(0.0, _gross(r) - r["rec"])),
+]
+# The "Oldest aging" of open invoices: the aging each record is listed with
+# (runtime days since raised for a pending one, else the stored value).
+_SHOWN_AGING_SQL = (
+    "(CASE WHEN payment_status = 'Pending' AND raised_at IS NOT NULL "
+    f"THEN GREATEST(0, {_DAYS_SINCE_RAISED}) ELSE COALESCE(agening, 0) END)::float8"
+)
+
+
+def _shown_aging(f: dict, now: datetime) -> float:
+    st = _short(f.get("Payment Status"), 60)
+    raised = parse_instant(f.get("Raised Date"))
+    if st == "Pending" and raised is not None:
+        return float(max(0, math.floor((now - raised).total_seconds() / 86400)))
+    return _num(f.get("Agening (Days)")) or 0.0
+
+
+def tax_sql(where: str, src: Source = INVOICES) -> str:
+    sums = ",\n          ".join(f"sum({expr})::float8 AS {name}" for name, expr, _ in TAX_MEASURES)
+    return f"""
+        WITH base AS (
+          SELECT
+            payment_status AS st,
+            CASE WHEN payment_status = 'Paid' THEN 'paid' ELSE 'open' END AS tset,
+            COALESCE(amount_raised, 0)::float8 AS raised,
+            COALESCE(amount_with_tax, 0)::float8 AS wt,
+            COALESCE(amount_received, 0)::float8 AS rec,
+            {_local_month('raised_at')} AS tmonth,
+            tax_client AS tclient,
+            {_SHOWN_AGING_SQL} AS shown_aging
+          FROM {src.table}
+          WHERE {where}
+        )
+        SELECT GROUPING(tset, tmonth, tclient) AS g, tset, tmonth, tclient,
+          {sums},
+          max(shown_aging)::float8 AS oldest
+        FROM base
+        GROUP BY GROUPING SETS ((tset), (tset, tmonth), (tset, tclient))
+    """
+
+
+def _tax_values(m: dict) -> dict:
+    return {
+        "count": int(m["n"]), "taxable": _r(m["taxable"]), "gst": _r(m["gst"]), "tds": _r(m["tds"]),
+        "gross": _r(m["gross"]), "received": _r(m["received"]), "outstanding": _r(m["outstanding"]),
+    }
+
+
+def shape_tax(rows: list[dict]) -> dict:
+    """rows: {level, tset, tmonth, tclient, measures…, oldest} at the three groupings."""
+    sets: dict[str, dict] = {}
+    months: list[dict] = []
+    clients: list[dict] = []
+    for r in rows:
+        if r["level"] == "set":
+            sets[r["tset"]] = r
+        elif r["tset"] == "paid" and r["level"] == "month" and r["tmonth"]:
+            months.append({"key": r["tmonth"], **_tax_values(r)})
+        elif r["tset"] == "paid" and r["level"] == "client":
+            clients.append({"client": r["tclient"], **_tax_values(r)})
+    empty = {name: 0.0 for name, _, _ in TAX_MEASURES}
+    paid = _tax_values(sets.get("paid", empty))
+    opened = {**_tax_values(sets.get("open", empty)), "oldest": int(sets.get("open", {}).get("oldest") or 0)}
+    return {
+        "paid": paid,
+        "open": opened,
+        "scope_counts": {"tax": paid["count"], "open": opened["count"], "all": paid["count"] + opened["count"]},
+        "months": sorted(months, key=lambda m: m["key"]),
+        "clients": sorted(clients, key=lambda c: (-c["gross"], str(c["client"]))),
+    }
+
+
+def _tax_rows_from_sql(rows) -> list[dict]:
+    level = {3: "set", 1: "month", 2: "client"}
+    return [{"level": level[r["g"]], "tset": r["tset"], "tmonth": r["tmonth"], "tclient": r["tclient"],
+             "oldest": float(r["oldest"] or 0), **{n: float(r[n] or 0) for n, _, _ in TAX_MEASURES}}
+            for r in rows if r["g"] in level]
+
+
+def py_tax(records: list[dict], qry: InvoiceQuery, now: datetime) -> dict:
+    """tax_sql over records already filtered to the tax scope."""
+    acc: dict[tuple, dict] = {}
+    for rec in records:
+        f = rec.get("fields") or {}
+        row = _row(rec, now, qry.tz)
+        tset = "paid" if row["st"] == "Paid" else "open"
+        contrib = {n: float(fn(row)) for n, _, fn in TAX_MEASURES}
+        aging = _shown_aging(f, now)
+        for key in (("set", tset, None, None), ("month", tset, row["rmonth"], None),
+                    ("client", tset, None, tax_client(f))):
+            a = acc.setdefault(key, {**{n: 0.0 for n, _, _ in TAX_MEASURES}, "oldest": None})
+            for k, v in contrib.items():
+                a[k] += v
+            a["oldest"] = aging if a["oldest"] is None else max(a["oldest"], aging)
+    return shape_tax([{"level": k[0], "tset": k[1], "tmonth": k[2], "tclient": k[3], **v} for k, v in acc.items()])
+
+
+def tax_parts(fields: dict) -> dict:
+    """taxParts() of TaxLedger.jsx for one record (the CSV export's columns)."""
+    base = _amount(fields.get("Amount Raised"))
+    wt = _amount(fields.get("Amount with Tax"))
+    gross = wt if wt != 0 else base
+    received = _amount(fields.get("Amount Received"))
+    status = str(fields.get("Payment Status") or "").strip()
+    gst = max(0.0, gross - base)
+    tds = max(0.0, gross - received) if status == "Paid" and received < gross else 0.0
+    return {
+        "base": base, "gross": gross, "gst": gst, "gst_pct": gst / base * 100 if base > 0 else 0.0,
+        "tds": tds, "tds_pct": tds / base * 100 if base > 0 else 0.0, "received": received, "status": status,
+        "outstanding": max(0.0, gross - received) if status not in ("Paid", "Cancelled") else 0.0,
     }
 
 
@@ -846,6 +1064,26 @@ def with_runtime_aging(record: dict, now: datetime) -> dict:
     return {**record, "fields": f}
 
 
+def _py_tax_ok(f: dict, qry: InvoiceQuery) -> bool:
+    """The tax-scope part of where_sql, as shared_views ports TaxLedger.jsx."""
+    from .shared_views import _js_falsy, _js_string
+
+    if qry.tax_scope:
+        status = ("" if _js_falsy(f.get("Payment Status")) else _js_string(f.get("Payment Status"))).strip()
+        if status == "Cancelled":
+            return False
+        currency = ("RS" if _js_falsy(f.get("Currency")) else _js_string(f.get("Currency"))).strip().upper()
+        if currency not in ("RS", "INR"):
+            return False
+        if qry.tax_scope == "tax" and status != "Paid":
+            return False
+        if qry.tax_scope == "open" and status == "Paid":
+            return False
+    if qry.tax_client and tax_client(f) != qry.tax_client:
+        return False
+    return True
+
+
 def py_filter(records: list[dict], qry: InvoiceQuery, owner: Optional[str], now: datetime) -> list[dict]:
     from .shared_views import _record_matches_view
 
@@ -856,6 +1094,8 @@ def py_filter(records: list[dict], qry: InvoiceQuery, owner: Optional[str], now:
         f = r.get("fields") or {}
         if owner_lc and str(f.get("Raised By", "")).lower() != owner_lc:
             continue
+        if not _py_tax_ok(f, qry):
+            continue
         if _record_matches_view("invoices", cfg, r, now):
             out.append(r)
     return out
@@ -863,24 +1103,14 @@ def py_filter(records: list[dict], qry: InvoiceQuery, owner: Optional[str], now:
 
 def py_page(records: list[dict], qry: InvoiceQuery, now: datetime, *, limit: int,
             cursor: Optional[tuple[Any, str]] = None, offset: int = 0) -> tuple[list[dict], Optional[tuple[Any, str]]]:
-    desc = qry.order == "desc"
-    keyed = sorted(((py_sort_key(qry, r, now), str(r.get("id") or ""), r) for r in records),
-                   key=lambda t: (t[0], t[1]), reverse=desc)
-    if cursor is not None:
-        ck = (cursor[0], cursor[1])
-        keyed = [t for t in keyed if ((t[0], t[1]) < ck if desc else (t[0], t[1]) > ck)]
-    else:
-        keyed = keyed[offset:]
-    page = keyed[:limit]
-    more = len(keyed) > limit
-    nxt = (page[-1][0], page[-1][1]) if more and page else None
-    return [t[2] for t in page], nxt
+    keyed = [(py_sort_key(qry, r, now), str(r.get("id") or ""), r) for r in records]
+    return py_keyset_page(keyed, qry.order == "desc", limit=limit, cursor=cursor, offset=offset)
 
 
-def py_aggregates(records: list[dict], qry: InvoiceQuery, now: datetime, *, workspace: bool = False) -> dict:
+def py_aggregates(records: list[dict], qry: InvoiceQuery, now: datetime, *, workspace: bool = False,
+                  src: Source = INVOICES) -> dict:
     rows = [_row(r, now, qry.tz) for r in records]
-    groups = GROUPS_SCOPE + (GROUPS_FACETS if workspace else ())
-    out = shape(group_rows_py(rows, groups), workspace=workspace)
+    out = shape(group_rows_py(rows, _groups_for(src, workspace)), workspace=workspace)
     if workspace:
         pending = sorted((r for r in rows if r["st"] == "Pending"), key=lambda r: (-r["aging"], str(r["id"])))
         out["overdue_top"] = [overdue_entry(r["id"], r["fields"], r["aging"]) for r in pending[:5]]
@@ -905,15 +1135,13 @@ def _order_sql(qry: InvoiceQuery) -> str:
 
 
 def _page_sql(qry: InvoiceQuery, where: str, p: _Params, cursor: Optional[tuple[Any, str]],
-              limit: int, offset: int) -> str:
+              limit: int, offset: int, src: Source = INVOICES) -> str:
     key = _sort_key_sql(qry)
     if cursor is not None:
-        cast = "::text" if SORTS[qry.sort][0] == "text" else "::double precision"
-        cmp = "<" if qry.order == "desc" else ">"
-        where += f' AND ({key}, teable_id COLLATE "C") {cmp} ({p.add(cursor[0])}{cast}, {p.add(cursor[1])}::text)'
+        where += " AND " + keyset_sql(key, SORTS[qry.sort][0] == "text", qry.order == "desc", p, cursor)
         offset = 0
     return (
-        f"SELECT teable_id, fields, {key} AS sort_key FROM invoices_mirror WHERE {where} "
+        f"SELECT teable_id, fields, {key} AS sort_key FROM {src.table} WHERE {where} "
         f"ORDER BY {_order_sql(qry)} LIMIT {int(limit) + 1} OFFSET {int(offset)}"
     )
 
@@ -929,10 +1157,10 @@ def _cursor_of(row) -> tuple[Any, str]:
 
 
 async def _groups_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime,
-                      groups: tuple[str, ...], *, scoped: bool) -> dict:
+                      groups: tuple[str, ...], *, scoped: bool, src: Source = INVOICES) -> dict:
     p = _Params(now, qry.tz)
     where = where_sql(qry if scoped else InvoiceQuery(tz=qry.tz), owner, p)
-    rows = await pool.fetch(aggregate_sql(where, groups), *p.values)
+    rows = await pool.fetch(aggregate_sql(where, groups, src), *p.values)
     return _group_rows_from_sql(rows, list(groups))
 
 
@@ -940,19 +1168,20 @@ def _today_key(now: datetime) -> str:
     return now.astimezone(timezone.utc).date().isoformat()
 
 
-async def _workspace_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime) -> dict:
+async def _workspace_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime,
+                         src: Source = INVOICES) -> dict:
     from ..utils.cache import cache
 
-    key = f"invoice:q:ws:{(owner or '*').lower()}:{qry.tz}:{_today_key(now)}"
+    key = f"{src.cache}q:ws:{(owner or '*').lower()}:{qry.tz}:{_today_key(now)}"
     cached = cache.get(key)
     if cached is not None:
         return cached
-    ws = shape(await _groups_sql(pool, qry, owner, now, GROUPS_SCOPE + GROUPS_FACETS, scoped=False),
+    ws = shape(await _groups_sql(pool, qry, owner, now, _groups_for(src, True), scoped=False, src=src),
                workspace=True)
     p = _Params(now, qry.tz)
     where = where_sql(InvoiceQuery(tz=qry.tz), owner, p)
     rows = await pool.fetch(
-        f"SELECT teable_id, fields, {AGING_SQL} AS aging FROM invoices_mirror "
+        f"SELECT teable_id, fields, {AGING_SQL} AS aging FROM {src.table} "
         f"WHERE {where} AND payment_status = 'Pending' "
         f'ORDER BY aging DESC, teable_id COLLATE "C" ASC LIMIT 5',
         *p.values,
@@ -962,16 +1191,78 @@ async def _workspace_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: dat
     return ws
 
 
-async def _scope_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime) -> dict:
+async def _scope_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime,
+                     src: Source = INVOICES) -> dict:
     from ..utils.cache import cache
 
-    key = f"invoice:q:scope:{(owner or '*').lower()}:{_today_key(now)}:{qry.filter_key()}"
+    key = f"{src.cache}q:scope:{(owner or '*').lower()}:{_today_key(now)}:{qry.filter_key()}"
     cached = cache.get(key)
     if cached is not None:
         return cached
-    scope = shape(await _groups_sql(pool, qry, owner, now, GROUPS_SCOPE, scoped=True))
+    scope = shape(await _groups_sql(pool, qry, owner, now, _groups_for(src, False), scoped=True, src=src))
     cache.set(key, scope, ttl=_TTL_SCOPE)
     return scope
+
+
+def tax_scope_query(qry: InvoiceQuery, *, workspace: bool) -> InvoiceQuery:
+    """What the tax totals add up: the filtered scope (or, for the "of all"
+    figures, just the period), with paid and open together."""
+    if workspace:
+        return InvoiceQuery(tz=qry.tz, date_field=qry.date_field, date_from=qry.date_from, date_to=qry.date_to,
+                            tax_scope="all", period=qry.period)
+    return replace(qry, tax_scope="all", tax_client=None, sort="Raised Date", order="desc")
+
+
+async def _tax_totals_sql(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime, src: Source,
+                          *, workspace: bool = False) -> dict:
+    from ..utils.cache import cache
+
+    kind = "taxws" if workspace else "tax"
+    key = f"{src.cache}q:{kind}:{(owner or '*').lower()}:{_today_key(now)}:{qry.filter_key()}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    p = _Params(now, qry.tz)
+    rows = await pool.fetch(tax_sql(where_sql(qry, owner, p), src), *p.values)
+    out = shape_tax(_tax_rows_from_sql(rows))
+    cache.set(key, out, ttl=_TTL_WORKSPACE if workspace else _TTL_SCOPE)
+    return out
+
+
+async def query_mirror(pool, qry: InvoiceQuery, owner: Optional[str], *, limit: int,
+                       cursor: Optional[tuple[Any, str]], offset: int, aggregates: bool,
+                       now: datetime, src: Source = INVOICES) -> Optional[dict]:
+    """The query against the mirror, or None when the mirror holds no invoices yet."""
+    p = _Params(now, qry.tz)
+    where = where_sql(qry, owner, p)
+    rows = await pool.fetch(_page_sql(qry, where, p, cursor, limit, offset, src), *p.values)
+    more = len(rows) > limit
+    rows = rows[:limit]
+    out: dict[str, Any] = {
+        "records": [{"id": r["teable_id"], "fields": _fields_of(r)} for r in rows],
+        "next": _cursor_of(rows[-1]) if more and rows else None,
+    }
+    if aggregates and qry.tax_scope:
+        # The tax ledger's figures, not the invoice list's: the paid register
+        # and the open invoices of the filtered scope, and of the period alone.
+        out["aggregates"] = await _tax_totals_sql(pool, tax_scope_query(qry, workspace=False), owner, now, src)
+        out["workspace"] = await _tax_totals_sql(pool, tax_scope_query(qry, workspace=True), owner, now, src,
+                                                 workspace=True)
+    if aggregates and not qry.tax_scope:
+        ws = await _workspace_sql(pool, qry, owner, now, src)
+        scope = await _scope_sql(pool, qry, owner, now, src) if qry.filtered else scope_of(ws)
+        out.update(aggregates=scope, workspace=ws, total=scope["count"])
+    else:
+        cp = _Params(now, qry.tz)
+        out["total"] = int(await pool.fetchval(
+            f"SELECT count(*) FROM {src.table} WHERE {where_sql(qry, owner, cp)}", *cp.values))
+
+    if out["total"] == 0 and not out["records"]:
+        # "Nothing matches" and "the mirror was never filled" look alike here;
+        # only the first is an answer.
+        if not await pool.fetchval(f"SELECT EXISTS (SELECT 1 FROM {src.table} WHERE deleted_at IS NULL)"):
+            return None
+    return out
 
 
 def scope_of(ws: dict) -> dict:
@@ -979,38 +1270,9 @@ def scope_of(ws: dict) -> dict:
     return {k: v for k, v in ws.items() if k not in ("facets", "recent_projects", "overdue_top")}
 
 
-async def query_mirror(pool, qry: InvoiceQuery, owner: Optional[str], *, limit: int,
-                       cursor: Optional[tuple[Any, str]], offset: int, aggregates: bool,
-                       now: datetime) -> Optional[dict]:
-    """The query against invoices_mirror, or None when the mirror holds no invoices yet."""
-    p = _Params(now, qry.tz)
-    where = where_sql(qry, owner, p)
-    rows = await pool.fetch(_page_sql(qry, where, p, cursor, limit, offset), *p.values)
-    more = len(rows) > limit
-    rows = rows[:limit]
-    out: dict[str, Any] = {
-        "records": [{"id": r["teable_id"], "fields": _fields_of(r)} for r in rows],
-        "next": _cursor_of(rows[-1]) if more and rows else None,
-    }
-    if aggregates:
-        ws = await _workspace_sql(pool, qry, owner, now)
-        scope = await _scope_sql(pool, qry, owner, now) if qry.filtered else scope_of(ws)
-        out.update(aggregates=scope, workspace=ws, total=scope["count"])
-    else:
-        cp = _Params(now, qry.tz)
-        out["total"] = int(await pool.fetchval(
-            f"SELECT count(*) FROM invoices_mirror WHERE {where_sql(qry, owner, cp)}", *cp.values))
-
-    if out["total"] == 0 and not out["records"]:
-        # "Nothing matches" and "the mirror was never filled" look alike here;
-        # only the first is an answer.
-        if not await pool.fetchval("SELECT EXISTS (SELECT 1 FROM invoices_mirror WHERE deleted_at IS NULL)"):
-            return None
-    return out
-
-
 def query_records(records: list[dict], qry: InvoiceQuery, owner: Optional[str], *, limit: int,
-                  cursor: Optional[tuple[Any, str]], offset: int, aggregates: bool, now: datetime) -> dict:
+                  cursor: Optional[tuple[Any, str]], offset: int, aggregates: bool, now: datetime,
+                  src: Source = INVOICES) -> dict:
     """The same query over records already in memory (the Teable fallback)."""
     records = [with_runtime_aging(r, now) for r in records]
     if owner:
@@ -1019,20 +1281,23 @@ def query_records(records: list[dict], qry: InvoiceQuery, owner: Optional[str], 
     matched = py_filter(records, qry, None, now)
     page, nxt = py_page(matched, qry, now, limit=limit, cursor=cursor, offset=offset)
     out: dict[str, Any] = {"records": page, "next": nxt, "total": len(matched)}
-    if aggregates:
-        ws = py_aggregates(records, qry, now, workspace=True)
-        scope = py_aggregates(matched, qry, now) if qry.filtered else scope_of(ws)
+    if aggregates and qry.tax_scope:
+        out["aggregates"] = py_tax(py_filter(records, tax_scope_query(qry, workspace=False), None, now), qry, now)
+        out["workspace"] = py_tax(py_filter(records, tax_scope_query(qry, workspace=True), None, now), qry, now)
+    elif aggregates:
+        ws = py_aggregates(records, qry, now, workspace=True, src=src)
+        scope = py_aggregates(matched, qry, now, src=src) if qry.filtered else scope_of(ws)
         out.update(aggregates=scope, workspace=ws)
     return out
 
 
-async def iter_export(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime):
+async def iter_export(pool, qry: InvoiceQuery, owner: Optional[str], now: datetime, src: Source = INVOICES):
     """Every record in scope, in order, a batch at a time (keyset over the mirror)."""
     cursor = None
     while True:
         p = _Params(now, qry.tz)
         where = where_sql(qry, owner, p)
-        rows = await pool.fetch(_page_sql(qry, where, p, cursor, EXPORT_BATCH, 0), *p.values)
+        rows = await pool.fetch(_page_sql(qry, where, p, cursor, EXPORT_BATCH, 0, src), *p.values)
         batch = rows[:EXPORT_BATCH]
         if batch:
             yield [{"id": r["teable_id"], "fields": _fields_of(r)} for r in batch]

@@ -8,9 +8,15 @@
  * • Client-wise GST + TDS breakdown with percentage validation
  * • Invoice-level drilldown with tax line items
  * • Export: CSV + print-ready PDF layout
+ *
+ * The totals, months and clients come from the server (GET /api/invoices/query
+ * with a tax_scope; /api/web-invoices/query for the web module), worked out
+ * over the whole period with the same arithmetic as taxParts below, which
+ * stays for each row shown. The register is paged; export and print take the
+ * whole of it.
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Download, Printer, ChevronDown, ChevronUp,
@@ -18,32 +24,27 @@ import {
   ReceiptText, RefreshCw, Search, X, Share2, Link2,
 } from 'lucide-react'
 import { api } from '../services/api'
-import { csvRow } from '../utils/csv'
-import { parseDate } from '../utils/dates'
 import { downloadBlob } from '../utils/download'
 import { escapeHtml } from '../utils/sanitize'
 import { useAuth } from '../context/AuthContext'
-import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { useChangeCount } from '../hooks/useServerList'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import SkeletonList from '../components/SkeletonList'
+import { DEFAULT_TAX_PERIOD, TAX_PAGE_SIZE, fyStartYear, taxFilters, taxListFor, taxQueryParams, useTaxLedgerQuery } from './tax/useTaxLedgerQuery'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TDS_RATE   = 0.10   // 10%
 const FMT_INR    = (n) => `${Number(n || 0) < 0 ? '-' : ''}₹${Math.abs(Math.round(n || 0)).toLocaleString('en-IN')}`
 const FMT_PCT    = (n) => (n == null ? '—' : `${Math.round(n * 10) / 10}%`)
 const PCT_OK     = (pct, expected, tol = 1.5) => Math.abs(pct - expected) <= tol
+const PRINT_MAX_ROWS = 2000
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 const today      = new Date()
 const thisYear   = today.getFullYear()
 const thisMonth  = today.getMonth()   // 0-indexed
 
-function dateKey(iso) {
-  const d = parseDate(iso)
-  if (!d) return ''
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
 function shortMonth(key) {
   if (!key) return ''
   const [y, m] = key.split('-')
@@ -51,12 +52,8 @@ function shortMonth(key) {
 }
 function fyLabel(y) { return `FY ${y}-${String(y + 1).slice(-2)}` }
 
-// Financial year start: April 1
-function fyStartYear(date = today) {
-  return date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1
-}
-
-// Generate period options
+// Generate period options. Each key is the period the server's `period`
+// parameter names (m-2026-10, q3-2026, h1-2026, cy-2026, fy-2025).
 function buildPeriods() {
   const periods = []
   // Monthly: last 12 months
@@ -64,7 +61,7 @@ function buildPeriods() {
     const d = new Date(thisYear, thisMonth - i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     const label = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-    periods.push({ type: 'month', key, label, from: `${key}-01`, to: lastDay(key) })
+    periods.push({ type: 'month', key: `m-${key}`, label, from: `${key}-01`, to: lastDay(key) })
   }
   // Quarters: last 4
   for (let i = 0; i < 4; i++) {
@@ -74,17 +71,17 @@ function buildPeriods() {
     const toKey = `${qy}-${String(qm * 3 + 3).padStart(2, '0')}`
     const to = lastDay(toKey)
     const qLabel = ['Q1 (Jan–Mar)', 'Q2 (Apr–Jun)', 'Q3 (Jul–Sep)', 'Q4 (Oct–Dec)'][qm]
-    periods.push({ type: 'quarter', key: `Q${totalQ}`, label: `${qLabel} ${qy}`, from, to })
+    periods.push({ type: 'quarter', key: `q${qm + 1}-${qy}`, label: `${qLabel} ${qy}`, from, to })
   }
   // Half-years
-  periods.push({ type: 'half', key: `H1-${thisYear}`, label: `H1 Jan–Jun ${thisYear}`, from: `${thisYear}-01-01`, to: `${thisYear}-06-30` })
-  periods.push({ type: 'half', key: `H2-${thisYear}`, label: `H2 Jul–Dec ${thisYear}`, from: `${thisYear}-07-01`, to: `${thisYear}-12-31` })
+  periods.push({ type: 'half', key: `h1-${thisYear}`, label: `H1 Jan–Jun ${thisYear}`, from: `${thisYear}-01-01`, to: `${thisYear}-06-30` })
+  periods.push({ type: 'half', key: `h2-${thisYear}`, label: `H2 Jul–Dec ${thisYear}`, from: `${thisYear}-07-01`, to: `${thisYear}-12-31` })
   // Calendar years
-  periods.push({ type: 'year', key: `CY-${thisYear}`,     label: `${thisYear} (full year)`,     from: `${thisYear}-01-01`,     to: `${thisYear}-12-31` })
-  periods.push({ type: 'year', key: `CY-${thisYear - 1}`, label: `${thisYear - 1} (full year)`, from: `${thisYear - 1}-01-01`, to: `${thisYear - 1}-12-31` })
+  periods.push({ type: 'year', key: `cy-${thisYear}`,     label: `${thisYear} (full year)`,     from: `${thisYear}-01-01`,     to: `${thisYear}-12-31` })
+  periods.push({ type: 'year', key: `cy-${thisYear - 1}`, label: `${thisYear - 1} (full year)`, from: `${thisYear - 1}-01-01`, to: `${thisYear - 1}-12-31` })
   // Financial years
   for (let fy = fyStartYear(); fy >= fyStartYear() - 2; fy--) {
-    periods.push({ type: 'fy', key: `FY-${fy}`, label: fyLabel(fy), from: `${fy}-04-01`, to: `${fy + 1}-03-31` })
+    periods.push({ type: 'fy', key: `fy-${fy}`, label: fyLabel(fy), from: `${fy}-04-01`, to: `${fy + 1}-03-31` })
   }
   return periods
 }
@@ -94,7 +91,8 @@ function lastDay(monthKey) {
 }
 const PERIODS = buildPeriods()
 
-// ── Tax computation ───────────────────────────────────────────────────────────
+// ── Tax computation (each row shown) ─────────────────────────────────────────
+// The server adds these up for the totals: invoice_query.TAX_MEASURES.
 function taxParts(fields = {}) {
   const base    = Number(fields['Amount Raised']    || 0)
   const gross   = Number(fields['Amount with Tax']  || base)
@@ -120,12 +118,6 @@ function taxParts(fields = {}) {
   return { base, gross, gstAmt, gstPct, tdsAmt, tdsPct, received, netReceivable, outstanding, status, isPaid, isCancelled }
 }
 
-function inPeriod(raisedDate, from, to) {
-  if (!raisedDate) return false
-  const d = String(raisedDate).slice(0, 10)
-  return d >= from && d <= to
-}
-
 // ── Formatting ────────────────────────────────────────────────────────────────
 const VAR_GOOD = { color: 'var(--fin-positive)' }
 const VAR_WARN = { color: 'var(--fin-warning)' }
@@ -138,23 +130,8 @@ function taxStatus(gstPct) {
   return { label: `${FMT_PCT(gstPct)}`, style: VAR_BAD, icon: AlertCircle }
 }
 
-// ── Export helpers ────────────────────────────────────────────────────────────
-function exportCSV(rows, filename) {
-  const cols = ['Invoice No', 'Date', 'Project', 'Client', 'Taxable Value', 'GST Amount', 'GST %', 'Gross', 'TDS Amount', 'TDS %', 'Received', 'Status']
-  const lines = [cols.join(',')]
-  for (const r of rows) {
-    // csvRow quotes as needed and neutralises formula-looking text.
-    lines.push(csvRow([
-      r.invoiceNo, r.date, r.project, r.client,
-      r.base, r.gstAmt, FMT_PCT(r.gstPct).replace('%',''), r.gross,
-      r.tdsAmt, FMT_PCT(r.tdsPct).replace('%',''), r.received, r.status,
-    ]))
-  }
-  downloadBlob(new Blob([lines.join('\n')], { type: 'text/csv' }), filename)
-}
-
 // ── Components ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, accent = false, warn = false }) {
+function StatCard({ label, value, sub, accent = false, warn = false, ofAll }) {
   return (
     <div className="rounded-xl p-4 flex flex-col gap-1" style={{
       background: 'var(--card-bg)',
@@ -163,7 +140,23 @@ function StatCard({ label, value, sub, accent = false, warn = false }) {
       <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-3)' }}>{label}</p>
       <p className="text-2xl font-bold tabular-nums" style={{ color: warn ? 'var(--fin-warning)' : accent ? 'var(--accent)' : 'var(--text-1)' }}>{value}</p>
       {sub && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{sub}</p>}
+      {ofAll && <p className="invoice-kpi-of-all" style={{ marginTop: 0 }}>{ofAll}</p>}
     </div>
+  )
+}
+// Under an opened month or client: while its invoices load, or when there
+// are more than one request returns.
+function DrillNote({ drill, count, colSpan }) {
+  if (drill && !drill.loading && !drill.failed && (drill.records?.length || 0) >= count) return null
+  const text = !drill || drill.loading
+    ? 'Loading invoices…'
+    : drill.failed
+      ? 'These invoices could not be loaded.'
+      : `Showing ${drill.records.length} of ${count}; the All Invoices tab lists every one.`
+  return (
+    <tr>
+      <td colSpan={colSpan} className="pl-6 pr-3 py-2 text-xs" style={{ color: 'var(--text-3)', background: 'var(--accent-dim)' }}>{text}</td>
+    </tr>
   )
 }
 
@@ -184,168 +177,109 @@ export default function TaxLedger({ source = 'main' } = {}) {
   const { isEditor } = useAuth()
   const isWebSource = source === 'web'
   const canShare = isEditor && !isWebSource
-  const [selectedPeriodKey, setSelectedPeriodKey] = useState(PERIODS.find(p => p.type === 'fy')?.key || PERIODS[0].key)
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo,   setCustomTo]   = useState('')
-  const [useCustom,  setUseCustom]  = useState(false)
-  const [search, setSearch] = useState('')
+  // Period, scope and search live in the URL (under "tax_" inside the web
+  // module, whose own list uses the plain names).
+  const ledgerFilters = taxFilters(isWebSource ? 'tax_' : '')
+  const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch } = ledgerFilters.useFilters()
+  const useCustom = filters.period === 'custom'
+  const selectedPeriodKey = useCustom ? DEFAULT_TAX_PERIOD : filters.period
+  const customFrom = filters.from
+  const customTo = filters.to
+  const invoiceScope = filters.scope
+  const search = filters.q
+  const setInvoiceScope = (scope) => setFilters({ scope })
+  const setSearch = (q) => { setSearchInput(q); setFilters({ q: q.trim() }, { replace: true }) }
   const [expandedClients, setExpandedClients] = useState(new Set())
   const [expandedMonths, setExpandedMonths] = useState(new Set())
   const [activeTab, setActiveTab] = useState('summary') // summary | monthly | clients | invoices
-  const [invoiceScope, setInvoiceScope] = useState('tax')
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const printRef = useRef(null)
 
-  const fetchInvoices = useCallback((opts = {}) => {
-    const params = { limit: 1000, order_by: 'Raised Date', order: 'desc', ...opts }
-    return isWebSource ? api.webInvoices.list(params) : api.invoices.list(params)
-  }, [isWebSource])
-  const { data: listData, loading, refresh, changeCount } = useAutoRefresh(fetchInvoices, 15_000)
-  const allInvoices = listData?.records || []
+  /* ── The register and its totals, from the server ──
+   * One request per scope: a page of the register (the All Invoices tab) and
+   * the ledger's totals for the search (`agg`) and for the period alone
+   * (`ws`, the "of all" figures). */
+  const {
+    records, total: scopeTotal, nextCursor, aggregates: agg, workspace: ws, hasData,
+    refreshing: loading, loadingMore, loadMore, refresh, error,
+  } = useTaxLedgerQuery(source, filters, { pages, onPagesChange: setPages })
+  const changeCount = useChangeCount(ws ? [ws.paid, ws.open] : null)
+  const hasSearch = !!search
+  // The whole period's figure, under a card the search has narrowed.
+  const ofAll = (value, count = ws?.paid?.count) => (
+    hasSearch && ws && value != null ? `of ${FMT_INR(value)} across all ${count ?? 0} in the period` : null
+  )
 
   // Active period
   const period = useMemo(() => {
     if (useCustom && customFrom && customTo) {
       return { type: 'custom', label: `${customFrom} → ${customTo}`, from: customFrom, to: customTo }
     }
-    return PERIODS.find(p => p.key === selectedPeriodKey) || PERIODS[0]
+    return PERIODS.find(p => p.key === selectedPeriodKey) || PERIODS.find(p => p.key === DEFAULT_TAX_PERIOD) || PERIODS[0]
   }, [selectedPeriodKey, useCustom, customFrom, customTo])
 
-  // Period invoices by Raised Date. Tax calculations below use paid invoices only.
-  // GST/TDS only applies to INR/RS invoices — exclude foreign-currency records.
-  const periodInvoices = useMemo(() =>
-    allInvoices.filter(r => {
-      const f = r.fields || {}
-      if (f['Payment Status'] === 'Cancelled') return false
-      const cur = (f['Currency'] || 'RS').toString().trim().toUpperCase()
-      if (cur !== 'RS' && cur !== 'INR') return false
-      return inPeriod(f['Raised Date'], period.from, period.to)
-    }),
-  [allInvoices, period])
+  const filteredInvoices = records
 
-  const taxInvoices = useMemo(
-    () => periodInvoices.filter(r => taxParts(r.fields).isPaid),
-    [periodInvoices]
-  )
-
-  const openInvoices = useMemo(
-    () => periodInvoices.filter(r => {
-      const p = taxParts(r.fields)
-      return !p.isPaid && !p.isCancelled
-    }),
-    [periodInvoices]
-  )
-
-  const invoiceScopeRecords = useMemo(() => {
-    if (invoiceScope === 'all') return periodInvoices
-    if (invoiceScope === 'open') return openInvoices
-    return taxInvoices
-  }, [invoiceScope, openInvoices, periodInvoices, taxInvoices])
-
-  // Search-filtered for drilldown
-  const filteredInvoices = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return invoiceScopeRecords
-    return invoiceScopeRecords.filter(r => {
-      const f = r.fields || {}
-      return [f['Invoice Number'], f['Project'], f['Client Name'], f['Client'], f['Payment Status']].some(v => String(v || '').toLowerCase().includes(q))
-    })
-  }, [invoiceScopeRecords, search])
-
-  // Aggregate totals
+  // Aggregate totals: the paid register (GST/TDS are paid-only).
   const totals = useMemo(() => {
-    let taxable = 0, gstAmt = 0, tdsAmt = 0, gross = 0, received = 0, outstanding = 0, count = 0
-    for (const r of taxInvoices) {
-      const p = taxParts(r.fields)
-      taxable     += p.base
-      gstAmt      += p.gstAmt
-      tdsAmt      += p.tdsAmt
-      gross       += p.gross
-      received    += p.received
-      outstanding += p.outstanding
-      count++
+    const p = agg?.paid || {}
+    const taxable = p.taxable || 0, gstAmt = p.gst || 0, tdsAmt = p.tds || 0, gross = p.gross || 0
+    const received = p.received || 0
+    return {
+      taxable, gstAmt, tdsAmt, gross, received, outstanding: p.outstanding || 0, count: p.count || 0,
+      effectiveGstPct: taxable > 0 ? (gstAmt / taxable) * 100 : 0,
+      effectiveTdsPct: taxable > 0 ? (tdsAmt / taxable) * 100 : 0,
+      netReceivable: gross - tdsAmt,
+      collectionRate: gross > 0 ? (received / gross) * 100 : 0,
     }
-    const effectiveGstPct = taxable > 0 ? (gstAmt / taxable) * 100 : 0
-    const effectiveTdsPct = taxable > 0 ? (tdsAmt / taxable) * 100 : 0
-    const netReceivable   = gross - tdsAmt
-    const collectionRate  = gross > 0 ? (received / gross) * 100 : 0
-    return { taxable, gstAmt, tdsAmt, gross, received, outstanding, netReceivable, effectiveGstPct, effectiveTdsPct, collectionRate, count }
-  }, [taxInvoices])
+  }, [agg])
 
-  const openSummary = useMemo(() => {
-    let taxable = 0, gross = 0, received = 0, outstanding = 0
-    let oldest = 0
-    for (const r of openInvoices) {
-      const p = taxParts(r.fields)
-      taxable += p.base
-      gross += p.gross
-      received += p.received
-      outstanding += p.outstanding
-      oldest = Math.max(oldest, Number(r.fields?.['Agening (Days)'] || 0))
+  const openSummary = useMemo(() => ({
+    count: agg?.open?.count || 0, taxable: agg?.open?.taxable || 0, gross: agg?.open?.gross || 0,
+    received: agg?.open?.received || 0, outstanding: agg?.open?.outstanding || 0, oldest: agg?.open?.oldest || 0,
+  }), [agg])
+
+  /* ── Drilldowns: a month's or a client's invoices, fetched when opened ── */
+  const scopeKey = JSON.stringify(taxQueryParams(filters))
+  const [drill, setDrill] = useState({})
+  const expandedRef = useRef({ months: expandedMonths, clients: expandedClients })
+  expandedRef.current = { months: expandedMonths, clients: expandedClients }
+  const loadDrill = useCallback(async (key, extra) => {
+    setDrill(d => ({ ...d, [key]: { loading: true, records: d[key]?.records || [] } }))
+    try {
+      const data = await taxListFor(source).fetchOnce({
+        ...taxQueryParams(filters), tax_scope: 'tax', ...extra, limit: 200, aggregates: '0',
+      })
+      if (data) setDrill(d => ({ ...d, [key]: { records: data.records || [], total: data.total || 0 } }))
+    } catch {
+      setDrill(d => ({ ...d, [key]: { records: [], total: 0, failed: true } }))
     }
-    return { count: openInvoices.length, taxable, gross, received, outstanding, oldest }
-  }, [openInvoices])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, scopeKey])
+  // A new period, scope or search: what is open is fetched again for it.
+  useEffect(() => {
+    setDrill({})
+    expandedRef.current.months.forEach(k => loadDrill(`m:${k}`, { month: k }))
+    expandedRef.current.clients.forEach(c => loadDrill(`c:${c}`, { tax_client: c }))
+  }, [loadDrill])
 
   // Month-by-month breakdown
-  const monthlyRows = useMemo(() => {
-    const map = new Map()
-    for (const r of taxInvoices) {
-      const f   = r.fields || {}
-      const key = dateKey(f['Raised Date'])
-      if (!key) continue
-      if (!map.has(key)) map.set(key, { key, label: shortMonth(key), invoices: [] })
-      map.get(key).invoices.push(r)
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, row]) => {
-        let taxable = 0, gstAmt = 0, tdsAmt = 0, gross = 0, received = 0, outstanding = 0
-        for (const r of row.invoices) {
-          const p = taxParts(r.fields)
-          taxable += p.base; gstAmt += p.gstAmt; tdsAmt += p.tdsAmt
-          gross += p.gross; received += p.received; outstanding += p.outstanding
-        }
-        return { ...row, taxable, gstAmt, tdsAmt, gross, received, outstanding, count: row.invoices.length }
-      })
-  }, [taxInvoices])
+  const monthlyRows = useMemo(() => (agg?.months || []).map(m => ({
+    ...m, label: shortMonth(m.key), gstAmt: m.gst, tdsAmt: m.tds,
+    invoices: drill[`m:${m.key}`]?.records || [], drill: drill[`m:${m.key}`],
+  })), [agg, drill])
 
   // Client-wise breakdown
-  const clientRows = useMemo(() => {
-    const map = new Map()
-    for (const r of taxInvoices) {
-      const f      = r.fields || {}
-      const client = f['Client Name'] || f['Project'] || 'Unknown'
-      if (!map.has(client)) map.set(client, { client, invoices: [] })
-      map.get(client).invoices.push(r)
-    }
-    return [...map.values()].map(row => {
-      let taxable = 0, gstAmt = 0, tdsAmt = 0, gross = 0, received = 0, outstanding = 0
-      for (const r of row.invoices) {
-        const p = taxParts(r.fields)
-        taxable += p.base; gstAmt += p.gstAmt; tdsAmt += p.tdsAmt
-        gross += p.gross; received += p.received; outstanding += p.outstanding
-      }
-      const gstPct = taxable > 0 ? (gstAmt / taxable) * 100 : 0
-      const tdsPct = taxable > 0 ? (tdsAmt / taxable) * 100 : 0
-      return { ...row, taxable, gstAmt, tdsAmt, gross, received, outstanding, gstPct, tdsPct, count: row.invoices.length }
-    }).sort((a, b) => b.gross - a.gross)
-  }, [taxInvoices])
+  const clientRows = useMemo(() => (agg?.clients || []).map(c => ({
+    ...c, gstAmt: c.gst, tdsAmt: c.tds,
+    gstPct: c.taxable > 0 ? (c.gst / c.taxable) * 100 : 0,
+    tdsPct: c.taxable > 0 ? (c.tds / c.taxable) * 100 : 0,
+    invoices: drill[`c:${c.client}`]?.records || [], drill: drill[`c:${c.client}`],
+  })), [agg, drill])
 
-  // CSV export rows
-  const csvRows = useMemo(() =>
-    filteredInvoices.map(r => {
-      const f = r.fields || {}
-      const p = taxParts(f)
-      return {
-        invoiceNo: f['Invoice Number'] || r.id,
-        date:      String(f['Raised Date'] || '').slice(0, 10),
-        project:   f['Project'] || '',
-        client:    f['Client Name'] || f['Project'] || '',
-        ...p,
-      }
-    }),
-  [filteredInvoices])
+  const scopeCount = ws?.scope_counts?.[invoiceScope] ?? 0
 
   const sharedViewConfig = useMemo(() => ({
     type: 'list',
@@ -382,15 +316,41 @@ export default function TaxLedger({ source = 'main' } = {}) {
     [invoiceScope, period.label]
   )
 
-  function handleExport() {
-    exportCSV(csvRows, `tax-ledger-${period.label.replace(/[^a-z0-9]/gi, '-')}.csv`)
+  // The whole register of this scope and search, built on the server.
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const params = { ...taxQueryParams(filters), columns: 'tax' }
+      const { blob } = await (isWebSource ? api.webInvoices.exportCsv(params) : api.invoices.exportCsv(params))
+      downloadBlob(blob, `tax-ledger-${period.label.replace(/[^a-z0-9]/gi, '-')}.csv`)
+    } catch { /* the request reports its own failure */ } finally {
+      setExporting(false)
+    }
   }
 
-  function handlePrint() {
+  // Print the whole register: the pages not yet on screen are fetched first.
+  async function registerForPrint() {
+    let rows = [...records]
+    let cursor = nextCursor
+    while (cursor && rows.length < PRINT_MAX_ROWS) {
+      const more = await taxListFor(source).fetchOnce({ ...taxQueryParams(filters), cursor, limit: 200, aggregates: '0' })
+      if (!more) break
+      rows = rows.concat(more.records || [])
+      cursor = more.next_cursor
+    }
+    return { rows, truncated: !!cursor }
+  }
+
+  async function handlePrint() {
+    // Opened inside the click, while the gesture still allows a popup; filled
+    // once the register has loaded.
+    const w = window.open('', '_blank', 'width=1200,height=860')
+    if (!w) return
+    const { rows: register, truncated } = await registerForPrint()
     const INR = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const PCT = (n) => Number(n || 0).toFixed(1) + '%'
 
-    const rows = filteredInvoices.map(r => {
+    const rows = register.map(r => {
       const f = r.fields || {}
       const p = taxParts(f)
       return { no: f['Invoice Number'] || r.id, date: String(f['Raised Date'] || '').slice(0,10),
@@ -422,7 +382,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
       @media print{body{padding:0}}
     </style></head><body>
     <h1>Tax Ledger · ${period.label}</h1>
-    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${rows.length} invoices</p>
+    <p class="sub">Generated ${new Date().toLocaleString('en-IN')} · ${rows.length} invoices${truncated ? ` (first ${rows.length} of ${scopeTotal}; export CSV for the full register)` : ''}</p>
 
     <h2>Summary</h2>
     <div class="stat-grid">
@@ -474,17 +434,20 @@ export default function TaxLedger({ source = 'main' } = {}) {
     </table>
     </body></html>`
 
-    const w = window.open('', '_blank', 'width=1200,height=860')
     w.document.write(html)
     w.document.close()
     w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close() }
   }
 
   function toggleClient(c) {
+    const opening = !expandedClients.has(c)
     setExpandedClients(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
+    if (opening && !drill[`c:${c}`]) loadDrill(`c:${c}`, { tax_client: c })
   }
   function toggleMonth(k) {
+    const opening = !expandedMonths.has(k)
     setExpandedMonths(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
+    if (opening && !drill[`m:${k}`]) loadDrill(`m:${k}`, { month: k })
   }
 
   const TABS = [
@@ -531,23 +494,28 @@ export default function TaxLedger({ source = 'main' } = {}) {
             <button onClick={refresh} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
-            <button onClick={handleExport} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
-              <Download size={12} /> Export CSV
+            <button onClick={handleExport} disabled={exporting} title="Download the whole register as CSV" className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
+              <Download size={12} className={exporting ? 'animate-pulse' : ''} /> Export CSV
             </button>
             <button onClick={handlePrint} className="btn-ghost flex items-center gap-1.5 text-xs px-3 py-2">
               <Printer size={12} /> Print
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Period selector */}
-        <div className="mt-4 flex flex-wrap gap-2 items-end">
+      {/* ── Period, scope and search: one bar that stays in view ─────────── */}
+      <div className="invoice-sticky-filters" role="search" aria-label="Tax ledger period and search">
+        <div className="rounded-2xl border px-3 py-2.5 flex flex-wrap gap-2 items-end" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Period</label>
             <select
+              aria-label="Period"
               value={useCustom ? 'custom' : selectedPeriodKey}
-              onChange={e => { if (e.target.value === 'custom') setUseCustom(true); else { setUseCustom(false); setSelectedPeriodKey(e.target.value) } }}
-              className="input text-xs h-9 pr-8 min-w-[220px]"
+              onChange={e => setFilters(e.target.value === 'custom'
+                ? { period: 'custom', from: period.from, to: period.to }
+                : { period: e.target.value, from: '', to: '' })}
+              className="input text-xs h-9 pr-8 min-w-[200px]"
             >
               {/* Financial Years */}
               <optgroup label="Financial Year (Apr–Mar)">
@@ -574,34 +542,65 @@ export default function TaxLedger({ source = 'main' } = {}) {
             <>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>From</label>
-                <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="input text-xs h-9" />
+                <input type="date" value={customFrom} onChange={e => setFilters({ from: e.target.value })} className="input text-xs h-9" />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>To</label>
-                <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="input text-xs h-9" />
+                <input type="date" value={customTo} onChange={e => setFilters({ to: e.target.value })} className="input text-xs h-9" />
               </div>
-              <button onClick={() => setUseCustom(false)} className="btn-ghost text-xs h-9 px-3">
+              <button onClick={() => setFilters({ period: DEFAULT_TAX_PERIOD, from: '', to: '' })} aria-label="Back to a named period" className="btn-ghost text-xs h-9 px-3">
                 <X size={12} />
               </button>
             </>
           )}
-          <div className="ml-auto text-xs flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
-            <LiveDot changeCount={changeCount} loading={loading && !listData} size={5} />
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Register</label>
+            <select
+              aria-label="Register scope"
+              value={invoiceScope}
+              onChange={e => setInvoiceScope(e.target.value)}
+              className="input text-xs h-9 min-w-[170px]"
+            >
+              <option value="tax">Tax register only</option>
+              <option value="open">Open invoices only</option>
+              <option value="all">All invoices</option>
+            </select>
+          </div>
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
+            <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitSearch() } }}
+              aria-label="Search invoices" placeholder="Search invoice #, client, project…"
+              className="input text-xs pl-8 pr-7 h-9 w-full" />
+            {searchInput && <button onClick={() => setSearch('')} aria-label="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2"><X size={12} style={{ color: 'var(--text-3)' }} /></button>}
+          </div>
+          <div className="ml-auto text-xs flex items-center gap-1.5 self-center" style={{ color: 'var(--text-3)' }} aria-live="polite">
+            <LiveDot changeCount={changeCount} loading={!hasData} size={5} />
             <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{totals.count}</span> paid tax invoice{totals.count !== 1 ? 's' : ''} · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{openSummary.count}</span> open · <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{period.label}</span>
+            {loading && hasData && <RefreshCw size={10} className="animate-spin" aria-hidden="true" />}
           </div>
         </div>
       </div>
 
-      {/* ── KPI strip ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Taxable Value"   value={<LiveValue value={totals.taxable} format={FMT_INR} />}     sub="Pre-GST base" />
-        <StatCard label="GST Collected Total" value={<LiveValue value={totals.gstAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent />
-        <StatCard label="TDS Collected Total" value={<LiveValue value={totals.tdsAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveTdsPct)} on taxable`} warn={totals.tdsAmt > 0} />
-        <StatCard label="Gross Invoiced"  value={<LiveValue value={totals.gross} format={FMT_INR} />}       sub={`${totals.count} paid invoices`} />
-        <StatCard label="Net Receivable"  value={<LiveValue value={totals.netReceivable} format={FMT_INR} />} sub="Gross minus TDS" />
-        <StatCard label="Open Invoices"   value={<LiveValue value={openSummary.outstanding} format={FMT_INR} />} sub={`${openSummary.count} pending · excluded from GST/TDS`} warn={openSummary.count > 0} />
-      </div>
+      {error && (
+        <div role="alert" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+          style={{ background: 'var(--fin-neg-bg)', border: '1px solid var(--fin-neg-border)', color: 'var(--fin-negative)' }}>
+          <AlertCircle size={15} aria-hidden="true" /> {error}
+          <button onClick={refresh} className="underline ml-1">retry</button>
+        </div>
+      )}
 
+      {/* ── KPI strip ──────────────────────────────────────────────────────── */}
+      {/* The figures follow the search; while one is active, a quiet line
+          under each gives the whole period's figure. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatCard label="Taxable Value"   value={<LiveValue value={totals.taxable} format={FMT_INR} />}     sub="Pre-GST base" ofAll={ofAll(ws?.paid?.taxable)} />
+        <StatCard label="GST Collected Total" value={<LiveValue value={totals.gstAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveGstPct)} on base`} accent ofAll={ofAll(ws?.paid?.gst)} />
+        <StatCard label="TDS Collected Total" value={<LiveValue value={totals.tdsAmt} format={FMT_INR} />}  sub={`Paid only · Avg ${FMT_PCT(totals.effectiveTdsPct)} on taxable`} warn={totals.tdsAmt > 0} ofAll={ofAll(ws?.paid?.tds)} />
+        <StatCard label="Gross Invoiced"  value={<LiveValue value={totals.gross} format={FMT_INR} />}       sub={`${totals.count} paid invoices`} ofAll={ofAll(ws?.paid?.gross)} />
+        <StatCard label="Net Receivable"  value={<LiveValue value={totals.netReceivable} format={FMT_INR} />} sub="Gross minus TDS" ofAll={ofAll(ws?.paid ? ws.paid.gross - ws.paid.tds : null)} />
+        <StatCard label="Open Invoices"   value={<LiveValue value={openSummary.outstanding} format={FMT_INR} />} sub={`${openSummary.count} pending · excluded from GST/TDS`} warn={openSummary.count > 0} ofAll={ofAll(ws?.open?.outstanding, ws?.open?.count)} />
+      </div>
       {/* ── GST / TDS health bar ───────────────────────────────────────────── */}
       <div className="rounded-xl p-4 grid sm:grid-cols-2 gap-4" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
         <div>
@@ -787,6 +786,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
                         </tr>
                       )
                     })}
+                    {expandedMonths.has(row.key) && <DrillNote drill={row.drill} count={row.count} colSpan={10} />}
                   </>
                 ))}
               </tbody>
@@ -894,6 +894,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
                               </tr>
                             )
                           })}
+                          <DrillNote drill={row.drill} count={row.count} colSpan={10} />
                         </tbody>
                         <tfoot>
                           <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-input)' }}>
@@ -913,10 +914,10 @@ export default function TaxLedger({ source = 'main' } = {}) {
                 </div>
               )
             })}
-            {clientRows.length === 0 && loading && !listData && (
+            {clientRows.length === 0 && !hasData && (
               <SkeletonList rows={5} label="Loading tax ledger" />
             )}
-            {clientRows.length === 0 && !(loading && !listData) && (
+            {clientRows.length === 0 && hasData && (
               <div className="text-center py-12" style={{ color: 'var(--text-3)' }}>
                 <ReceiptText size={32} className="mx-auto mb-2 opacity-30" />
                 <p>No invoices in this period</p>
@@ -990,25 +991,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
       {/* ── All invoices tab ───────────────────────────────────────────────── */}
       {activeTab === 'invoices' && (
         <div className="space-y-3">
-          <SectionHead title="Invoice-level Tax Register" sub={`${filteredInvoices.length} of ${invoiceScopeRecords.length} invoices · tax totals stay paid-only`}>
-            <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={invoiceScope}
-              onChange={e => setInvoiceScope(e.target.value)}
-              className="input text-xs h-8 min-w-[180px]"
-            >
-              <option value="tax">Tax register only</option>
-              <option value="open">Open invoices only</option>
-              <option value="all">All invoices</option>
-            </select>
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-3)' }} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoices…"
-                className="input text-xs pl-8 h-8 w-52" />
-              {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2"><X size={12} style={{ color: 'var(--text-3)' }} /></button>}
-            </div>
-            </div>
-          </SectionHead>
+          {/* Scope and search sit in the bar above, so they stay in reach. */}
+          <SectionHead title="Invoice-level Tax Register" sub={`${scopeTotal.toLocaleString('en-IN')} of ${scopeCount.toLocaleString('en-IN')} invoices · tax totals stay paid-only`} />
 
           <div className="rounded-xl overflow-x-auto" style={{ border: '1px solid var(--border)' }}>
             <table className="w-full text-xs whitespace-nowrap">
@@ -1052,7 +1036,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--bg-input)' }}>
-                  <td className="px-3 py-2.5 font-bold text-[10px] uppercase" colSpan={4} style={{ color: 'var(--text-2)' }}>Total ({filteredInvoices.length})</td>
+                  <td className="px-3 py-2.5 font-bold text-[10px] uppercase" colSpan={4} style={{ color: 'var(--text-2)' }}>Total ({scopeTotal})</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--text-1)' }}>{FMT_INR(totals.taxable)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
                   <td className="px-3 py-2.5 tabular-nums font-bold" style={{ color: 'var(--fin-positive)' }}>{FMT_INR(totals.gstAmt / 2)}</td>
@@ -1068,6 +1052,27 @@ export default function TaxLedger({ source = 'main' } = {}) {
               </tfoot>
             </table>
           </div>
+          {hasData && scopeTotal === 0 ? (
+            <div className="text-center py-10 space-y-3" style={{ color: 'var(--text-3)' }}>
+              <ReceiptText size={32} className="mx-auto opacity-30" />
+              <p>{search ? 'No invoices match this search in the period' : 'No invoices in this period'}</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {search && <button onClick={() => setSearch('')} className="btn-ghost text-xs px-3 py-2">Clear the search</button>}
+                {invoiceScope !== 'all' && <button onClick={() => setInvoiceScope('all')} className="btn-ghost text-xs px-3 py-2">Show all invoices</button>}
+              </div>
+            </div>
+          ) : (
+            <div className="invoice-show-more rounded-xl" style={{ border: '1px solid var(--border)' }} aria-live="polite">
+              <span>Showing {filteredInvoices.length.toLocaleString('en-IN')} of {scopeTotal.toLocaleString('en-IN')}</span>
+              {nextCursor && (
+                <button type="button" onClick={loadMore} disabled={loadingMore} className="btn-ghost"
+                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.8rem' }}>
+                  {loadingMore ? <RefreshCw size={12} className="animate-spin" /> : <ChevronDown size={12} />}
+                  {loadingMore ? 'Loading…' : `Show ${Math.min(TAX_PAGE_SIZE, scopeTotal - filteredInvoices.length)} more`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

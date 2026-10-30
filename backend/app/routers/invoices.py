@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import csv
 import httpx
 import io
+import math
 import logging
 import re
 from datetime import date as _date, datetime, timezone
@@ -261,6 +262,12 @@ async def list_invoices(
 
 # ── Server-side list: search, filters, sort, paging, totals ──────────────────
 
+def _given(value):
+    """A parameter's value when the function is called directly (tests, other
+    routers) rather than by FastAPI, which leaves Query() markers behind."""
+    return None if hasattr(value, "default") and not isinstance(value, (str, int, float, bool)) else value
+
+
 def _scope_params(
     q:            Optional[str] = Query(None, max_length=200),
     status:       Optional[str] = Query(None, max_length=255),
@@ -281,14 +288,21 @@ def _scope_params(
     sort:         Optional[str] = Query(None, max_length=60),
     order:        Optional[str] = Query(None, max_length=4),
     tz:           int           = Query(0, ge=-900, le=900),
+    tax_scope:    Optional[str] = Query(None, max_length=10),
+    tax_client:   Optional[str] = Query(None, max_length=255),
+    period:       Optional[str] = Query(None, max_length=12),
 ) -> InvoiceQuery:
-    """The filters every invoice-list read takes, validated (400 on anything unknown)."""
+    """The filters every invoice-list read takes, validated (400 on anything unknown).
+
+    `tax_scope` (tax | open | all), `tax_client` and `period` (fy-2025,
+    cy-2026, h1-2026, q3-2026, m-2026-10…) are the tax ledger's."""
     try:
         return build_query(
             q=q, status=status, project=project, client=client, category=category, raised_by=raised_by,
             billing=billing, month=month, aging=aging, date_field=date_field, date_from=date_from,
             date_to=date_to, overdue=overdue, has_docs=has_docs, followup_due=followup_due,
             conditions=conditions, sort=sort, order=order, tz=tz,
+            tax_scope=_given(tax_scope), tax_client=_given(tax_client), period=_given(period),
         )
     except QueryError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -300,6 +314,43 @@ async def _all_from_teable(scoped_email: Optional[str]) -> list[dict]:
     except Exception as exc:
         logger.warning("invoice query: Teable fallback failed: %s", exc)
         raise HTTPException(status_code=503, detail="Invoices are temporarily unavailable")
+
+
+async def answer_query(request: Request, qry: InvoiceQuery, *, src: "iq.Source", scoped_email: Optional[str],
+                       load_all, limit: int, cursor: Optional[str], offset: int, aggregates: bool):
+    """GET …/query for either invoice mirror: SQL first, `load_all()` through
+    the same rules when the mirror cannot answer, an ETag either way."""
+    try:
+        cur = iq.decode_cursor(qry, cursor) if cursor else None
+    except QueryError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    now = datetime.now(timezone.utc)
+    result, source = None, "mirror"
+    pool = _pg.get_pool()
+    if pool is not None:
+        try:
+            result = await iq.query_mirror(pool, qry, scoped_email, limit=limit, cursor=cur, offset=offset,
+                                           aggregates=aggregates, now=now, src=src)
+        except Exception as exc:
+            logger.warning("%s query via PG mirror failed, falling back to Teable: %s", src.name, exc)
+    if result is None:
+        source = "teable"
+        result = iq.query_records(await load_all(), qry, scoped_email, limit=limit,
+                                  cursor=cur, offset=offset, aggregates=aggregates, now=now, src=src)
+    payload: dict = {
+        "records": [iq.public_record(r) for r in result["records"]],
+        "total": result["total"],
+        "next_cursor": iq.encode_cursor(qry, *result["next"]) if result["next"] else None,
+        "limit": limit,
+        "sort": qry.sort,
+        "order": qry.order,
+        "filtered": qry.filtered,
+        "source": source,
+    }
+    if aggregates:
+        payload["aggregates"] = result["aggregates"]
+        payload["workspace"] = result["workspace"]
+    return json_response(request, payload)
 
 
 @router.get("/query")
@@ -321,44 +372,19 @@ async def query_invoices(
     `aggregates` holds the totals of the whole filtered scope — the KPI
     cards, project snapshot, aging bands, months and column totals — and
     `workspace` the same for everything the caller may see, with the filter
-    options (`facets`) and the overdue list.
+    options (`facets`) and the overdue list. With a `tax_scope`, both hold
+    the tax ledger's figures instead (paid register, open invoices, months,
+    clients): `aggregates` for the filtered scope, `workspace` for the
+    period alone.
 
     Answered from invoices_mirror with indexed SQL; from Teable through the
     same rules when the mirror cannot answer. Carries an ETag: a poll with
     If-None-Match gets a bodiless 304 when nothing changed.
     """
-    try:
-        cur = iq.decode_cursor(qry, cursor) if cursor else None
-    except QueryError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     scoped_email = owner_scope_email(request)
-    now = datetime.now(timezone.utc)
-    result, source = None, "mirror"
-    pool = _pg.get_pool()
-    if pool is not None:
-        try:
-            result = await iq.query_mirror(pool, qry, scoped_email, limit=limit, cursor=cur, offset=offset,
-                                           aggregates=aggregates, now=now)
-        except Exception as exc:
-            logger.warning("invoice query via PG mirror failed, falling back to Teable: %s", exc)
-    if result is None:
-        source = "teable"
-        result = iq.query_records(await _all_from_teable(scoped_email), qry, scoped_email, limit=limit,
-                                  cursor=cur, offset=offset, aggregates=aggregates, now=now)
-    payload: dict = {
-        "records": [iq.public_record(r) for r in result["records"]],
-        "total": result["total"],
-        "next_cursor": iq.encode_cursor(qry, *result["next"]) if result["next"] else None,
-        "limit": limit,
-        "sort": qry.sort,
-        "order": qry.order,
-        "filtered": qry.filtered,
-        "source": source,
-    }
-    if aggregates:
-        payload["aggregates"] = result["aggregates"]
-        payload["workspace"] = result["workspace"]
-    return json_response(request, payload)
+    return await answer_query(request, qry, src=iq.INVOICES, scoped_email=scoped_email,
+                              load_all=lambda: _all_from_teable(scoped_email), limit=limit, cursor=cursor,
+                              offset=offset, aggregates=aggregates)
 
 
 # Columns of the CSV export, as the page's export has always written them.
@@ -367,10 +393,19 @@ EXPORT_FIELDS = (
     "Raised By", "Milestone", "Currency", "Amount Raised", "Amount with Tax",
     "Amount Received", "Outstanding Amount", "Cleared Date", "Remark",
 )
+# The tax ledger's register, as TaxLedger.jsx's exportCSV wrote it.
+TAX_EXPORT_FIELDS = (
+    "Invoice No", "Date", "Project", "Client", "Taxable Value", "GST Amount", "GST %", "Gross",
+    "TDS Amount", "TDS %", "Received", "Status",
+)
 
 
 def _export_cell(fields: dict, key: str) -> str:
     value = (fields.get("Client Name") or fields.get("Client")) if key == "Client" else fields.get(key)
+    return _safe_cell(value)
+
+
+def _safe_cell(value) -> str:
     if value is None or isinstance(value, (list, dict)):
         return ""
     # Text that a spreadsheet would run as a formula gets a leading quote;
@@ -379,54 +414,91 @@ def _export_cell(fields: dict, key: str) -> str:
     return value if isinstance(value, str) else _js_string(value)
 
 
+def _pct_cell(value: float) -> str:
+    """FMT_PCT(n).replace('%', ''): one decimal, as Math.round(n * 10) / 10."""
+    return _js_string(math.floor(value * 10 + 0.5) / 10)
+
+
+def _tax_row(record: dict) -> list[str]:
+    f = record.get("fields") or {}
+    p = iq.tax_parts(f)
+    raised = f.get("Raised Date")
+    return [
+        _safe_cell(f.get("Invoice Number") or record.get("id")),
+        _safe_cell(str(raised)[:10] if raised else ""),
+        _safe_cell(f.get("Project") or ""),
+        _safe_cell(f.get("Client Name") or f.get("Project") or ""),
+        _safe_cell(p["base"]), _safe_cell(p["gst"]), _pct_cell(p["gst_pct"]), _safe_cell(p["gross"]),
+        _safe_cell(p["tds"]), _pct_cell(p["tds_pct"]), _safe_cell(p["received"]), _safe_cell(p["status"]),
+    ]
+
+
 def _csv_lines(rows: list[list[str]]) -> str:
     buf = io.StringIO()
     csv.writer(buf, lineterminator="\n").writerows(rows)
     return buf.getvalue()
 
 
-@router.get("/export")
-async def export_invoices(
-    request: Request,
-    qry:     InvoiceQuery = Depends(_scope_params),
-    _role:   str          = Depends(require_auth),
-    _perm:   str          = Depends(require_permission("module.invoices.view")),
-):
-    """Every invoice in the current search and filters as CSV, in list order.
-
-    Streams from the mirror a batch at a time, so the full filtered set is
-    exported whatever the page has loaded."""
-    scoped_email = owner_scope_email(request)
+async def export_response(qry: InvoiceQuery, *, src: "iq.Source", scoped_email: Optional[str], load_all,
+                          columns: Optional[str], prefix: str):
+    """GET …/export for either invoice mirror: the whole filtered scope, streamed."""
+    if columns not in (None, "", "invoices", "tax"):
+        raise HTTPException(status_code=400, detail="columns must be invoices or tax")
     now = datetime.now(timezone.utc)
     pool = _pg.get_pool()
     batches = None
     if pool is not None:
         try:
             probe = await iq.query_mirror(pool, qry, scoped_email, limit=1, cursor=None, offset=0,
-                                          aggregates=False, now=now)
+                                          aggregates=False, now=now, src=src)
             if probe is not None:
-                batches = iq.iter_export(pool, qry, scoped_email, now)
+                batches = iq.iter_export(pool, qry, scoped_email, now, src)
         except Exception as exc:
-            logger.warning("invoice export via PG mirror failed, falling back to Teable: %s", exc)
+            logger.warning("%s export via PG mirror failed, falling back to Teable: %s", src.name, exc)
     if batches is None:
-        records = iq.query_records(await _all_from_teable(scoped_email), qry, scoped_email,
-                                   limit=10_000_000, cursor=None, offset=0, aggregates=False, now=now)["records"]
+        records = iq.query_records(await load_all(), qry, scoped_email, limit=10_000_000, cursor=None,
+                                   offset=0, aggregates=False, now=now, src=src)["records"]
 
         async def _memory():
             for i in range(0, len(records), iq.EXPORT_BATCH):
                 yield records[i:i + iq.EXPORT_BATCH]
         batches = _memory()
 
-    async def body():
-        yield _csv_lines([list(EXPORT_FIELDS)])
-        async for batch in batches:
-            yield _csv_lines([[_export_cell(r.get("fields") or {}, k) for k in EXPORT_FIELDS] for r in batch])
+    tax = columns == "tax"
 
-    name = f"invoices_{'filtered_' if qry.filtered else ''}{now.date().isoformat()}.csv"
+    async def body():
+        yield _csv_lines([list(TAX_EXPORT_FIELDS if tax else EXPORT_FIELDS)])
+        async for batch in batches:
+            if tax:
+                yield _csv_lines([_tax_row(r) for r in batch])
+            else:
+                yield _csv_lines([[_export_cell(r.get("fields") or {}, k) for k in EXPORT_FIELDS] for r in batch])
+
+    name = f"{prefix}_{'filtered_' if qry.filtered else ''}{now.date().isoformat()}.csv"
     return StreamingResponse(body(), media_type="text/csv; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="{name}"',
         "Cache-Control": "private, no-store",
     })
+
+
+@router.get("/export")
+async def export_invoices(
+    request: Request,
+    qry:     InvoiceQuery  = Depends(_scope_params),
+    columns: Optional[str] = Query(None, max_length=10),
+    _role:   str           = Depends(require_auth),
+    _perm:   str           = Depends(require_permission("module.invoices.view")),
+):
+    """Every invoice in the current search and filters as CSV, in list order.
+
+    Streams from the mirror a batch at a time, so the full filtered set is
+    exported whatever the page has loaded. `columns=tax` writes the tax
+    ledger's register (taxable value, GST, TDS…) instead."""
+    scoped_email = owner_scope_email(request)
+    columns = _given(columns)
+    return await export_response(qry, src=iq.INVOICES, scoped_email=scoped_email,
+                                 load_all=lambda: _all_from_teable(scoped_email), columns=columns,
+                                 prefix="tax-ledger" if columns == "tax" else "invoices")
 
 
 # ── Aging Buckets ─────────────────────────────────────────────────────────────

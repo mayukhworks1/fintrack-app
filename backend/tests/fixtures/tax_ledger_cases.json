@@ -1,0 +1,3465 @@
+{
+ "about": "Invoices and the tax ledger figures the old browser code (frontend/src/test/taxLedgerLegacy.js) gives for each period. Raised dates are at noon UTC, so local months agree in every time zone the page is used in.",
+ "now": "2026-10-30T09:30:00Z",
+ "records": [
+  {
+   "id": "recTax0000",
+   "fields": {
+    "Invoice Number": "WM/25-26/1000",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Raised Date": "2025-01-27T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 31500,
+    "Agening (Days)": 640
+   }
+  },
+  {
+   "id": "recTax0001",
+   "fields": {
+    "Invoice Number": "WM/25-26/1001",
+    "Payment Status": "On Hold",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "RS",
+    "Raised Date": "2026-07-06T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0002",
+   "fields": {
+    "Invoice Number": "WM/25-26/1002",
+    "Payment Status": "Paid",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-08-02T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 35400,
+    "Amount Received": 32400
+   }
+  },
+  {
+   "id": "recTax0003",
+   "fields": {
+    "Invoice Number": "WM/25-26/1003",
+    "Payment Status": "Cancelled",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Currency": "USD",
+    "Raised Date": "2025-02-16",
+    "Amount Raised": 20000,
+    "Amount with Tax": 22400,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0004",
+   "fields": {
+    "Invoice Number": "WM/25-26/1004",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "INR",
+    "Raised Date": "2026-08-31T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 21000,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0005",
+   "fields": {
+    "Invoice Number": "WM/25-26/1005",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "INR",
+    "Raised Date": "2025-05-11T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Agening (Days)": 536
+   }
+  },
+  {
+   "id": "recTax0006",
+   "fields": {
+    "Invoice Number": "WM/25-26/1006",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2026-01-06T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 0,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0007",
+   "fields": {
+    "Invoice Number": "WM/25-26/1007",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0008",
+   "fields": {
+    "Invoice Number": "WM/25-26/1008",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Currency": "USD",
+    "Raised Date": "2025-01-17T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Amount Received": 172800,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0009",
+   "fields": {
+    "Invoice Number": "WM/25-26/1009",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": " inr ",
+    "Raised Date": "2025-01-05T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0010",
+   "fields": {
+    "Invoice Number": "WM/25-26/1010",
+    "Payment Status": "Pending",
+    "Project": "Innovine-ZOHO",
+    "Currency": "INR",
+    "Raised Date": "2026-04-13T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Agening (Days)": 199
+   }
+  },
+  {
+   "id": "recTax0011",
+   "fields": {
+    "Invoice Number": "WM/25-26/1011",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Currency": "INR",
+    "Amount Raised": 30000,
+    "Amount with Tax": 31500,
+    "Amount Received": 31510
+   }
+  },
+  {
+   "id": "recTax0012",
+   "fields": {
+    "Invoice Number": "WM/25-26/1012",
+    "Payment Status": "On Hold",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": " inr ",
+    "Raised Date": "2026-03-28T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Amount Received": 7500.25,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0013",
+   "fields": {
+    "Invoice Number": "WM/25-26/1013",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Currency": "",
+    "Raised Date": "2025-03-02T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Agening (Days)": 606
+   }
+  },
+  {
+   "id": "recTax0014",
+   "fields": {
+    "Invoice Number": "WM/25-26/1014",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2024-11-04",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 725
+   }
+  },
+  {
+   "id": "recTax0015",
+   "fields": {
+    "Invoice Number": "WM/25-26/1015",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Currency": "USD",
+    "Raised Date": "2026-07-14T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Amount Received": 10000
+   }
+  },
+  {
+   "id": "recTax0016",
+   "fields": {
+    "Invoice Number": "WM/25-26/1016",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Raised Date": "2026-09-05T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Amount Received": 60000,
+    "Agening (Days)": 54
+   }
+  },
+  {
+   "id": "recTax0017",
+   "fields": {
+    "Invoice Number": "WM/25-26/1017",
+    "Payment Status": "On Hold",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2026-09-19",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0018",
+   "fields": {
+    "Invoice Number": "WM/25-26/1018",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Currency": "USD",
+    "Raised Date": "2025-10-31T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0019",
+   "fields": {
+    "Invoice Number": "WM/25-26/1019",
+    "Payment Status": "On Hold",
+    "Client Name": "Maitrimetal",
+    "Amount Raised": 15000,
+    "Amount with Tax": 15750,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0020",
+   "fields": {
+    "Invoice Number": "WM/25-26/1020",
+    "Payment Status": "On Hold",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Raised Date": "2024-10-08T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0021",
+   "fields": {
+    "Invoice Number": "WM/25-26/1021",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0022",
+   "fields": {
+    "Invoice Number": "WM/25-26/1022",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Currency": "USD",
+    "Raised Date": "2026-01-14T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 31500,
+    "Agening (Days)": 288
+   }
+  },
+  {
+   "id": "recTax0023",
+   "fields": {
+    "Invoice Number": "WM/25-26/1023",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Currency": " inr ",
+    "Raised Date": "2025-09-15T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Amount Received": 141610
+   }
+  },
+  {
+   "id": "recTax0024",
+   "fields": {
+    "Invoice Number": "WM/25-26/1024",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Currency": "INR",
+    "Raised Date": "2025-07-06T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0025",
+   "fields": {
+    "Invoice Number": "WM/25-26/1025",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Currency": " inr ",
+    "Raised Date": "2025-01-31",
+    "Agening (Days)": 637
+   }
+  },
+  {
+   "id": "recTax0026",
+   "fields": {
+    "Invoice Number": "WM/25-26/1026",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2024-10-17T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 16800.56,
+    "Amount Received": 15300.51
+   }
+  },
+  {
+   "id": "recTax0027",
+   "fields": {
+    "Invoice Number": "WM/25-26/1027",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "PMS",
+    "Currency": " inr ",
+    "Raised Date": "2025-06-01T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0028",
+   "fields": {
+    "Invoice Number": "WM/25-26/1028",
+    "Payment Status": "Paid",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2025-04-06",
+    "Amount Raised": 20000,
+    "Amount with Tax": 0,
+    "Amount Received": 19600
+   }
+  },
+  {
+   "id": "recTax0029",
+   "fields": {
+    "Invoice Number": "WM/25-26/1029",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Currency": "RS",
+    "Raised Date": "2024-10-30",
+    "Amount Raised": 345600,
+    "Amount with Tax": 387072,
+    "Amount Received": 172800,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0030",
+   "fields": {
+    "Invoice Number": "WM/25-26/1030",
+    "Payment Status": "Cancelled",
+    "Client Name": "Maitrimetal",
+    "Currency": "RS",
+    "Raised Date": "2025-03-19T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808
+   }
+  },
+  {
+   "id": "recTax0031",
+   "fields": {
+    "Invoice Number": "WM/25-26/1031",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Amount Received": 23600
+   }
+  },
+  {
+   "id": "recTax0032",
+   "fields": {
+    "Invoice Number": "WM/25-26/1032",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-04-16T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount Received": 120010
+   }
+  },
+  {
+   "id": "recTax0033",
+   "fields": {
+    "Invoice Number": "WM/25-26/1033",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Raised Date": "2025-04-23T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 21000,
+    "Agening (Days)": 554
+   }
+  },
+  {
+   "id": "recTax0034",
+   "fields": {
+    "Invoice Number": "WM/25-26/1034",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-06-19T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 22400,
+    "Amount Received": 10000,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0035",
+   "fields": {
+    "Invoice Number": "WM/25-26/1035",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Currency": "INR",
+    "Raised Date": "2024-11-06T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 722
+   }
+  },
+  {
+   "id": "recTax0036",
+   "fields": {
+    "Invoice Number": "WM/25-26/1036",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-11-05T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0037",
+   "fields": {
+    "Invoice Number": "WM/25-26/1037",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Currency": "RS",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Amount Received": 16200.54
+   }
+  },
+  {
+   "id": "recTax0038",
+   "fields": {
+    "Invoice Number": "WM/25-26/1038",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Raised Date": "2025-05-29",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0039",
+   "fields": {
+    "Invoice Number": "WM/25-26/1039",
+    "Payment Status": "Paid",
+    "Project": "PMS",
+    "Currency": " inr ",
+    "Raised Date": "2025-08-13T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 16800,
+    "Amount Received": 16810
+   }
+  },
+  {
+   "id": "recTax0040",
+   "fields": {
+    "Invoice Number": "WM/25-26/1040",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Currency": " inr ",
+    "Raised Date": "2025-08-30T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Agening (Days)": 425
+   }
+  },
+  {
+   "id": "recTax0041",
+   "fields": {
+    "Invoice Number": "WM/25-26/1041",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2026-03-21T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 22400,
+    "Amount Received": 20400
+   }
+  },
+  {
+   "id": "recTax0042",
+   "fields": {
+    "Invoice Number": "WM/25-26/1042",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Raised Date": "2026-08-22T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0043",
+   "fields": {
+    "Invoice Number": "WM/25-26/1043",
+    "Currency": "",
+    "Raised Date": "2026-04-25T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0044",
+   "fields": {
+    "Invoice Number": "WM/25-26/1044",
+    "Payment Status": "Pending",
+    "Currency": "RS",
+    "Raised Date": "2025-10-06",
+    "Agening (Days)": 389
+   }
+  },
+  {
+   "id": "recTax0045",
+   "fields": {
+    "Invoice Number": "WM/25-26/1045",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "INR",
+    "Raised Date": "2026-02-16T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Amount Received": 17700
+   }
+  },
+  {
+   "id": "recTax0046",
+   "fields": {
+    "Invoice Number": "WM/25-26/1046",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": "USD",
+    "Raised Date": "2026-08-05T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 387072
+   }
+  },
+  {
+   "id": "recTax0047",
+   "fields": {
+    "Invoice Number": "WM/25-26/1047",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2024-10-17",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Agening (Days)": 743
+   }
+  },
+  {
+   "id": "recTax0048",
+   "fields": {
+    "Invoice Number": "WM/25-26/1048",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Currency": "USD",
+    "Raised Date": "2026-03-12T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Amount Received": 7500,
+    "Agening (Days)": 231
+   }
+  },
+  {
+   "id": "recTax0049",
+   "fields": {
+    "Invoice Number": "WM/25-26/1049",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-02-17",
+    "Amount Raised": 30000,
+    "Amount with Tax": 35400,
+    "Agening (Days)": 620
+   }
+  },
+  {
+   "id": "recTax0050",
+   "fields": {
+    "Invoice Number": "WM/25-26/1050",
+    "Payment Status": "Paid",
+    "Currency": "RS",
+    "Raised Date": "2026-04-01T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Amount Received": 139200
+   }
+  },
+  {
+   "id": "recTax0051",
+   "fields": {
+    "Invoice Number": "WM/25-26/1051",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Raised Date": "2024-12-26T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount Received": 117600
+   }
+  },
+  {
+   "id": "recTax0052",
+   "fields": {
+    "Invoice Number": "WM/25-26/1052",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2024-12-21T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0053",
+   "fields": {
+    "Invoice Number": "WM/25-26/1053",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Raised Date": "2025-09-23T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 362880,
+    "Amount Received": 362890
+   }
+  },
+  {
+   "id": "recTax0054",
+   "fields": {
+    "Invoice Number": "WM/25-26/1054",
+    "Payment Status": "On Hold",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "USD",
+    "Raised Date": "2026-10-27",
+    "Amount Raised": 0,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0055",
+   "fields": {
+    "Invoice Number": "WM/25-26/1055",
+    "Payment Status": "On Hold",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-08-16T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0056",
+   "fields": {
+    "Invoice Number": "WM/25-26/1056",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "PMS",
+    "Raised Date": "2026-04-14T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 0,
+    "Agening (Days)": 198
+   }
+  },
+  {
+   "id": "recTax0057",
+   "fields": {
+    "Invoice Number": "WM/25-26/1057",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "PMS",
+    "Raised Date": "2025-08-12T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 31500,
+    "Agening (Days)": 443
+   }
+  },
+  {
+   "id": "recTax0058",
+   "fields": {
+    "Invoice Number": "WM/25-26/1058",
+    "Payment Status": "Cancelled",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Currency": "",
+    "Raised Date": "2025-05-31T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0059",
+   "fields": {
+    "Invoice Number": "WM/25-26/1059",
+    "Payment Status": "Pending",
+    "Currency": "USD",
+    "Raised Date": "2026-03-03T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount Received": 15000,
+    "Agening (Days)": 240
+   }
+  },
+  {
+   "id": "recTax0060",
+   "fields": {
+    "Invoice Number": "WM/25-26/1060",
+    "Payment Status": "Cancelled",
+    "Project": "PMS",
+    "Raised Date": "2025-02-25T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount Received": 15000,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0061",
+   "fields": {
+    "Invoice Number": "WM/25-26/1061",
+    "Payment Status": "Cancelled",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-06-10",
+    "Amount Raised": 15000,
+    "Amount with Tax": 16800
+   }
+  },
+  {
+   "id": "recTax0062",
+   "fields": {
+    "Invoice Number": "WM/25-26/1062",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Currency": "USD",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 15750.53,
+    "Amount Received": 15750.53
+   }
+  },
+  {
+   "id": "recTax0063",
+   "fields": {
+    "Invoice Number": "WM/25-26/1063",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2025-06-26T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount Received": 120010
+   }
+  },
+  {
+   "id": "recTax0064",
+   "fields": {
+    "Invoice Number": "WM/25-26/1064",
+    "Payment Status": "On Hold",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-04-22",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Amount Received": 7500,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0065",
+   "fields": {
+    "Invoice Number": "WM/25-26/1065",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2025-03-08T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0066",
+   "fields": {
+    "Invoice Number": "WM/25-26/1066",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Currency": " inr ",
+    "Raised Date": "2025-02-23T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 387072,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0067",
+   "fields": {
+    "Invoice Number": "WM/25-26/1067",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Raised Date": "2026-05-16T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Amount Received": 407818
+   }
+  },
+  {
+   "id": "recTax0068",
+   "fields": {
+    "Invoice Number": "WM/25-26/1068",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Raised Date": "2026-10-07T12:00:00.000Z",
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0069",
+   "fields": {
+    "Invoice Number": "WM/25-26/1069",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Currency": " inr ",
+    "Raised Date": "2025-01-01",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0070",
+   "fields": {
+    "Invoice Number": "WM/25-26/1070",
+    "Payment Status": "On Hold",
+    "Client Name": "Maitrimetal",
+    "Currency": "RS",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Amount Received": 7500.25
+   }
+  },
+  {
+   "id": "recTax0071",
+   "fields": {
+    "Invoice Number": "WM/25-26/1071",
+    "Payment Status": "Pending",
+    "Project": "Workspace migration",
+    "Currency": "RS",
+    "Raised Date": "2026-06-23T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 128
+   }
+  },
+  {
+   "id": "recTax0072",
+   "fields": {
+    "Invoice Number": "WM/25-26/1072",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-05-10T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 134400,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0073",
+   "fields": {
+    "Invoice Number": "WM/25-26/1073",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Raised Date": "2024-10-16T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 743
+   }
+  },
+  {
+   "id": "recTax0074",
+   "fields": {
+    "Invoice Number": "WM/25-26/1074",
+    "Payment Status": "Cancelled",
+    "Project": "Workspace migration",
+    "Currency": "USD",
+    "Raised Date": "2026-06-21T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0075",
+   "fields": {
+    "Invoice Number": "WM/25-26/1075",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Currency": "INR",
+    "Amount Raised": 120000,
+    "Amount with Tax": 134400,
+    "Amount Received": 122400
+   }
+  },
+  {
+   "id": "recTax0076",
+   "fields": {
+    "Invoice Number": "WM/25-26/1076",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Raised Date": "2025-10-09T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0077",
+   "fields": {
+    "Invoice Number": "WM/25-26/1077",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Currency": "",
+    "Raised Date": "2026-09-12T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 33600,
+    "Amount Received": 33600
+   }
+  },
+  {
+   "id": "recTax0078",
+   "fields": {
+    "Invoice Number": "WM/25-26/1078",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Raised Date": "2025-06-02T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 387072
+   }
+  },
+  {
+   "id": "recTax0079",
+   "fields": {
+    "Invoice Number": "WM/25-26/1079",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "PMS",
+    "Amount Raised": 30000,
+    "Amount Received": 30000
+   }
+  },
+  {
+   "id": "recTax0080",
+   "fields": {
+    "Invoice Number": "WM/26-27/1080",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-05-18T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0081",
+   "fields": {
+    "Invoice Number": "WM/26-27/1081",
+    "Client Name": "",
+    "Raised Date": "2025-07-21T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 362880
+   }
+  },
+  {
+   "id": "recTax0082",
+   "fields": {
+    "Invoice Number": "WM/26-27/1082",
+    "Payment Status": "Cancelled",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2024-12-06T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0083",
+   "fields": {
+    "Invoice Number": "WM/26-27/1083",
+    "Payment Status": "Cancelled",
+    "Raised Date": "2026-04-09",
+    "Amount Raised": 15000,
+    "Amount with Tax": 15750,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0084",
+   "fields": {
+    "Invoice Number": "WM/26-27/1084",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-12-30T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 33600,
+    "Amount Received": 15000,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0085",
+   "fields": {
+    "Invoice Number": "WM/26-27/1085",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Raised Date": "2026-02-24",
+    "Amount Raised": 20000,
+    "Amount with Tax": 22400,
+    "Amount Received": 10000,
+    "Agening (Days)": 248
+   }
+  },
+  {
+   "id": "recTax0086",
+   "fields": {
+    "Invoice Number": "WM/26-27/1086",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Currency": "",
+    "Raised Date": "2026-09-26",
+    "Amount Raised": 30000,
+    "Amount with Tax": 33600,
+    "Amount Received": 33000
+   }
+  },
+  {
+   "id": "recTax0087",
+   "fields": {
+    "Invoice Number": "WM/26-27/1087",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-09-30",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 16800.56,
+    "Amount Received": 15300.51
+   }
+  },
+  {
+   "id": "recTax0088",
+   "fields": {
+    "Invoice Number": "WM/26-27/1088",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "RS",
+    "Raised Date": "2026-01-17T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 33600,
+    "Amount Received": 15000
+   }
+  },
+  {
+   "id": "recTax0089",
+   "fields": {
+    "Invoice Number": "WM/26-27/1089",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Raised Date": "2026-06-04",
+    "Amount Raised": 120000,
+    "Amount with Tax": 0,
+    "Amount Received": 108000
+   }
+  },
+  {
+   "id": "recTax0090",
+   "fields": {
+    "Invoice Number": "WM/26-27/1090",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Currency": "",
+    "Raised Date": "2026-06-10",
+    "Amount Raised": 30000,
+    "Amount with Tax": 0,
+    "Amount Received": 29400
+   }
+  },
+  {
+   "id": "recTax0091",
+   "fields": {
+    "Invoice Number": "WM/26-27/1091",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2025-04-19T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Amount Received": 172800,
+    "Agening (Days)": 558
+   }
+  },
+  {
+   "id": "recTax0092",
+   "fields": {
+    "Invoice Number": "WM/26-27/1092",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-04-25T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 0,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0093",
+   "fields": {
+    "Invoice Number": "WM/26-27/1093",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2025-03-26",
+    "Amount Raised": 120000,
+    "Amount with Tax": 0,
+    "Amount Received": 108000
+   }
+  },
+  {
+   "id": "recTax0094",
+   "fields": {
+    "Invoice Number": "WM/26-27/1094",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 15750.53,
+    "Amount Received": 15750.53
+   }
+  },
+  {
+   "id": "recTax0095",
+   "fields": {
+    "Invoice Number": "WM/26-27/1095",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Currency": "INR",
+    "Raised Date": "2026-04-10T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount Received": 60000,
+    "Agening (Days)": 202
+   }
+  },
+  {
+   "id": "recTax0096",
+   "fields": {
+    "Invoice Number": "WM/26-27/1096",
+    "Payment Status": "Cancelled",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "RS",
+    "Raised Date": "2026-03-14T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59
+   }
+  },
+  {
+   "id": "recTax0097",
+   "fields": {
+    "Invoice Number": "WM/26-27/1097",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "USD",
+    "Raised Date": "2025-01-16",
+    "Amount Raised": 15000,
+    "Amount with Tax": 16800
+   }
+  },
+  {
+   "id": "recTax0098",
+   "fields": {
+    "Invoice Number": "WM/26-27/1098",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "PMS",
+    "Amount Raised": 345600,
+    "Amount with Tax": 0,
+    "Amount Received": 338688
+   }
+  },
+  {
+   "id": "recTax0099",
+   "fields": {
+    "Invoice Number": "WM/26-27/1099",
+    "Client Name": "Maitrimetal",
+    "Currency": "INR",
+    "Raised Date": "2025-03-17T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0100",
+   "fields": {
+    "Invoice Number": "WM/26-27/1100",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Currency": " inr ",
+    "Raised Date": "2024-12-10T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 21000
+   }
+  },
+  {
+   "id": "recTax0101",
+   "fields": {
+    "Invoice Number": "WM/26-27/1101",
+    "Payment Status": "Cancelled",
+    "Currency": "USD",
+    "Raised Date": "2024-11-25T12:00:00.000Z",
+    "Amount Raised": 15000.5
+   }
+  },
+  {
+   "id": "recTax0102",
+   "fields": {
+    "Invoice Number": "WM/26-27/1102",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Currency": "USD",
+    "Raised Date": "2024-10-07",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Agening (Days)": 753
+   }
+  },
+  {
+   "id": "recTax0103",
+   "fields": {
+    "Invoice Number": "WM/26-27/1103",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "PMS"
+   }
+  },
+  {
+   "id": "recTax0104",
+   "fields": {
+    "Invoice Number": "WM/26-27/1104",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-12-07",
+    "Amount Raised": 345600,
+    "Amount Received": 172800,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0105",
+   "fields": {
+    "Invoice Number": "WM/26-27/1105",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-08-13T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 126000,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0106",
+   "fields": {
+    "Invoice Number": "WM/26-27/1106",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Currency": "",
+    "Raised Date": "2024-12-11T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Amount Received": 141610
+   }
+  },
+  {
+   "id": "recTax0107",
+   "fields": {
+    "Invoice Number": "WM/26-27/1107",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Raised Date": "2025-02-07T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0108",
+   "fields": {
+    "Invoice Number": "WM/26-27/1108",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Currency": "INR",
+    "Raised Date": "2026-10-17T12:00:00.000Z",
+    "Agening (Days)": 12
+   }
+  },
+  {
+   "id": "recTax0109",
+   "fields": {
+    "Invoice Number": "WM/26-27/1109",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Currency": "RS",
+    "Raised Date": "2025-11-30T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 333
+   }
+  },
+  {
+   "id": "recTax0110",
+   "fields": {
+    "Invoice Number": "WM/26-27/1110",
+    "Payment Status": "On Hold",
+    "Currency": "RS",
+    "Raised Date": "2024-12-31",
+    "Amount Raised": 15000,
+    "Amount with Tax": 16800,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0111",
+   "fields": {
+    "Invoice Number": "WM/26-27/1111",
+    "Payment Status": "On Hold",
+    "Project": "PMS",
+    "Raised Date": "2026-03-09T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0112",
+   "fields": {
+    "Invoice Number": "WM/26-27/1112",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0113",
+   "fields": {
+    "Invoice Number": "WM/26-27/1113",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-07-02T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0114",
+   "fields": {
+    "Invoice Number": "WM/26-27/1114",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-02-24T12:00:00.000Z",
+    "Agening (Days)": 612
+   }
+  },
+  {
+   "id": "recTax0115",
+   "fields": {
+    "Invoice Number": "WM/26-27/1115",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Currency": "RS",
+    "Raised Date": "2025-04-03T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 17700,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0116",
+   "fields": {
+    "Invoice Number": "WM/26-27/1116",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Raised Date": "2025-03-30T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 15750.53,
+    "Agening (Days)": 578
+   }
+  },
+  {
+   "id": "recTax0117",
+   "fields": {
+    "Invoice Number": "WM/26-27/1117",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "PMS",
+    "Raised Date": "2025-01-17T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0118",
+   "fields": {
+    "Invoice Number": "WM/26-27/1118",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2026-05-06T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Agening (Days)": 176
+   }
+  },
+  {
+   "id": "recTax0119",
+   "fields": {
+    "Invoice Number": "WM/26-27/1119",
+    "Payment Status": "Cancelled",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2026-03-20T12:00:00.000Z",
+    "Agening (Days)": 7
+   }
+  },
+  {
+   "id": "recTax0120",
+   "fields": {
+    "Invoice Number": "WM/26-27/1120",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-12-05T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600
+   }
+  },
+  {
+   "id": "recTax0121",
+   "fields": {
+    "Invoice Number": "WM/26-27/1121",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600
+   }
+  },
+  {
+   "id": "recTax0122",
+   "fields": {
+    "Invoice Number": "WM/26-27/1122",
+    "Payment Status": "On Hold",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-03-18T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0123",
+   "fields": {
+    "Invoice Number": "WM/26-27/1123",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-02-07T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Agening (Days)": 629
+   }
+  },
+  {
+   "id": "recTax0124",
+   "fields": {
+    "Invoice Number": "WM/26-27/1124",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Raised Date": "2026-06-06T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0125",
+   "fields": {
+    "Invoice Number": "WM/26-27/1125",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Innovine-ZOHO",
+    "Currency": "RS",
+    "Raised Date": "2025-08-02",
+    "Amount Raised": 30000,
+    "Amount with Tax": 35400,
+    "Agening (Days)": 454
+   }
+  },
+  {
+   "id": "recTax0126",
+   "fields": {
+    "Invoice Number": "WM/26-27/1126",
+    "Payment Status": "Pending",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-08-26T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Agening (Days)": 64
+   }
+  },
+  {
+   "id": "recTax0127",
+   "fields": {
+    "Invoice Number": "WM/26-27/1127",
+    "Payment Status": "On Hold",
+    "Client Name": "",
+    "Currency": "RS",
+    "Raised Date": "2025-11-18T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 31500,
+    "Agening (Days)": 45
+   }
+  },
+  {
+   "id": "recTax0128",
+   "fields": {
+    "Invoice Number": "WM/26-27/1128",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Project": "Workspace migration",
+    "Currency": " inr ",
+    "Raised Date": "2025-02-24T12:00:00.000Z",
+    "Amount Raised": 0
+   }
+  },
+  {
+   "id": "recTax0129",
+   "fields": {
+    "Invoice Number": "WM/26-27/1129",
+    "Payment Status": "Pending",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "INR",
+    "Raised Date": "2026-07-13T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Amount Received": 7500.25,
+    "Agening (Days)": 108
+   }
+  },
+  {
+   "id": "recTax0130",
+   "fields": {
+    "Invoice Number": "WM/26-27/1130",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2025-07-10T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0131",
+   "fields": {
+    "Invoice Number": "WM/26-27/1131",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2026-05-16T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0132",
+   "fields": {
+    "Invoice Number": "WM/26-27/1132",
+    "Payment Status": "Cancelled",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Currency": "",
+    "Raised Date": "2024-10-17T12:00:00.000Z",
+    "Amount Raised": 20000
+   }
+  },
+  {
+   "id": "recTax0133",
+   "fields": {
+    "Invoice Number": "WM/26-27/1133",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Currency": "INR",
+    "Raised Date": "2026-09-14T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0134",
+   "fields": {
+    "Invoice Number": "WM/26-27/1134",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": "USD",
+    "Raised Date": "2025-11-10T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0
+   }
+  },
+  {
+   "id": "recTax0135",
+   "fields": {
+    "Invoice Number": "WM/26-27/1135",
+    "Payment Status": "On Hold",
+    "Client Name": "Maitrimetal",
+    "Project": "PMS",
+    "Raised Date": "2026-09-22T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600,
+    "Amount Received": 10000
+   }
+  },
+  {
+   "id": "recTax0136",
+   "fields": {
+    "Invoice Number": "WM/26-27/1136",
+    "Payment Status": "Pending",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Raised Date": "2025-08-27T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Agening (Days)": 428
+   }
+  },
+  {
+   "id": "recTax0137",
+   "fields": {
+    "Invoice Number": "WM/26-27/1137",
+    "Payment Status": "Pending",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-08-24T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Agening (Days)": 66
+   }
+  },
+  {
+   "id": "recTax0138",
+   "fields": {
+    "Invoice Number": "WM/26-27/1138",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Project": "PMS",
+    "Raised Date": "2026-03-23T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Amount Received": 17400.58
+   }
+  },
+  {
+   "id": "recTax0139",
+   "fields": {
+    "Invoice Number": "WM/26-27/1139",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": ""
+   }
+  },
+  {
+   "id": "recTax0140",
+   "fields": {
+    "Invoice Number": "WM/26-27/1140",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Currency": "RS",
+    "Raised Date": "2026-02-08T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Amount Received": 172800,
+    "Agening (Days)": 263
+   }
+  },
+  {
+   "id": "recTax0141",
+   "fields": {
+    "Invoice Number": "WM/26-27/1141",
+    "Payment Status": "Paid",
+    "Client Name": "",
+    "Project": "PMS",
+    "Currency": "RS",
+    "Raised Date": "2025-05-02T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 126000
+   }
+  },
+  {
+   "id": "recTax0142",
+   "fields": {
+    "Invoice Number": "WM/26-27/1142",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": " inr ",
+    "Raised Date": "2024-12-10T12:00:00.000Z",
+    "Amount Raised": 0,
+    "Amount with Tax": 0,
+    "Agening (Days)": 0
+   }
+  },
+  {
+   "id": "recTax0143",
+   "fields": {
+    "Invoice Number": "WM/26-27/1143",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Currency": "RS",
+    "Raised Date": "2026-10-22T12:00:00.000Z",
+    "Amount Raised": 30000,
+    "Amount with Tax": 0,
+    "Amount Received": 30010
+   }
+  },
+  {
+   "id": "recTax0144",
+   "fields": {
+    "Invoice Number": "WM/26-27/1144",
+    "Payment Status": "Paid",
+    "Project": "PMS",
+    "Raised Date": "2024-12-19T12:00:00.000Z",
+    "Amount Raised": 0
+   }
+  },
+  {
+   "id": "recTax0145",
+   "fields": {
+    "Invoice Number": "WM/26-27/1145",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Raised Date": "2026-02-19T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 23600
+   }
+  },
+  {
+   "id": "recTax0146",
+   "fields": {
+    "Invoice Number": "WM/26-27/1146",
+    "Client Name": "Birla Open Minds",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-07-23T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0147",
+   "fields": {
+    "Invoice Number": "WM/26-27/1147",
+    "Payment Status": "On Hold",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Raised Date": "2026-02-22",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0148",
+   "fields": {
+    "Invoice Number": "WM/26-27/1148",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-07-20T12:00:00.000Z"
+   }
+  },
+  {
+   "id": "recTax0149",
+   "fields": {
+    "Invoice Number": "WM/26-27/1149",
+    "Client Name": "",
+    "Project": "PMS",
+    "Currency": " inr ",
+    "Raised Date": "2025-10-06",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 17700.59,
+    "Amount Received": 7500.25
+   }
+  },
+  {
+   "id": "recTax0150",
+   "fields": {
+    "Invoice Number": "WM/26-27/1150",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Currency": " inr ",
+    "Raised Date": "2025-08-23T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount Received": 338688
+   }
+  },
+  {
+   "id": "recTax0151",
+   "fields": {
+    "Invoice Number": "WM/26-27/1151",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "Workspace migration",
+    "Raised Date": "2025-11-29T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 15750.53,
+    "Amount Received": 14250.48
+   }
+  },
+  {
+   "id": "recTax0152",
+   "fields": {
+    "Invoice Number": "WM/26-27/1152",
+    "Payment Status": "Paid",
+    "Client Name": "Maitrimetal",
+    "Currency": "RS",
+    "Raised Date": "2026-10-27T12:00:00.000Z",
+    "Amount Raised": 120000,
+    "Amount with Tax": 141600,
+    "Amount Received": 129600
+   }
+  },
+  {
+   "id": "recTax0153",
+   "fields": {
+    "Invoice Number": "WM/26-27/1153",
+    "Payment Status": "Pending",
+    "Currency": "RS",
+    "Raised Date": "2025-06-28T12:00:00.000Z",
+    "Amount Raised": 20000,
+    "Amount with Tax": 0,
+    "Agening (Days)": 488
+   }
+  },
+  {
+   "id": "recTax0154",
+   "fields": {
+    "Invoice Number": "WM/26-27/1154",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": "",
+    "Raised Date": "2025-10-25T12:00:00.000Z",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Agening (Days)": 369
+   }
+  },
+  {
+   "id": "recTax0155",
+   "fields": {
+    "Invoice Number": "WM/26-27/1155",
+    "Payment Status": "Cancelled",
+    "Client Name": "Innovine",
+    "Raised Date": "2026-10-23T12:00:00.000Z",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 0,
+    "Amount Received": 7500.25
+   }
+  },
+  {
+   "id": "recTax0156",
+   "fields": {
+    "Invoice Number": "WM/26-27/1156",
+    "Payment Status": "Pending",
+    "Client Name": "",
+    "Project": "Innovine-ZOHO",
+    "Currency": "INR",
+    "Raised Date": "2025-04-25",
+    "Amount Raised": 15000.5,
+    "Amount with Tax": 15750.53,
+    "Agening (Days)": 553
+   }
+  },
+  {
+   "id": "recTax0157",
+   "fields": {
+    "Invoice Number": "WM/26-27/1157",
+    "Payment Status": "Cancelled",
+    "Client Name": "",
+    "Project": "PMS",
+    "Raised Date": "2026-09-28",
+    "Amount Raised": 345600,
+    "Amount with Tax": 387072,
+    "Agening (Days)": 400
+   }
+  },
+  {
+   "id": "recTax0158",
+   "fields": {
+    "Invoice Number": "WM/26-27/1158",
+    "Payment Status": "Paid",
+    "Client Name": "Birla Open Minds",
+    "Project": "Innovine-ZOHO",
+    "Raised Date": "2026-07-22T12:00:00.000Z",
+    "Amount Raised": 15000,
+    "Amount with Tax": 0,
+    "Amount Received": 13500
+   }
+  },
+  {
+   "id": "recTax0159",
+   "fields": {
+    "Invoice Number": "WM/26-27/1159",
+    "Payment Status": "Paid",
+    "Client Name": "Innovine",
+    "Project": "PMS",
+    "Currency": "",
+    "Amount Raised": 345600,
+    "Amount with Tax": 407808,
+    "Amount Received": 407818
+   }
+  }
+ ],
+ "cases": [
+  {
+   "period": "fy-2025",
+   "from": "2025-04-01",
+   "to": "2026-03-31",
+   "expected": {
+    "totals": {
+     "count": 18,
+     "taxable": 1551801.5,
+     "gstAmt": 105702.18,
+     "tdsAmt": 572884.1100000001,
+     "gross": 1657503.6800000002,
+     "received": 1084659.5699999998,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 26,
+     "taxable": 2623602,
+     "gross": 3029272.2099999995,
+     "received": 393100.5,
+     "outstanding": 2636171.7099999995,
+     "oldest": 558
+    },
+    "monthlyRows": [
+     {
+      "key": "2025-04",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-05",
+      "count": 2,
+      "taxable": 120000,
+      "gstAmt": 6000,
+      "tdsAmt": 126000,
+      "gross": 126000,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-06",
+      "count": 2,
+      "taxable": 465600,
+      "gstAmt": 41472,
+      "tdsAmt": 387072,
+      "gross": 507072,
+      "received": 120010,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-07",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-08",
+      "count": 2,
+      "taxable": 360600,
+      "gstAmt": 1800,
+      "tdsAmt": 6912,
+      "gross": 362400,
+      "received": 355498,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-09",
+      "count": 3,
+      "taxable": 480600.5,
+      "gstAmt": 40680.06,
+      "tdsAmt": 1500.050000000001,
+      "gross": 521280.56,
+      "received": 519800.51,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-10",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 3600,
+      "tdsAmt": 23600,
+      "gross": 23600,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-11",
+      "count": 2,
+      "taxable": 15000.5,
+      "gstAmt": 750.0300000000007,
+      "tdsAmt": 1500.050000000001,
+      "gross": 15750.53,
+      "received": 14250.48,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-02",
+      "count": 2,
+      "taxable": 35000,
+      "gstAmt": 6300,
+      "tdsAmt": 23600,
+      "gross": 41300,
+      "received": 17700,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-03",
+      "count": 2,
+      "taxable": 35000.5,
+      "gstAmt": 5100.09,
+      "tdsAmt": 2300.0099999999984,
+      "gross": 40100.59,
+      "received": 37800.58,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 4,
+      "taxable": 726200,
+      "gstAmt": 23580,
+      "tdsAmt": 30512,
+      "gross": 749780,
+      "received": 719278,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 6,
+      "taxable": 520600.5,
+      "gstAmt": 69822.03,
+      "tdsAmt": 414172.05,
+      "gross": 590422.53,
+      "received": 176260.48,
+      "outstanding": 0
+     },
+     {
+      "client": "PMS",
+      "count": 3,
+      "taxable": 150000.5,
+      "gstAmt": 10500.09,
+      "tdsAmt": 126300.01,
+      "gross": 160500.59,
+      "received": 34210.58,
+      "outstanding": 0
+     },
+     {
+      "client": "Maitrimetal",
+      "count": 4,
+      "taxable": 135000.5,
+      "gstAmt": 1800.0600000000013,
+      "tdsAmt": 1500.050000000001,
+      "gross": 136800.56,
+      "received": 135310.51,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine-ZOHO",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0023",
+      "recTax0028",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0041",
+      "recTax0045",
+      "recTax0053",
+      "recTax0063",
+      "recTax0076",
+      "recTax0078",
+      "recTax0087",
+      "recTax0138",
+      "recTax0141",
+      "recTax0145",
+      "recTax0148",
+      "recTax0150",
+      "recTax0151"
+     ],
+     "open": [
+      "recTax0005",
+      "recTax0012",
+      "recTax0033",
+      "recTax0040",
+      "recTax0044",
+      "recTax0057",
+      "recTax0064",
+      "recTax0081",
+      "recTax0085",
+      "recTax0088",
+      "recTax0091",
+      "recTax0109",
+      "recTax0111",
+      "recTax0115",
+      "recTax0120",
+      "recTax0125",
+      "recTax0127",
+      "recTax0130",
+      "recTax0136",
+      "recTax0140",
+      "recTax0146",
+      "recTax0147",
+      "recTax0149",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ],
+     "all": [
+      "recTax0005",
+      "recTax0012",
+      "recTax0023",
+      "recTax0028",
+      "recTax0033",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0040",
+      "recTax0041",
+      "recTax0044",
+      "recTax0045",
+      "recTax0053",
+      "recTax0057",
+      "recTax0063",
+      "recTax0064",
+      "recTax0076",
+      "recTax0078",
+      "recTax0081",
+      "recTax0085",
+      "recTax0087",
+      "recTax0088",
+      "recTax0091",
+      "recTax0109",
+      "recTax0111",
+      "recTax0115",
+      "recTax0120",
+      "recTax0125",
+      "recTax0127",
+      "recTax0130",
+      "recTax0136",
+      "recTax0138",
+      "recTax0140",
+      "recTax0141",
+      "recTax0145",
+      "recTax0146",
+      "recTax0147",
+      "recTax0148",
+      "recTax0149",
+      "recTax0150",
+      "recTax0151",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ]
+    }
+   }
+  },
+  {
+   "period": "fy-2026",
+   "from": "2026-04-01",
+   "to": "2027-03-31",
+   "expected": {
+    "totals": {
+     "count": 16,
+     "taxable": 1010600,
+     "gstAmt": 121608,
+     "tdsAmt": 55700,
+     "gross": 1132208,
+     "received": 1076538,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 19,
+     "taxable": 790601.5,
+     "gross": 825501.59,
+     "received": 147500.25,
+     "outstanding": 678001.34,
+     "oldest": 400
+    },
+    "monthlyRows": [
+     {
+      "key": "2026-04",
+      "count": 2,
+      "taxable": 240000,
+      "gstAmt": 21600,
+      "tdsAmt": 2400,
+      "gross": 261600,
+      "received": 259210,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-05",
+      "count": 2,
+      "taxable": 345600,
+      "gstAmt": 62208,
+      "tdsAmt": 0,
+      "gross": 407808,
+      "received": 407818,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-06",
+      "count": 3,
+      "taxable": 150000,
+      "gstAmt": 0,
+      "tdsAmt": 12600,
+      "gross": 150000,
+      "received": 137400,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-07",
+      "count": 2,
+      "taxable": 35000,
+      "gstAmt": 3600,
+      "tdsAmt": 25100,
+      "gross": 38600,
+      "received": 13500,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-08",
+      "count": 2,
+      "taxable": 30000,
+      "gstAmt": 5400,
+      "tdsAmt": 3000,
+      "gross": 35400,
+      "received": 32400,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-09",
+      "count": 3,
+      "taxable": 60000,
+      "gstAmt": 7200,
+      "tdsAmt": 600,
+      "gross": 67200,
+      "received": 66600,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-10",
+      "count": 2,
+      "taxable": 150000,
+      "gstAmt": 21600,
+      "tdsAmt": 12000,
+      "gross": 171600,
+      "received": 159610,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 5,
+      "taxable": 420600,
+      "gstAmt": 65808,
+      "tdsAmt": 1500,
+      "gross": 486408,
+      "received": 484928,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 5,
+      "taxable": 270000,
+      "gstAmt": 0,
+      "tdsAmt": 12600,
+      "gross": 270000,
+      "received": 257410,
+      "outstanding": 0
+     },
+     {
+      "client": "Maitrimetal",
+      "count": 3,
+      "taxable": 150000,
+      "gstAmt": 25200,
+      "tdsAmt": 12600,
+      "gross": 175200,
+      "received": 162600,
+      "outstanding": 0
+     },
+     {
+      "client": "Unknown",
+      "count": 1,
+      "taxable": 120000,
+      "gstAmt": 21600,
+      "tdsAmt": 2400,
+      "gross": 141600,
+      "received": 139200,
+      "outstanding": 0
+     },
+     {
+      "client": "Workspace migration",
+      "count": 2,
+      "taxable": 50000,
+      "gstAmt": 9000,
+      "tdsAmt": 26600,
+      "gross": 59000,
+      "received": 32400,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0002",
+      "recTax0032",
+      "recTax0042",
+      "recTax0050",
+      "recTax0067",
+      "recTax0077",
+      "recTax0080",
+      "recTax0086",
+      "recTax0089",
+      "recTax0090",
+      "recTax0113",
+      "recTax0124",
+      "recTax0133",
+      "recTax0143",
+      "recTax0152",
+      "recTax0158"
+     ],
+     "open": [
+      "recTax0001",
+      "recTax0004",
+      "recTax0010",
+      "recTax0016",
+      "recTax0017",
+      "recTax0034",
+      "recTax0043",
+      "recTax0055",
+      "recTax0056",
+      "recTax0068",
+      "recTax0071",
+      "recTax0095",
+      "recTax0108",
+      "recTax0118",
+      "recTax0126",
+      "recTax0129",
+      "recTax0131",
+      "recTax0135",
+      "recTax0137"
+     ],
+     "all": [
+      "recTax0001",
+      "recTax0002",
+      "recTax0004",
+      "recTax0010",
+      "recTax0016",
+      "recTax0017",
+      "recTax0032",
+      "recTax0034",
+      "recTax0042",
+      "recTax0043",
+      "recTax0050",
+      "recTax0055",
+      "recTax0056",
+      "recTax0067",
+      "recTax0068",
+      "recTax0071",
+      "recTax0077",
+      "recTax0080",
+      "recTax0086",
+      "recTax0089",
+      "recTax0090",
+      "recTax0095",
+      "recTax0108",
+      "recTax0113",
+      "recTax0118",
+      "recTax0124",
+      "recTax0126",
+      "recTax0129",
+      "recTax0131",
+      "recTax0133",
+      "recTax0135",
+      "recTax0137",
+      "recTax0143",
+      "recTax0152",
+      "recTax0158"
+     ]
+    }
+   }
+  },
+  {
+   "period": "cy-2025",
+   "from": "2025-01-01",
+   "to": "2025-12-31",
+   "expected": {
+    "totals": {
+     "count": 18,
+     "taxable": 1601801,
+     "gstAmt": 94302.09,
+     "tdsAmt": 558984.1000000001,
+     "gross": 1696103.09,
+     "received": 1137158.99,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 33,
+     "taxable": 2378002.5,
+     "gross": 2713178.65,
+     "received": 187800.25,
+     "outstanding": 2525378.4,
+     "oldest": 640
+    },
+    "monthlyRows": [
+     {
+      "key": "2025-01",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-02",
+      "count": 2,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-03",
+      "count": 1,
+      "taxable": 120000,
+      "gstAmt": 0,
+      "tdsAmt": 12000,
+      "gross": 120000,
+      "received": 108000,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-04",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-05",
+      "count": 2,
+      "taxable": 120000,
+      "gstAmt": 6000,
+      "tdsAmt": 126000,
+      "gross": 126000,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-06",
+      "count": 2,
+      "taxable": 465600,
+      "gstAmt": 41472,
+      "tdsAmt": 387072,
+      "gross": 507072,
+      "received": 120010,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-07",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-08",
+      "count": 2,
+      "taxable": 360600,
+      "gstAmt": 1800,
+      "tdsAmt": 6912,
+      "gross": 362400,
+      "received": 355498,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-09",
+      "count": 3,
+      "taxable": 480600.5,
+      "gstAmt": 40680.06,
+      "tdsAmt": 1500.050000000001,
+      "gross": 521280.56,
+      "received": 519800.51,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-10",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 3600,
+      "tdsAmt": 23600,
+      "gross": 23600,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-11",
+      "count": 2,
+      "taxable": 15000.5,
+      "gstAmt": 750.0300000000007,
+      "tdsAmt": 1500.050000000001,
+      "gross": 15750.53,
+      "received": 14250.48,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 4,
+      "taxable": 811200,
+      "gstAmt": 17280,
+      "tdsAmt": 18912,
+      "gross": 828480,
+      "received": 809578,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 6,
+      "taxable": 500600.5,
+      "gstAmt": 67422.03,
+      "tdsAmt": 412172.05,
+      "gross": 568022.53,
+      "received": 155860.48,
+      "outstanding": 0
+     },
+     {
+      "client": "PMS",
+      "count": 2,
+      "taxable": 135000,
+      "gstAmt": 7800,
+      "tdsAmt": 126000,
+      "gross": 142800,
+      "received": 16810,
+      "outstanding": 0
+     },
+     {
+      "client": "Maitrimetal",
+      "count": 4,
+      "taxable": 135000.5,
+      "gstAmt": 1800.0600000000013,
+      "tdsAmt": 1500.050000000001,
+      "gross": 136800.56,
+      "received": 135310.51,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine-ZOHO",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     },
+     {
+      "client": "Workspace migration",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0023",
+      "recTax0028",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0053",
+      "recTax0063",
+      "recTax0076",
+      "recTax0078",
+      "recTax0087",
+      "recTax0093",
+      "recTax0107",
+      "recTax0117",
+      "recTax0128",
+      "recTax0141",
+      "recTax0148",
+      "recTax0150",
+      "recTax0151"
+     ],
+     "open": [
+      "recTax0000",
+      "recTax0005",
+      "recTax0009",
+      "recTax0013",
+      "recTax0025",
+      "recTax0033",
+      "recTax0040",
+      "recTax0044",
+      "recTax0049",
+      "recTax0057",
+      "recTax0064",
+      "recTax0065",
+      "recTax0066",
+      "recTax0069",
+      "recTax0081",
+      "recTax0091",
+      "recTax0099",
+      "recTax0109",
+      "recTax0114",
+      "recTax0115",
+      "recTax0116",
+      "recTax0120",
+      "recTax0122",
+      "recTax0123",
+      "recTax0125",
+      "recTax0127",
+      "recTax0130",
+      "recTax0136",
+      "recTax0146",
+      "recTax0149",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ],
+     "all": [
+      "recTax0000",
+      "recTax0005",
+      "recTax0009",
+      "recTax0013",
+      "recTax0023",
+      "recTax0025",
+      "recTax0028",
+      "recTax0033",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0040",
+      "recTax0044",
+      "recTax0049",
+      "recTax0053",
+      "recTax0057",
+      "recTax0063",
+      "recTax0064",
+      "recTax0065",
+      "recTax0066",
+      "recTax0069",
+      "recTax0076",
+      "recTax0078",
+      "recTax0081",
+      "recTax0087",
+      "recTax0091",
+      "recTax0093",
+      "recTax0099",
+      "recTax0107",
+      "recTax0109",
+      "recTax0114",
+      "recTax0115",
+      "recTax0116",
+      "recTax0117",
+      "recTax0120",
+      "recTax0122",
+      "recTax0123",
+      "recTax0125",
+      "recTax0127",
+      "recTax0128",
+      "recTax0130",
+      "recTax0136",
+      "recTax0141",
+      "recTax0146",
+      "recTax0148",
+      "recTax0149",
+      "recTax0150",
+      "recTax0151",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ]
+    }
+   }
+  },
+  {
+   "period": "h1-2026",
+   "from": "2026-01-01",
+   "to": "2026-06-30",
+   "expected": {
+    "totals": {
+     "count": 11,
+     "taxable": 805600.5,
+     "gstAmt": 95208.09,
+     "tdsAmt": 40900.009999999995,
+     "gross": 900808.59,
+     "received": 859928.58,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 14,
+     "taxable": 976201.5,
+     "gross": 1111717.5899999999,
+     "received": 275300.25,
+     "outstanding": 836417.34,
+     "oldest": 400
+    },
+    "monthlyRows": [
+     {
+      "key": "2026-02",
+      "count": 2,
+      "taxable": 35000,
+      "gstAmt": 6300,
+      "tdsAmt": 23600,
+      "gross": 41300,
+      "received": 17700,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-03",
+      "count": 2,
+      "taxable": 35000.5,
+      "gstAmt": 5100.09,
+      "tdsAmt": 2300.0099999999984,
+      "gross": 40100.59,
+      "received": 37800.58,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-04",
+      "count": 2,
+      "taxable": 240000,
+      "gstAmt": 21600,
+      "tdsAmt": 2400,
+      "gross": 261600,
+      "received": 259210,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-05",
+      "count": 2,
+      "taxable": 345600,
+      "gstAmt": 62208,
+      "tdsAmt": 0,
+      "gross": 407808,
+      "received": 407818,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-06",
+      "count": 3,
+      "taxable": 150000,
+      "gstAmt": 0,
+      "tdsAmt": 12600,
+      "gross": 150000,
+      "received": 137400,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 4,
+      "taxable": 380600,
+      "gstAmt": 68508,
+      "tdsAmt": 23600,
+      "gross": 449108,
+      "received": 425518,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 5,
+      "taxable": 290000,
+      "gstAmt": 2400,
+      "tdsAmt": 14600,
+      "gross": 292400,
+      "received": 277810,
+      "outstanding": 0
+     },
+     {
+      "client": "Unknown",
+      "count": 1,
+      "taxable": 120000,
+      "gstAmt": 21600,
+      "tdsAmt": 2400,
+      "gross": 141600,
+      "received": 139200,
+      "outstanding": 0
+     },
+     {
+      "client": "PMS",
+      "count": 1,
+      "taxable": 15000.5,
+      "gstAmt": 2700.09,
+      "tdsAmt": 300.0099999999984,
+      "gross": 17700.59,
+      "received": 17400.58,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0032",
+      "recTax0041",
+      "recTax0045",
+      "recTax0050",
+      "recTax0067",
+      "recTax0080",
+      "recTax0089",
+      "recTax0090",
+      "recTax0124",
+      "recTax0138",
+      "recTax0145"
+     ],
+     "open": [
+      "recTax0010",
+      "recTax0012",
+      "recTax0034",
+      "recTax0043",
+      "recTax0056",
+      "recTax0071",
+      "recTax0085",
+      "recTax0088",
+      "recTax0095",
+      "recTax0111",
+      "recTax0118",
+      "recTax0131",
+      "recTax0140",
+      "recTax0147"
+     ],
+     "all": [
+      "recTax0010",
+      "recTax0012",
+      "recTax0032",
+      "recTax0034",
+      "recTax0041",
+      "recTax0043",
+      "recTax0045",
+      "recTax0050",
+      "recTax0056",
+      "recTax0067",
+      "recTax0071",
+      "recTax0080",
+      "recTax0085",
+      "recTax0088",
+      "recTax0089",
+      "recTax0090",
+      "recTax0095",
+      "recTax0111",
+      "recTax0118",
+      "recTax0124",
+      "recTax0131",
+      "recTax0138",
+      "recTax0140",
+      "recTax0145",
+      "recTax0147"
+     ]
+    }
+   }
+  },
+  {
+   "period": "q3-2026",
+   "from": "2026-07-01",
+   "to": "2026-09-30",
+   "expected": {
+    "totals": {
+     "count": 7,
+     "taxable": 125000,
+     "gstAmt": 16200,
+     "tdsAmt": 28700,
+     "gross": 141200,
+     "received": 112500,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 9,
+     "taxable": 585601,
+     "gross": 618101.09,
+     "received": 77500.25,
+     "outstanding": 540600.84,
+     "oldest": 400
+    },
+    "monthlyRows": [
+     {
+      "key": "2026-07",
+      "count": 2,
+      "taxable": 35000,
+      "gstAmt": 3600,
+      "tdsAmt": 25100,
+      "gross": 38600,
+      "received": 13500,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-08",
+      "count": 2,
+      "taxable": 30000,
+      "gstAmt": 5400,
+      "tdsAmt": 3000,
+      "gross": 35400,
+      "received": 32400,
+      "outstanding": 0
+     },
+     {
+      "key": "2026-09",
+      "count": 3,
+      "taxable": 60000,
+      "gstAmt": 7200,
+      "tdsAmt": 600,
+      "gross": 67200,
+      "received": 66600,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Workspace migration",
+      "count": 2,
+      "taxable": 50000,
+      "gstAmt": 9000,
+      "tdsAmt": 26600,
+      "gross": 59000,
+      "received": 32400,
+      "outstanding": 0
+     },
+     {
+      "client": "Birla Open Minds",
+      "count": 2,
+      "taxable": 45000,
+      "gstAmt": 3600,
+      "tdsAmt": 1500,
+      "gross": 48600,
+      "received": 47100,
+      "outstanding": 0
+     },
+     {
+      "client": "Maitrimetal",
+      "count": 2,
+      "taxable": 30000,
+      "gstAmt": 3600,
+      "tdsAmt": 600,
+      "gross": 33600,
+      "received": 33000,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0002",
+      "recTax0042",
+      "recTax0077",
+      "recTax0086",
+      "recTax0113",
+      "recTax0133",
+      "recTax0158"
+     ],
+     "open": [
+      "recTax0001",
+      "recTax0004",
+      "recTax0016",
+      "recTax0017",
+      "recTax0055",
+      "recTax0126",
+      "recTax0129",
+      "recTax0135",
+      "recTax0137"
+     ],
+     "all": [
+      "recTax0001",
+      "recTax0002",
+      "recTax0004",
+      "recTax0016",
+      "recTax0017",
+      "recTax0042",
+      "recTax0055",
+      "recTax0077",
+      "recTax0086",
+      "recTax0113",
+      "recTax0126",
+      "recTax0129",
+      "recTax0133",
+      "recTax0135",
+      "recTax0137",
+      "recTax0158"
+     ]
+    }
+   }
+  },
+  {
+   "period": "m-2026-05",
+   "from": "2026-05-01",
+   "to": "2026-05-31",
+   "expected": {
+    "totals": {
+     "count": 2,
+     "taxable": 345600,
+     "gstAmt": 62208,
+     "tdsAmt": 0,
+     "gross": 407808,
+     "received": 407818,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 2,
+     "taxable": 30000,
+     "gross": 30000,
+     "received": 0,
+     "outstanding": 30000,
+     "oldest": 176
+    },
+    "monthlyRows": [
+     {
+      "key": "2026-05",
+      "count": 2,
+      "taxable": 345600,
+      "gstAmt": 62208,
+      "tdsAmt": 0,
+      "gross": 407808,
+      "received": 407818,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 1,
+      "taxable": 345600,
+      "gstAmt": 62208,
+      "tdsAmt": 0,
+      "gross": 407808,
+      "received": 407818,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0067",
+      "recTax0080"
+     ],
+     "open": [
+      "recTax0118",
+      "recTax0131"
+     ],
+     "all": [
+      "recTax0067",
+      "recTax0080",
+      "recTax0118",
+      "recTax0131"
+     ]
+    }
+   }
+  },
+  {
+   "period": null,
+   "from": "2025-02-10",
+   "to": "2025-11-20",
+   "expected": {
+    "totals": {
+     "count": 15,
+     "taxable": 1586800.5,
+     "gstAmt": 93552.06,
+     "tdsAmt": 557484.05,
+     "gross": 1680352.56,
+     "received": 1122908.51,
+     "outstanding": 0
+    },
+    "openSummary": {
+     "count": 26,
+     "taxable": 2193002,
+     "gross": 2501478.15,
+     "received": 187800.25,
+     "outstanding": 2313677.9,
+     "oldest": 620
+    },
+    "monthlyRows": [
+     {
+      "key": "2025-02",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-03",
+      "count": 1,
+      "taxable": 120000,
+      "gstAmt": 0,
+      "tdsAmt": 12000,
+      "gross": 120000,
+      "received": 108000,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-04",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-05",
+      "count": 2,
+      "taxable": 120000,
+      "gstAmt": 6000,
+      "tdsAmt": 126000,
+      "gross": 126000,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-06",
+      "count": 2,
+      "taxable": 465600,
+      "gstAmt": 41472,
+      "tdsAmt": 387072,
+      "gross": 507072,
+      "received": 120010,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-07",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-08",
+      "count": 2,
+      "taxable": 360600,
+      "gstAmt": 1800,
+      "tdsAmt": 6912,
+      "gross": 362400,
+      "received": 355498,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-09",
+      "count": 3,
+      "taxable": 480600.5,
+      "gstAmt": 40680.06,
+      "tdsAmt": 1500.050000000001,
+      "gross": 521280.56,
+      "received": 519800.51,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-10",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 3600,
+      "tdsAmt": 23600,
+      "gross": 23600,
+      "received": 0,
+      "outstanding": 0
+     },
+     {
+      "key": "2025-11",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     }
+    ],
+    "clientRows": [
+     {
+      "client": "Birla Open Minds",
+      "count": 3,
+      "taxable": 811200,
+      "gstAmt": 17280,
+      "tdsAmt": 18912,
+      "gross": 828480,
+      "received": 809578,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine",
+      "count": 4,
+      "taxable": 485600,
+      "gstAmt": 66672,
+      "tdsAmt": 410672,
+      "gross": 552272,
+      "received": 141610,
+      "outstanding": 0
+     },
+     {
+      "client": "PMS",
+      "count": 2,
+      "taxable": 135000,
+      "gstAmt": 7800,
+      "tdsAmt": 126000,
+      "gross": 142800,
+      "received": 16810,
+      "outstanding": 0
+     },
+     {
+      "client": "Maitrimetal",
+      "count": 4,
+      "taxable": 135000.5,
+      "gstAmt": 1800.0600000000013,
+      "tdsAmt": 1500.050000000001,
+      "gross": 136800.56,
+      "received": 135310.51,
+      "outstanding": 0
+     },
+     {
+      "client": "Innovine-ZOHO",
+      "count": 1,
+      "taxable": 20000,
+      "gstAmt": 0,
+      "tdsAmt": 400,
+      "gross": 20000,
+      "received": 19600,
+      "outstanding": 0
+     },
+     {
+      "client": "Workspace migration",
+      "count": 1,
+      "taxable": 0,
+      "gstAmt": 0,
+      "tdsAmt": 0,
+      "gross": 0,
+      "received": 0,
+      "outstanding": 0
+     }
+    ],
+    "scopes": {
+     "tax": [
+      "recTax0023",
+      "recTax0028",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0053",
+      "recTax0063",
+      "recTax0076",
+      "recTax0078",
+      "recTax0087",
+      "recTax0093",
+      "recTax0128",
+      "recTax0141",
+      "recTax0148",
+      "recTax0150"
+     ],
+     "open": [
+      "recTax0005",
+      "recTax0013",
+      "recTax0033",
+      "recTax0040",
+      "recTax0044",
+      "recTax0049",
+      "recTax0057",
+      "recTax0064",
+      "recTax0065",
+      "recTax0066",
+      "recTax0081",
+      "recTax0091",
+      "recTax0099",
+      "recTax0114",
+      "recTax0115",
+      "recTax0116",
+      "recTax0122",
+      "recTax0125",
+      "recTax0127",
+      "recTax0130",
+      "recTax0136",
+      "recTax0146",
+      "recTax0149",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ],
+     "all": [
+      "recTax0005",
+      "recTax0013",
+      "recTax0023",
+      "recTax0028",
+      "recTax0033",
+      "recTax0036",
+      "recTax0038",
+      "recTax0039",
+      "recTax0040",
+      "recTax0044",
+      "recTax0049",
+      "recTax0053",
+      "recTax0057",
+      "recTax0063",
+      "recTax0064",
+      "recTax0065",
+      "recTax0066",
+      "recTax0076",
+      "recTax0078",
+      "recTax0081",
+      "recTax0087",
+      "recTax0091",
+      "recTax0093",
+      "recTax0099",
+      "recTax0114",
+      "recTax0115",
+      "recTax0116",
+      "recTax0122",
+      "recTax0125",
+      "recTax0127",
+      "recTax0128",
+      "recTax0130",
+      "recTax0136",
+      "recTax0141",
+      "recTax0146",
+      "recTax0148",
+      "recTax0149",
+      "recTax0150",
+      "recTax0153",
+      "recTax0154",
+      "recTax0156"
+     ]
+    }
+   }
+  }
+ ]
+}

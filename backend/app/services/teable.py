@@ -22,6 +22,33 @@ def _bust_project_cache() -> None:
     cache.bust(prefix="project:")
 
 
+async def _mirror_write_through(teable_id: str | None, record: dict | None, *, deleted: bool = False) -> None:
+    """Apply a just-committed Teable write to projects_mirror immediately.
+
+    The project list (GET /api/projects/query) reads the mirror, which
+    otherwise catches up only through the webhook or the incremental sync, so
+    a saved project could be missing from the list the user lands back on.
+    Best-effort, as for invoices: Teable is the source of truth and the next
+    sync pass reconciles anything this misses.
+    """
+    from ..db import postgres as _pg
+
+    pool = _pg.get_pool()
+    if not pool or not teable_id:
+        return
+    try:
+        if deleted:
+            await pool.execute("UPDATE projects_mirror SET deleted_at = NOW() WHERE teable_id = $1", teable_id)
+            return
+        from ..db.sync import _extract_project, fields_with_lmt, upsert_record
+        fields = fields_with_lmt(record)
+        if fields is None:
+            return
+        await upsert_record(pool, "projects", "projects_mirror", teable_id, fields, _extract_project)
+    except Exception as exc:
+        logger.warning("project mirror write-through failed for %s (sync will reconcile): %s", teable_id, exc)
+
+
 class TeableService:
     def __init__(self):
         self.token    = settings.teable_api_token
@@ -220,6 +247,8 @@ class TeableService:
             r.raise_for_status()
             records = r.json().get("records", [])
             _bust_project_cache()
+            if records:
+                await _mirror_write_through(records[0].get("id"), records[0])
             return records[0] if records else r.json()
 
     async def update_record(self, record_id: str, fields: dict) -> dict[str, Any]:
@@ -232,13 +261,16 @@ class TeableService:
             )
             r.raise_for_status()
             _bust_project_cache()
-            return r.json()
+            updated = r.json()
+            await _mirror_write_through(record_id, updated)
+            return updated
 
     async def delete_record(self, record_id: str) -> bool:
         async with shared_client() as http:
             r = await http.delete(f"{self._record_url}/{record_id}", headers=self._headers, timeout=30)
             r.raise_for_status()
             _bust_project_cache()
+            await _mirror_write_through(record_id, None, deleted=True)
             return True
 
     async def search_records(self, query: str, take: int = 20) -> list[dict[str, Any]]:

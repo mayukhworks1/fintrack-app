@@ -40,7 +40,10 @@ const PRESETS = [
 ]
 
 // records: array of Teable invoice records (fields['Raised Date'], fields['Amount Raised/with Tax'], fields['Amount Received'])
-export default function MonthlyCollectionsChart({ records = [], className = '' }) {
+// months: the same totals already worked out per raised month, as the invoice
+//   query endpoints return them ([{ key, gross, received, count }]); used
+//   instead of `records` when given.
+export default function MonthlyCollectionsChart({ records = [], months: monthTotals, className = '' }) {
   const containerRef = useRef(null)
   const [width, setWidth] = useState(800)
   const [preset, setPreset] = useState('12mo')
@@ -82,7 +85,12 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
 
     // Aggregate records by month key
     const agg = {}
-    for (const r of records) {
+    if (monthTotals) {
+      for (const m of monthTotals) {
+        if (keys.includes(m.key)) agg[m.key] = { raised: m.gross || 0, received: m.received || 0, count: m.count || 0 }
+      }
+    }
+    for (const r of monthTotals ? [] : records) {
       const f = r.fields || {}
       const mk = monthKey(f['Raised Date'])
       if (!mk || !keys.includes(mk)) continue
@@ -97,7 +105,7 @@ export default function MonthlyCollectionsChart({ records = [], className = '' }
       const label = new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })
       return { mk, label, raised: agg[mk]?.raised || 0, received: agg[mk]?.received || 0, count: agg[mk]?.count || 0 }
     })
-  }, [records, preset, customFrom, customTo])
+  }, [records, monthTotals, preset, customFrom, customTo])
 
   // % change vs previous month
   const lastMonth  = months[months.length - 1]

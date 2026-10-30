@@ -362,21 +362,25 @@ class TestLiveViewFilters:
         ], filterConditions=[{"field": "Amount Raised", "op": "gt", "value": "500000"}])
         assert ids == ["r0"]
 
-    def test_tax_ledger_search_uses_the_tax_page_fields(self, public):
+    def test_tax_ledger_search_is_the_invoice_search(self, public):
+        # The tax ledger asks GET /api/invoices/query, so a live link searches
+        # with its rule: every word, in any of the invoice's searched fields.
         paid = {**INVOICE_FIELDS, "Payment Status": "Paid", "Raised Date": "2026-05-10"}
         ids = _live(public, "tax-ledger", [
             {**paid, "Client Name": "Acme"},
-            {**paid, "Client Name": "Globex", "Remark": "acme referral"},       # Remark is not searched
-            {**paid, "Client Name": "Globex", "Category": "Acme partner"},      # nor Category
+            {**paid, "Client Name": "Globex", "Remark": "acme referral"},       # Remark is searched
+            {**paid, "Client Name": "Globex", "Category": "Acme partner"},      # and Category
             {**paid, "Client Name": "Acme", "Raised Date": "2026-02-10"},       # outside the period
+            {**paid, "Client Name": "Globex"},
         ], search=" acme ", invoiceScope="tax", periodFrom="2026-04-01", periodTo="2027-03-31")
-        assert ids == ["r0"]
+        assert ids == ["r0", "r1", "r2"]
 
-    def test_tax_ledger_search_never_spans_two_fields(self):
+    def test_tax_ledger_search_needs_every_word(self):
         f = {"fields": {**INVOICE_FIELDS, "Payment Status": "Paid", "Invoice Number": "INV-7", "Project": "Rebrand"}}
         cfg = {"invoiceScope": "tax", "search": "inv-7 rebrand"}
-        assert S._record_matches_view("tax-ledger", cfg, f) is False
-        assert S._record_matches_view("tax-ledger", {**cfg, "search": "rebrand"}, f) is True
+        assert S._record_matches_view("tax-ledger", cfg, f) is True
+        assert S._record_matches_view("tax-ledger", {**cfg, "search": "inv-7 relaunch"}, f) is False
+        assert S._record_matches_view("tax-ledger", {**cfg, "search": "inv-7rebrand"}, f) is False
 
     def test_tax_ledger_excludes_foreign_currency_like_the_page(self, public):
         paid = {**INVOICE_FIELDS, "Payment Status": "Paid", "Raised Date": "2026-05-10"}
@@ -458,31 +462,24 @@ class TestLiveViewSaveChecks:
         row = asyncio.run(SharedViewService().create(None, ["rec1"], "editor", view_config=vc, resource_type="invoices"))
         assert row["is_dynamic"] is False
 
-    def test_a_searched_projects_view_is_shared_as_a_snapshot_not_live(self, monkeypatch):
-        # The Projects page's search is Teable full-text, capped at 20 and blind to the
-        # client/status filters; a live link would publish every substring match.
+    def test_a_searched_projects_view_can_be_live(self, monkeypatch):
+        # The Projects page searched with Teable full-text (capped at 20, blind to
+        # its filters), which no link could replay, so such links were snapshots.
+        # It now searches through GET /api/projects/query, whose rule a live link
+        # applies too.
         monkeypatch.setattr(S, "get_pool", self._pool)
         svc = SharedViewService()
         vc = {"type": "card", "filterClient": "", "search": "acme"}
-        with pytest.raises(ValueError, match="snapshot"):
-            asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="projects"))
+        assert asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="projects"))["is_dynamic"]
         assert asyncio.run(svc.create(None, ["p1"], "editor", view_config=vc, resource_type="projects"))["is_dynamic"] is False
-        for ok_vc in ({**vc, "search": "  "}, {**vc, "search": ""}):
-            assert asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=ok_vc, resource_type="projects"))["is_dynamic"]
-        # other pages' searches are replayed exactly, so they stay live
-        assert asyncio.run(svc.create(None, ["__dynamic__"], "editor", view_config=vc, resource_type="invoices"))["is_dynamic"]
 
-    def test_update_refuses_re_scoping_a_searched_projects_link_live(self, monkeypatch):
-        monkeypatch.setattr(S, "get_pool", self._pool)
-
-        async def existing(self, token):
-            return {"token": token, "resource_type": "projects", "is_dynamic": False, "record_ids": ["p1"],
-                    "view_config": {"search": "acme"}}
-        monkeypatch.setattr(SharedViewService, "get", existing)
-        with pytest.raises(ValueError, match="snapshot"):
-            asyncio.run(SharedViewService().update("tok", {"record_ids": ["__dynamic__"]}))
-        with pytest.raises(ValueError, match="snapshot"):
-            asyncio.run(SharedViewService().update("tok", {"record_ids": ["__dynamic__"], "view_config": {"search": "x"}}))
+    def test_projects_search_needs_every_word_in_the_searched_fields(self):
+        f = {"fields": {"Project Name": "Rebrand", "Client": "Acme Corp", "Health": "At Risk",
+                        "Project Status": "🟢 Active", "Remarks": "acme"}}
+        assert S._record_matches_view("projects", {"search": "acme rebrand"}, f) is True
+        assert S._record_matches_view("projects", {"search": " AT RISK "}, f) is True
+        assert S._record_matches_view("projects", {"search": "acme relaunch"}, f) is False
+        assert S._record_matches_view("projects", {"search": "corprebrand"}, f) is False
 
     def test_update_refuses_turning_such_a_snapshot_live(self, monkeypatch):
         monkeypatch.setattr(S, "get_pool", self._pool)
