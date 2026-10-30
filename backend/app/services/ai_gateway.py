@@ -354,8 +354,8 @@ class ProviderState:
 
     @property
     def flavor(self) -> str:
-        """Which vendor extensions the API understands: 'openrouter', 'groq'
-        or plain 'openai'. The built-ins keep theirs behind a proxy base URL;
+        """Which vendor extensions the API understands: 'openrouter', 'groq',
+        'gemini' or plain 'openai'. The built-ins keep theirs behind a proxy base URL;
         an added provider is judged by its host, so one pointing at
         openrouter.ai behaves like the built-in."""
         if self.key in PROVIDERS:
@@ -365,6 +365,8 @@ class ProviderState:
             return "openrouter"
         if host == "api.groq.com":
             return "groq"
+        if host == "generativelanguage.googleapis.com":
+            return "gemini"
         return "openai"
 
 
@@ -1719,6 +1721,9 @@ def parse_models(provider_key: str, payload: Any) -> list[dict]:
         if not isinstance(item, dict):
             continue
         mid = item.get("id")
+        if isinstance(mid, str) and mid.startswith("models/"):
+            # Gemini names its models "models/<id>"; calls take the bare id.
+            mid = mid[len("models/"):]
         if not isinstance(mid, str) or not MODEL_ID_RE.match(mid) or mid in found:
             continue
         if any(word in mid.lower() for word in _NON_CHAT) or item.get("active") is False:

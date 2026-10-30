@@ -392,6 +392,17 @@ def _build_payload(spec: ModelSpec, messages: list[dict], **extra) -> dict[str, 
         # max_tokens; at its default effort a short budget (the judge has 350)
         # can be spent before any answer is written.
         payload["reasoning_effort"] = "low"
+    elif flavor == "gemini":
+        model = spec.id[len("models/"):] if spec.id.startswith("models/") else spec.id
+        payload["model"] = model
+        # Gemini 2.5 and later think before answering, and the thinking counts
+        # against max_tokens just as gpt-oss's does. Flash can switch it off;
+        # Pro cannot, so it thinks at the lowest level. A model that refuses
+        # the field has it dropped and the request resent (_OPTIONAL_FIELDS).
+        if "flash" in model and "2.5" in model:
+            payload["reasoning_effort"] = "none"
+        elif "gemini" in model and not model.startswith(("gemini-1", "gemini-2.0")):
+            payload["reasoning_effort"] = "low"
     return payload
 
 
