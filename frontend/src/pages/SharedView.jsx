@@ -1020,7 +1020,7 @@ function DetailModal({ resourceType, record, onClose, onTrackEvent, isShared = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(10px)' }}
+      style={{ background: 'rgba(15,23,42,0.55)', WebkitBackdropFilter: 'blur(10px)', backdropFilter: 'blur(10px)' }}
       onClick={onClose}>
       <div {...dialog.panelProps} className="w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col rounded-[24px] shadow-2xl"
         style={{ background: '#fff', border: '1px solid #e5e7eb' }}
@@ -1252,7 +1252,7 @@ function EditModal({ resourceType, record, statusOptions, saving, error = '', on
   if (!record) return null
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(15,23,42,0.6)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: '#fff', border: '1px solid #e5e7eb', maxHeight: '92vh' }}>
         {/* sticky header */}

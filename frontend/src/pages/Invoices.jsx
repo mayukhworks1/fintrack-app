@@ -28,6 +28,8 @@ import { AgingBadge, MonthStatusPill, RaisedByBadge, ResizableHead, SkeletonRow,
 import { DEFAULT_INVOICE_COLUMN_VISIBILITY, DEFAULT_INVOICE_COLUMN_WIDTHS, INVOICE_COLUMNS, INVOICE_COLUMN_VISIBILITY_STORAGE_KEY, normalizeColumnVisibility, INVOICE_FIELDS, INVOICE_REQUEST_FORM_URL, INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS, INVOICE_SHARE_COLUMNS, STATUS_META, buildRetainerGroups, currentMonthKey, effectiveAging, endOfMonthIso, firstDayIso, fmt, fmtDate, monthLabel, parseAttachments, projectInitials, shiftMonthKey, shortMonthLabel } from './invoices/utils'
 import { activeConditions as activeRules, invoiceQueryParams, useInvoiceFilters, useInvoiceQuery } from './invoices/useInvoiceQuery'
 import { tint } from '../utils/color'
+import { usePhone } from '../components/mobile/MobileUI'
+import InvoicesPhone from './invoices/InvoicesPhone'
 
 const AGING_BAND_KEYS = ['0-14d', '15-30d', '31-60d', '60d+']
 const CHART_PRESETS = [
@@ -63,6 +65,8 @@ export default function Invoices() {
   const canEdit    = isEditor && hasPerm('module.invoices.edit')
   const canPayment = isEditor && hasPerm('module.invoices.payment')
   const toast = useToast()
+  // A phone (≤640px) gets its own layout of the same data; see InvoicesPhone.
+  const isPhone = usePhone()
   // Search, filters, sort and the number of loaded pages live in the URL, so
   // a link reopens the same view and back / forward step through changes.
   const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch, clearAll } = useInvoiceFilters()
@@ -780,6 +784,325 @@ export default function Invoices() {
     )
   }
 
+  // Drawers and dialogs: the same on desktop and on a phone.
+  const overlays = (
+    <>
+      <InvoiceDetail
+        open={drawer?.mode === 'view'}
+        invoice={drawer?.mode === 'view' ? drawer.invoice : null}
+        onClose={closeDrawer}
+        onEdit={canEdit ? () => setDrawer({ mode: 'edit', invoice: drawer?.invoice }) : null}
+        onRecordPayment={canPayment ? () => openRecordPayment(drawer?.invoice) : null}
+        isEditor={isEditor}
+        canPayment={canPayment}
+        onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
+        avatarMap={avatarMap}
+      />
+      {(canCreate || canEdit || canPayment) && (
+        <InvoiceDrawer
+          open={drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment'}
+          invoice={drawer?.mode === 'edit' || drawer?.mode === 'payment' ? drawer.invoice : null}
+          prefill={drawer?.mode === 'new' || drawer?.mode === 'payment' ? drawer?.prefill : null}
+          paymentOnly={drawer?.mode === 'payment'}
+          onClose={closeDrawer}
+          onSaved={handleSaved}
+          onDeleted={handleDeleted}
+          options={formOptions}
+        />
+      )}
+      {isEditor && shareModal && (
+        <ShareLinkModal
+          resourceType="invoices"
+          selectedRecords={records}
+          title={shareTitle}
+          recordLabel="invoice"
+          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
+          enableLiveMode
+          viewConfig={sharedViewConfig}
+          onClose={() => setShareModal(false)}
+        />
+      )}
+      {isEditor && manageModal && (
+        <ManageSharedLinksModal
+          resourceType="invoices"
+          recordLabel="invoice"
+          currentViewConfig={sharedViewConfig}
+          visibleRecords={records}
+          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
+          onClose={() => setManageModal(false)}
+        />
+      )}
+      <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
+    </>
+  )
+
+  // The retainer workspace, shared by the desktop page and the phone view.
+  const retainerWorkspace = workspace === 'retainers' && (
+    <section className="card space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>Retainer Workspace</h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+            <strong style={{ color: 'var(--text-1)' }}>Raise externally.</strong> Use the Zoho invoice request form when a retainer invoice needs to be raised.
+            {' '}
+            <strong style={{ color: 'var(--text-1)' }}>Record internally.</strong> Once raised, store the final invoice number and details here.
+          </p>
+        </div>
+        <div className="relative">
+          <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+          <select value={retainerMonth} onChange={e => setRetainerMonth(e.target.value)}
+            className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
+            {retainerMonthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          </select>
+          <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
+        </div>
+      </div>
+
+      {retainerGroups.length === 0 ? (
+        <div className="rounded-xl p-8 text-center" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+          <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No retainer templates found</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+            Create a normal invoice and set the category to a retainer category first.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-4">
+          <div className="space-y-3">
+            {retainerGroups.map(group => (
+              <button key={group.project} type="button"
+                onClick={() => setSelectedRetainer(group.project)}
+                className="w-full text-left rounded-xl p-4 transition-all"
+                style={{
+                  background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
+                  border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
+                  boxShadow: selectedRetainer === group.project ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'none',
+                }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                      {fmt(group.amount)} template · next due {monthLabel(group.nextDueMonth)}
+                    </p>
+                  </div>
+                  <MonthStatusPill status={group.monthStatus} active={selectedRetainer === group.project} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <div>
+                    <p className="label">Current month</p>
+                    <p className="text-xs font-medium" style={{ color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
+                      {group.currentMonthRaised ? 'Raised / planned' : 'Missing'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="label">Raised by</p>
+                    <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {selectedRetainerGroup && (() => {
+            const group = selectedRetainerGroup
+            const monthRec = group.monthRecord?.fields || null
+            const missing = !monthRec
+            const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
+            return (
+              <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{group.project}</p>
+                    <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
+                      Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''} · Next due {monthLabel(group.nextDueMonth)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <MonthStatusPill status={group.monthStatus} active />
+                    <span className="text-xs px-2 py-1 rounded-full"
+                      style={{
+                        background: group.currentMonthRaised ? 'var(--fin-pos-bg)' : 'var(--fin-warn-bg)',
+                        color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)',
+                        border: `1px solid ${group.currentMonthRaised ? 'var(--fin-pos-border)' : 'var(--fin-warn-border)'}`,
+                      }}>
+                      {group.currentMonthRaised ? 'Current month covered' : 'Current month not raised'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    ['Tracking month', monthLabel(retainerMonth)],
+                    ['Month invoice #', monthRec?.['Invoice Number'] || 'Pending update'],
+                    ['Raised by', group.raisedBy || '—'],
+                    ['Month remark', monthRec?.['Remark'] || '—'],
+                  ].map(([lbl, val]) => (
+                    <div key={lbl} className="card p-3">
+                      <p className="label">{lbl}</p>
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{val}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <p className="label mb-2">Month Timeline</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+                    {group.timeline.map(item => (
+                      <button key={item.key} type="button"
+                        onClick={() => setRetainerMonth(item.key)}
+                        className="min-w-0 rounded-xl p-3 text-left transition-all min-h-[72px]"
+                        style={{
+                          background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
+                          border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
+                          boxShadow: item.active ? '0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent)' : 'none',
+                        }}>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
+                            {item.label}
+                          </p>
+                          {item.current && <span className="text-[9px] font-bold" style={{ color: 'var(--accent)' }}>NOW</span>}
+                        </div>
+                        <MonthStatusPill status={item.status} active={item.active} />
+                        <p className="text-[10px] mt-2 truncate" style={{ color: 'var(--text-3)' }}>
+                          {item.record?.fields?.['Invoice Number'] || 'No record'}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="label mb-2">Monthly Records</p>
+                  <div className="space-y-2">
+                    {group.timeline.map(item => {
+                      const rec = item.record
+                      const f = rec?.fields || {}
+                      const key = `${item.key}-${group.project}`
+                      return (
+                        <div key={key} className="rounded-xl p-3 flex items-center justify-between gap-3"
+                          style={{
+                            background: item.active ? 'var(--accent-dim)' : 'var(--bg-base)',
+                            border: `1px solid ${item.active ? 'var(--accent-soft)' : 'var(--card-border)'}`,
+                          }}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.fullLabel}</p>
+                              <MonthStatusPill status={item.status} active={item.active} />
+                            </div>
+                            <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
+                              {rec
+                                ? `${f['Invoice Number'] || 'Invoice number pending'} · ${fmt(f['Amount Raised'])} · ${f['Remark'] || 'No remark'}`
+                                : 'No record created for this month yet'}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0 flex-wrap">
+                            {rec ? (
+                              <button onClick={() => openView(rec)}
+                                className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                View
+                              </button>
+                            ) : item.key === retainerMonth ? (
+                              <>
+                                <button onClick={() => openInvoiceRequestForm(group, item.key)}
+                                  className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                  Open request form
+                                </button>
+                                <button onClick={() => openRetainerRecordForm(group, item.key)}
+                                  className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                  Record raised invoice
+                                </button>
+                                <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                                  className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                                  {busyPause ? 'Pausing…' : 'Pause month'}
+                                </button>
+                              </>
+                            ) : (
+                              <button onClick={() => setRetainerMonth(item.key)}
+                                className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                                Track month
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {group.description && (
+                  <div className="rounded-xl p-3" style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
+                    <p className="label">Template Note</p>
+                    <p className="text-sm" style={{ color: 'var(--text-2)' }}>{group.description}</p>
+                  </div>
+                )}
+
+                {missing && (
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => openInvoiceRequestForm(group, retainerMonth)}
+                      className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                      Open invoice request form
+                    </button>
+                    <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
+                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
+                      Record already raised invoice
+                    </button>
+                    <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
+                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
+                      {busyPause ? 'Pausing…' : 'Pause month'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
+    </section>
+  )
+
+  if (isPhone) {
+    return (
+      <>
+        <InvoicesPhone
+          filters={filters}
+          setFilters={setFilters}
+          searchInput={searchInput}
+          onSearchInput={onSearchInput}
+          commitSearch={commitSearch}
+          clearAll={clearAllFilters}
+          hasFilters={!!hasFilters}
+          chips={activeFilterChips}
+          records={records}
+          scopeTotal={scopeTotal}
+          nextCursor={nextCursor}
+          loadMore={loadMore}
+          loadingMore={loadingMore}
+          hasData={hasData}
+          agg={agg}
+          ws={ws}
+          error={error}
+          errorStatus={errorStatus}
+          refresh={refresh}
+          loading={loading}
+          syncing={syncing}
+          canCreate={canCreate}
+          openNew={openNew}
+          openView={openView}
+          isEditor={isEditor}
+          onShare={() => setShareModal(true)}
+          onLinks={() => setManageModal(true)}
+          exportCsv={exportCsv}
+          exporting={exporting}
+          allCount={allCount}
+          options={{ clients: clientNameOptions, projects: projectOptions, months: monthOptions, categories: categoryOptions, raisedBy: raisedByOptions }}
+          workspace={workspace}
+          setWorkspace={setWorkspace}
+          retainerWorkspace={retainerWorkspace}
+        />
+        {overlays}
+      </>
+    )
+  }
+
   return (
     <ExecutiveShell className="invoice-workspace">
 
@@ -1454,227 +1777,7 @@ export default function Invoices() {
       {overdue.length > 0 && <OverdueAlert overdue={overdue} allRecords={overdueRecords} onViewAll={() => setOverdueOnly(true)} onOpenInvoice={(invNo) => { const hit = overdue.find(inv => inv.invoice_no === invNo); if (hit) openInvoiceById(hit.id) }} />}
 
       {/* ── Retainer Workspace ── */}
-      {workspace === 'retainers' && (
-        <section className="card space-y-4">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)', letterSpacing: '-0.02em' }}>Retainer Workspace</h2>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-                <strong style={{ color: 'var(--text-1)' }}>Raise externally.</strong> Use the Zoho invoice request form when a retainer invoice needs to be raised.
-                {' '}
-                <strong style={{ color: 'var(--text-1)' }}>Record internally.</strong> Once raised, store the final invoice number and details here.
-              </p>
-            </div>
-            <div className="relative">
-              <CalendarClock size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-              <select value={retainerMonth} onChange={e => setRetainerMonth(e.target.value)}
-                className="input pl-7 py-1.5 text-xs appearance-none" style={{ width: 'auto', minWidth: 170, paddingRight: '1.5rem' }}>
-                {retainerMonthOptions.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-              </select>
-              <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-3)' }} />
-            </div>
-          </div>
-
-          {retainerGroups.length === 0 ? (
-            <div className="rounded-xl p-8 text-center" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
-              <p className="text-sm font-medium" style={{ color: 'var(--text-2)' }}>No retainer templates found</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                Create a normal invoice and set the category to a retainer category first.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-4">
-              <div className="space-y-3">
-                {retainerGroups.map(group => (
-                  <button key={group.project} type="button"
-                    onClick={() => setSelectedRetainer(group.project)}
-                    className="w-full text-left rounded-xl p-4 transition-all"
-                    style={{
-                      background: selectedRetainer === group.project ? 'var(--accent-dim)' : 'var(--bg-layer)',
-                      border: `1px solid ${selectedRetainer === group.project ? 'var(--accent)' : 'var(--card-border)'}`,
-                      boxShadow: selectedRetainer === group.project ? '0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent)' : 'none',
-                    }}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{group.project}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-                          {fmt(group.amount)} template · next due {monthLabel(group.nextDueMonth)}
-                        </p>
-                      </div>
-                      <MonthStatusPill status={group.monthStatus} active={selectedRetainer === group.project} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      <div>
-                        <p className="label">Current month</p>
-                        <p className="text-xs font-medium" style={{ color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)' }}>
-                          {group.currentMonthRaised ? 'Raised / planned' : 'Missing'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="label">Raised by</p>
-                        <p className="text-xs font-medium" style={{ color: 'var(--text-1)' }}>{group.raisedBy || '—'}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {selectedRetainerGroup && (() => {
-                const group = selectedRetainerGroup
-                const monthRec = group.monthRecord?.fields || null
-                const missing = !monthRec
-                const busyPause = retainerActionBusy === `pause:${group.project}:${retainerMonth}`
-                return (
-                  <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <p className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{group.project}</p>
-                        <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
-                          Template amount {fmt(group.amount)}{group.withTax ? ` · GST total ${fmt(group.withTax)}` : ''} · Next due {monthLabel(group.nextDueMonth)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <MonthStatusPill status={group.monthStatus} active />
-                        <span className="text-xs px-2 py-1 rounded-full"
-                          style={{
-                            background: group.currentMonthRaised ? 'var(--fin-pos-bg)' : 'var(--fin-warn-bg)',
-                            color: group.currentMonthRaised ? 'var(--fin-positive)' : 'var(--fin-warning)',
-                            border: `1px solid ${group.currentMonthRaised ? 'var(--fin-pos-border)' : 'var(--fin-warn-border)'}`,
-                          }}>
-                          {group.currentMonthRaised ? 'Current month covered' : 'Current month not raised'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      {[
-                        ['Tracking month', monthLabel(retainerMonth)],
-                        ['Month invoice #', monthRec?.['Invoice Number'] || 'Pending update'],
-                        ['Raised by', group.raisedBy || '—'],
-                        ['Month remark', monthRec?.['Remark'] || '—'],
-                      ].map(([lbl, val]) => (
-                        <div key={lbl} className="card p-3">
-                          <p className="label">{lbl}</p>
-                          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-1)' }}>{val}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div>
-                      <p className="label mb-2">Month Timeline</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-                        {group.timeline.map(item => (
-                          <button key={item.key} type="button"
-                            onClick={() => setRetainerMonth(item.key)}
-                            className="min-w-0 rounded-xl p-3 text-left transition-all min-h-[72px]"
-                            style={{
-                              background: item.current ? 'var(--accent-dim)' : 'var(--bg-base)',
-                              border: `1px solid ${item.active ? 'var(--accent)' : 'var(--card-border)'}`,
-                              boxShadow: item.active ? '0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent)' : 'none',
-                            }}>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <p className="text-[11px] font-semibold" style={{ color: item.current ? 'var(--accent)' : 'var(--text-2)' }}>
-                                {item.label}
-                              </p>
-                              {item.current && <span className="text-[9px] font-bold" style={{ color: 'var(--accent)' }}>NOW</span>}
-                            </div>
-                            <MonthStatusPill status={item.status} active={item.active} />
-                            <p className="text-[10px] mt-2 truncate" style={{ color: 'var(--text-3)' }}>
-                              {item.record?.fields?.['Invoice Number'] || 'No record'}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="label mb-2">Monthly Records</p>
-                      <div className="space-y-2">
-                        {group.timeline.map(item => {
-                          const rec = item.record
-                          const f = rec?.fields || {}
-                          const key = `${item.key}-${group.project}`
-                          return (
-                            <div key={key} className="rounded-xl p-3 flex items-center justify-between gap-3"
-                              style={{
-                                background: item.active ? 'var(--accent-dim)' : 'var(--bg-base)',
-                                border: `1px solid ${item.active ? 'var(--accent-soft)' : 'var(--card-border)'}`,
-                              }}>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{item.fullLabel}</p>
-                                  <MonthStatusPill status={item.status} active={item.active} />
-                                </div>
-                                <p className="text-xs mt-1 truncate" style={{ color: 'var(--text-3)' }}>
-                                  {rec
-                                    ? `${f['Invoice Number'] || 'Invoice number pending'} · ${fmt(f['Amount Raised'])} · ${f['Remark'] || 'No remark'}`
-                                    : 'No record created for this month yet'}
-                                </p>
-                              </div>
-                              <div className="flex gap-2 flex-shrink-0 flex-wrap">
-                                {rec ? (
-                                  <button onClick={() => openView(rec)}
-                                    className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                    View
-                                  </button>
-                                ) : item.key === retainerMonth ? (
-                                  <>
-                                    <button onClick={() => openInvoiceRequestForm(group, item.key)}
-                                      className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                      Open request form
-                                    </button>
-                                    <button onClick={() => openRetainerRecordForm(group, item.key)}
-                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                      Record raised invoice
-                                    </button>
-                                    <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                                      className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
-                                      {busyPause ? 'Pausing…' : 'Pause month'}
-                                    </button>
-                                  </>
-                                ) : (
-                                  <button onClick={() => setRetainerMonth(item.key)}
-                                    className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                                    Track month
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {group.description && (
-                      <div className="rounded-xl p-3" style={{ background: 'var(--bg-base)', border: '1px solid var(--card-border)' }}>
-                        <p className="label">Template Note</p>
-                        <p className="text-sm" style={{ color: 'var(--text-2)' }}>{group.description}</p>
-                      </div>
-                    )}
-
-                    {missing && (
-                      <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => openInvoiceRequestForm(group, retainerMonth)}
-                          className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                          Open invoice request form
-                        </button>
-                        <button onClick={() => openRetainerRecordForm(group, retainerMonth)}
-                          className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem' }}>
-                          Record already raised invoice
-                        </button>
-                        <button onClick={() => createRetainerMonth(group, 'pause')} disabled={busyPause || !!retainerActionBusy}
-                          className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.375rem 0.75rem', color: 'var(--fin-negative)' }}>
-                          {busyPause ? 'Pausing…' : 'Pause month'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
-          )}
-        </section>
-      )}
+      {retainerWorkspace}
 
       {workspace === 'invoices' && (
       <>
@@ -2229,52 +2332,7 @@ export default function Invoices() {
       )}
 
       {/* ── Drawers — always rendered so exit animations play ── */}
-      <InvoiceDetail
-        open={drawer?.mode === 'view'}
-        invoice={drawer?.mode === 'view' ? drawer.invoice : null}
-        onClose={closeDrawer}
-        onEdit={canEdit ? () => setDrawer({ mode: 'edit', invoice: drawer?.invoice }) : null}
-        onRecordPayment={canPayment ? () => openRecordPayment(drawer?.invoice) : null}
-        isEditor={isEditor}
-        canPayment={canPayment}
-        onPreview={(docs, idx) => setPreviewDocs({ docs, index: idx })}
-        avatarMap={avatarMap}
-      />
-      {(canCreate || canEdit || canPayment) && (
-        <InvoiceDrawer
-          open={drawer?.mode === 'new' || drawer?.mode === 'edit' || drawer?.mode === 'payment'}
-          invoice={drawer?.mode === 'edit' || drawer?.mode === 'payment' ? drawer.invoice : null}
-          prefill={drawer?.mode === 'new' || drawer?.mode === 'payment' ? drawer?.prefill : null}
-          paymentOnly={drawer?.mode === 'payment'}
-          onClose={closeDrawer}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
-          options={formOptions}
-        />
-      )}
-      {isEditor && shareModal && (
-        <ShareLinkModal
-          resourceType="invoices"
-          selectedRecords={records}
-          title={shareTitle}
-          recordLabel="invoice"
-          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
-          enableLiveMode
-          viewConfig={sharedViewConfig}
-          onClose={() => setShareModal(false)}
-        />
-      )}
-      {isEditor && manageModal && (
-        <ManageSharedLinksModal
-          resourceType="invoices"
-          recordLabel="invoice"
-          currentViewConfig={sharedViewConfig}
-          visibleRecords={records}
-          highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
-          onClose={() => setManageModal(false)}
-        />
-      )}
-      <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
+      {overlays}
     </ExecutiveShell>
   )
 }

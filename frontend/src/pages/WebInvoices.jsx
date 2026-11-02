@@ -17,6 +17,10 @@ import { DocPreviewModal } from '../components/DocPreviewModal'
 import { FilterSelect } from '../components/FilterSelect'
 import { FilterBuilder } from '../components/FilterBuilder'
 import { activeConditions as activeRules, invoiceQueryParams, useInvoiceFilters, useWebInvoiceQuery, webInvoiceList } from './invoices/useInvoiceQuery'
+import { usePhone, useKeyboardWatch, joinMeta } from '../components/mobile/MobileUI'
+import { invoiceSummary } from '../components/mobile/summary'
+import InvoicesPhone from './invoices/InvoicesPhone'
+import { invoiceFilterChips } from './invoices/phoneSegments'
 
 import clsx from 'clsx'
 import { downloadBlob } from '../utils/download'
@@ -39,6 +43,22 @@ import { tint } from '../utils/color'
 const CHART_PRESET_DAYS = { '30d': 30, '60d': 60, '3m': 90, '6m': 180, '1y': 365, custom: null }
 const PRINT_MAX_ROWS = 2000
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * The phone's summary card for web invoices: the rupee figures, as on the
+ * desktop's primary cards, plus how many other currencies still owe money.
+ */
+function webPhoneSummary(agg) {
+  if (!agg) return null
+  const rs = agg.by_currency?.RS || {}
+  const base = invoiceSummary({
+    collection_rate: rs.collection_rate || 0, outstanding: rs.outstanding || 0, pending_count: rs.pending_count || 0,
+  })
+  const others = Object.entries(agg.by_currency || {}).filter(([cur, v]) => cur !== 'RS' && Number(v?.outstanding || 0) > 0).length
+  return others
+    ? { ...base, sentence: joinMeta([base.sentence, `${others} other currenc${others === 1 ? 'y' : 'ies'} owed`]) }
+    : base
+}
 
 /** GET /api/web-invoices/query totals in the shape the old /summary had:
  *  RS-primary figures, counts by status, per-currency and per-project maps. */
@@ -76,6 +96,10 @@ export default function WebInvoices() {
   const canViewTax        = isAll || hasPerm('module.tax.view')
   const { dark } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
+  // On a phone (≤640px) the invoices workspace is the grouped list of
+  // invoices/InvoicesPhone; the other workspaces keep their layouts.
+  const isPhone = usePhone()
+  useKeyboardWatch(isPhone)
 
   const initialWorkspace = searchParams.get('tab') || 'dashboard'
 
@@ -200,6 +224,7 @@ export default function WebInvoices() {
    * search and filters match (`agg`) and of every invoice the user may see
    * (`ws`), each per currency. The projects and tax workspaces do not need it. */
   const listWanted = workspace === 'dashboard' || workspace === 'invoices' || workspace === 'retainers'
+  const phoneList = isPhone && workspace === 'invoices'
   const {
     records, total: scopeTotal, nextCursor, aggregates: agg, workspace: ws, hasData,
     loading: firstLoad, refreshing: syncing, loadingMore, error, errorStatus, loadMore, refresh: refreshList,
@@ -710,6 +735,47 @@ export default function WebInvoices() {
       {/* Mobile top header — hidden sm+ */}
       <MobileHeader onHelp={() => setHelpOpen(true)} onLogout={logout} />
       <main className="flex-1 overflow-y-auto">
+        {phoneList ? (
+          <InvoicesPhone
+            inlineTitle={{ context: 'Web Tracker', title: 'Invoices' }}
+            label="web invoices"
+            filters={filters}
+            setFilters={setFilters}
+            searchInput={searchInput}
+            onSearchInput={setSearchInput}
+            commitSearch={commitSearch}
+            clearAll={clearAll}
+            hasFilters={!!hasFilters}
+            chips={invoiceFilterChips(filters, setFilters)}
+            records={records}
+            scopeTotal={scopeTotal}
+            nextCursor={nextCursor}
+            loadMore={loadMore}
+            loadingMore={loadingMore}
+            hasData={hasData}
+            agg={agg}
+            ws={ws}
+            error={error}
+            errorStatus={errorStatus}
+            refresh={refresh}
+            loading={loading}
+            syncing={syncing}
+            canCreate={canCreateInvoice}
+            openNew={openNew}
+            openView={openView}
+            allCount={allCount}
+            options={{ projects: picklists.Project || [], months: monthOptions, categories: picklists.Category || [], raisedBy: picklists['Raised By'] || [] }}
+            summary={webPhoneSummary(agg)}
+            amount={f => fmtCurrency(f['Amount Raised'], f['Currency'] || 'RS')}
+            actions={[
+              { label: `Export filtered CSV (${scopeTotal})`, icon: Download, onClick: () => exportCsv(true) },
+              { label: `Export all CSV (${allCount})`, icon: Download, onClick: () => exportCsv(false) },
+              { label: 'Print invoice list', icon: Printer, onClick: handlePrintInvoices },
+              { label: 'Raise externally', icon: ExternalLink, hint: 'Opens the invoice request form', onClick: () => window.open(INVOICE_REQUEST_FORM_URL, '_blank', 'noopener,noreferrer') },
+              { label: 'Refresh', icon: RefreshCw, disabled: loading, onClick: refresh },
+            ]}
+          />
+        ) : (
         <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 animate-fade-in">
 
           {/* ── Invoices header ── */}
@@ -2642,6 +2708,7 @@ export default function WebInvoices() {
           </>}
 
         </div>
+        )}
       </main>
       {/* Mobile bottom nav — hidden sm+ */}
       <MobileBottomNav workspace={workspace} setWorkspace={setWorkspace} isAll={isAll} canViewProjects={canViewProjects} canViewTax={canViewTax} />

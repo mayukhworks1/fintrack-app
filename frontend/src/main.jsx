@@ -14,6 +14,8 @@ import './index.css'
 // Motion tokens and primitives for the public pages; after index.css so its
 // rules sit on top of the base ones they extend.
 import './styles/motion.css'
+// The phone layout of the signed-in app (≤640px only).
+import './styles/app-mobile.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

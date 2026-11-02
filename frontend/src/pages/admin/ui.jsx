@@ -429,7 +429,7 @@ export function PurgeModal({ onConfirm, onCancel, purging, result }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(2px)' }}>
+      style={{ background: 'var(--scrim)', WebkitBackdropFilter: 'blur(2px)', backdropFilter: 'blur(2px)' }}>
       <div {...dialog.panelProps} style={{
         background: 'var(--card-bg)', border: '1px solid var(--border)',
         borderRadius: 18, padding: 28, width: '100%', maxWidth: 480,

@@ -1,0 +1,715 @@
+/* ══════════════════════════════════════════════════════════════════
+   Phone layout (≤640px) for the signed-in app
+
+   The large-title header, the bottom tab bar, the summary card, the
+   segmented control and the grouped inset lists. Everything here sits
+   inside the phone media query, and the components that use these
+   classes render only while usePhone() matches the same query, so
+   tablet and desktop are untouched. Colours are the palette tokens
+   only: the page is --bg-base, groups are --card-bg, separators are
+   --border, quiet text is --text-3 and the one colour is --accent.
+══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* ── Shell ── */
+  /* 100vh reaches behind Safari's toolbar; the tab bar sits in the flow at
+     the bottom of the column, so the column must be the visible height. */
+  .app-layout-shell.is-phone {
+    height: 100vh;
+    /* stylelint-disable-next-line value-no-vendor-prefix */
+    height: -webkit-fill-available;
+    height: 100dvh;
+  }
+  /* The tab bar is in the flow, not fixed over the content: no padding to
+     guess, nothing hidden under it. */
+  .app-layout-shell.is-phone #main-content { padding-bottom: 0; }
+
+  /* ── Large-title header ── */
+  .m-titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+    border-bottom: 1px solid var(--sidebar-border);
+  }
+  .m-titlebar-text { min-width: 0; flex: 1; }
+  .m-titlebar-context {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-titlebar-title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 36px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-titlebar.is-compact .m-titlebar-title { font-size: 22px; line-height: 30px; }
+  .m-titlebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .m-titlebar-slot { display: contents; }
+  .m-titlebar-actions .btn-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-pill);
+  }
+
+  /* Round icon buttons: header actions, ≥44px targets. */
+  .m-round-btn {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-1);
+    box-shadow: var(--shadow-sm);
+    transition: background var(--dur-fast), color var(--dur-fast), scale var(--motion-press) var(--ease-press);
+  }
+  .m-round-btn:active { scale: 0.94; }
+  .m-round-btn.is-active { color: var(--accent); border-color: var(--accent); }
+  .m-round-dot {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--card-bg);
+  }
+
+  /* ── Bottom tab bar ── */
+  .m-tabbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-around;
+    border-top: 1px solid var(--sidebar-border);
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    z-index: 30;
+  }
+  .m-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    color: var(--text-3);
+    background: none;
+    border: 0;
+    font: inherit;
+    text-decoration: none;
+    transition: color var(--dur-fast), scale var(--motion-press) var(--ease-press);
+  }
+  .m-tab:active { scale: var(--press-scale); }
+  .m-tab.is-active { color: var(--accent); }
+  .m-tab-label {
+    max-width: 100%;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-tab.is-active .m-tab-label { font-weight: 600; }
+
+  /* ── Page body ── */
+  .m-page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+    min-width: 0;
+  }
+
+  /* ── Summary card ── */
+  .m-summary {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--card-bg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .m-summary-text { min-width: 0; flex: 1; }
+  .m-summary-title {
+    margin: 0;
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+  .m-summary-sentence {
+    margin: 2px 0 0;
+    font-size: 14px;
+    line-height: 19px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .m-ring { position: relative; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .m-ring svg { position: absolute; inset: 0; }
+  .m-ring-track { stroke: var(--accent-soft); }
+  .m-ring-fill { stroke: var(--accent); transition: stroke-dashoffset var(--dur-slow) var(--ease-out); }
+  .m-ring-value {
+    position: relative;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-1);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Segmented control ── */
+  .m-segmented {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-2);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sm);
+  }
+  .m-segment {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background var(--dur-fast), color var(--dur-fast);
+  }
+  .m-segment.is-on {
+    background: var(--card-bg);
+    color: var(--text-1);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── Search + filters row ── */
+  .m-toolbar { display: flex; align-items: center; gap: 8px; }
+  .m-search {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .m-search svg { position: absolute; left: 12px; color: var(--text-3); pointer-events: none; }
+  .m-search input {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 40px 0 36px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-1);
+    font-size: 16px;
+    outline: none;
+  }
+  .m-search input:focus-visible { border-color: var(--accent); box-shadow: var(--focus-ring); }
+  .m-search-clear {
+    position: absolute;
+    right: 0;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    background: none;
+    border: 0;
+  }
+  .m-filter-btn {
+    position: relative;
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-1);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .m-filter-btn.is-active { color: var(--accent); border-color: var(--accent); }
+  .m-filter-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .m-applied {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: -6px;
+  }
+  .m-applied button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-2);
+    font-size: 13px;
+    max-width: 100%;
+  }
+  .m-applied button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Grouped inset lists ── */
+  .m-group { min-width: 0; }
+  .m-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px 6px;
+  }
+  .m-group-head h2 {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .m-group-head a, .m-group-head button {
+    font-size: 15px;
+    color: var(--accent);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: 0;
+    padding: 0 4px;
+  }
+  .m-group-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: var(--card-bg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .m-row-item { position: relative; }
+  /* Inset separators, aligned with the text rather than the card's edge. */
+  .m-row-item + .m-row-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 0;
+    height: 1px;
+    background: var(--border);
+  }
+  .m-row {
+    width: 100%;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    text-align: left;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-row:not(.is-static):active { background: var(--row-hover); }
+  .m-row:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+  .m-row:disabled { opacity: 0.5; }
+  .m-row-lead { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .m-row-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  .m-row-text > span { display: block; }
+  .m-row-title {
+    font-size: 16px;
+    line-height: 21px;
+    font-weight: 500;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-row-title.is-mono { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+  .m-row-title.is-done { color: var(--text-3); text-decoration: line-through; }
+  .m-row-meta {
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-row-trail {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 45%;
+  }
+  .m-row-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-1);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .m-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-fg);
+  }
+  .m-check.is-on { background: var(--accent); border-color: var(--accent); }
+
+  /* A row with a trailing "⋯" beside its main tap target. */
+  .m-row-item.has-accessory { display: flex; align-items: center; }
+  .m-row-item.has-accessory > .m-row { flex: 1; min-width: 0; padding-right: 4px; }
+  .m-row-more {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin-right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    background: none;
+    border: 0;
+    color: var(--text-3);
+  }
+  .m-row-more:active { background: var(--row-hover); }
+  .m-page-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-xs);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-size: 17px;
+  }
+
+  /* ── Inline add row ── */
+  .m-add {
+    background: var(--card-bg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .m-add-row {
+    width: 100%;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-md);
+    color: var(--accent);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    text-align: left;
+  }
+  .m-add-row:active { background: var(--row-hover); }
+  .m-add-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  /* ── Show more ── */
+  .m-more {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+    font-size: 13px;
+    color: var(--text-3);
+  }
+  .m-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--accent);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  /* ── Sheets ── */
+  .m-sheet-body { display: flex; flex-direction: column; gap: 16px; }
+  .m-sheet-body .m-group-list { box-shadow: none; border: 1px solid var(--card-border); }
+  .m-action-icon { width: 28px; color: var(--text-2); }
+  .m-action-list .m-row { min-height: 52px; }
+  .m-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .m-field-label { font-size: 13px; font-weight: 600; color: var(--text-3); }
+  .m-field select,
+  .m-field input[type="date"],
+  .m-field input[type="text"],
+  .m-field input[type="search"] {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--card-border);
+    background: var(--bg-input);
+    color: var(--text-1);
+    font-size: 16px;
+  }
+  .m-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .m-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    font-size: 15px;
+    color: var(--text-1);
+  }
+  .m-toggle-row input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+  .m-inline-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .m-inline-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+
+  /* The web module's own tab bar: labels at the 13px floor. */
+  .web-tabbar button { gap: 3px; }
+  .web-tabbar span { font-size: 13px; line-height: 16px; letter-spacing: -0.01em; }
+  .m-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .m-tools > * { min-width: 0; }
+
+  /* ── Notices ── */
+  .m-note {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    line-height: 19px;
+  }
+  .m-note.is-error {
+    background: var(--fin-neg-bg);
+    border: 1px solid var(--fin-neg-border);
+    color: var(--fin-negative);
+  }
+  .m-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 15px;
+  }
+  .m-empty strong { display: block; color: var(--text-1); font-size: 16px; margin-bottom: 4px; }
+  .m-empty button {
+    margin-top: 12px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--accent);
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  .m-ring-fill, .m-round-btn, .m-tab, .m-segment { transition: none; }
+  .m-round-btn:active, .m-tab:active { scale: 1; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   iPhone (Safari and Chrome on iOS, both WebKit)
+
+   Primary target: iPhone 17 Pro Max, 440×956 CSS px. Safe areas come
+   from env(safe-area-inset-*) (viewport-fit=cover in index.html):
+   ~62px top for the Dynamic Island, ~34px bottom for the home
+   indicator, and left/right in landscape. Heights use dvh after a vh
+   fallback, so Safari's collapsing address bar and Chrome's toolbars
+   never push the tab bar off screen or make the layout jump.
+══════════════════════════════════════════════════════════════════ */
+
+/* Text never inflates on rotation. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* A phone turned sideways is wider than 640px and gets the compact bars;
+   they clear the notch and the rounded corners too. Every inset is 0 on a
+   tablet or a desktop, so there these resolve to the padding they had. */
+.app-topbar {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+.app-bottom-bar {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (max-width: 640px) {
+  /* Taps: no 300ms double-tap wait, no grey flash; :active gives feedback. */
+  .app-layout-shell.is-phone,
+  .web-invoices-shell {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* The web module's shell sets 100vh inline; on a phone it is the visible height. */
+  .web-invoices-shell {
+    height: calc(100vh - var(--impersonation-banner-h, 0px)) !important;
+    height: calc(100dvh - var(--impersonation-banner-h, 0px)) !important;
+  }
+  .web-invoices-shell main {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .web-tabbar {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* The app's scroller: momentum, no scroll chaining, and room kept clear
+     when a focused field is scrolled into view. */
+  .app-layout-shell.is-phone #main-content {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-top: 12px;
+    scroll-padding-bottom: 24px;
+  }
+
+  /* While the keyboard is up the tab bars step aside, so nothing pinned to
+     the bottom floats over the keyboard or the field being typed in. */
+  html.kb-open .m-tabbar,
+  html.kb-open .web-tabbar { display: none; }
+
+  /* Sheets and drawers keep their scrolling to themselves: the page behind
+     does not move and pull-to-refresh does not fire inside them. */
+  .app-modal-panel,
+  .app-drawer-panel,
+  .app-modal-panel .overflow-y-auto,
+  .app-drawer-panel .overflow-y-auto,
+  #mobile-nav-drawer {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-modal-panel {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .m-sheet-body { scroll-padding: 16px 0 24px; }
+
+  /* Native pickers, styled alike: one height, radius and chevron for every
+     select, and date fields that keep their height when empty (iOS collapses
+     an empty date input to its text line). */
+  .m-field select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 36px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  .m-field input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    line-height: 44px;
+    text-align: left;
+  }
+  .m-field input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+  /* Toasts clear the tab bar and the home indicator (and the keyboard). */
+  .app-toasts {
+    bottom: calc(68px + env(safe-area-inset-bottom));
+    right: max(16px, env(safe-area-inset-right));
+  }
+  html.kb-open .app-toasts { bottom: calc(var(--kb-inset, 0px) + 12px); }
+
+  /* Pressed states take the place of hover on touch. */
+  .m-segment:active:not(.is-on) { background: var(--row-hover); }
+  .m-filter-btn:active, .m-more-btn:active, .m-applied button:active { background: var(--row-hover); }
+}
+
+/* Opened from the home screen: no browser chrome above the page, so the
+   public pages and sign-in (which have no app header) clear the status bar
+   themselves. */
+@media (display-mode: standalone) and (max-width: 640px) {
+  body:not(:has(.app-layout-shell)):not(:has(.web-invoices-shell)) {
+    padding-top: env(safe-area-inset-top);
+  }
+}

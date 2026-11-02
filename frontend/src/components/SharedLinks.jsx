@@ -202,7 +202,7 @@ export function ShareLinkModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         {/* sticky header */}
@@ -469,7 +469,7 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'rgba(5,10,20,0.82)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'rgba(5,10,20,0.82)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
@@ -805,7 +805,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-      style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
+      style={{ background: 'var(--scrim)', WebkitBackdropFilter: 'blur(8px)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '88vh' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>

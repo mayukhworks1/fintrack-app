@@ -21,7 +21,7 @@ import { createPortal } from 'react-dom'
 import {
   Download, Printer, ChevronDown, ChevronUp,
   CheckCircle2, AlertCircle, Info,
-  ReceiptText, RefreshCw, Search, X, Share2, Link2,
+  ReceiptText, RefreshCw, Search, X, Share2, Link2, ChevronLeft,
 } from 'lucide-react'
 import { api } from '../services/api'
 import { downloadBlob } from '../utils/download'
@@ -31,6 +31,8 @@ import { useChangeCount } from '../hooks/useServerList'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { ManageSharedLinksModal, ShareLinkModal } from '../components/SharedLinks'
 import SkeletonList from '../components/SkeletonList'
+import { usePhone } from '../components/mobile/MobileUI'
+import TaxLedgerPhone from './tax/TaxLedgerPhone'
 import { DEFAULT_TAX_PERIOD, TAX_PAGE_SIZE, fyStartYear, taxFilters, taxListFor, taxQueryParams, useTaxLedgerQuery } from './tax/useTaxLedgerQuery'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -196,6 +198,9 @@ export default function TaxLedger({ source = 'main' } = {}) {
   const [manageModal, setManageModal] = useState(false)
   const [exporting, setExporting] = useState(false)
   const printRef = useRef(null)
+  // A phone (≤640px) opens on its own summary; the full tables are one tap away.
+  const isPhone = usePhone()
+  const [phoneFull, setPhoneFull] = useState(false)
 
   /* ── The register and its totals, from the server ──
    * One request per scope: a page of the register (the All Invoices tab) and
@@ -458,8 +463,82 @@ export default function TaxLedger({ source = 'main' } = {}) {
     { id: 'invoices', label: 'All Invoices' },
   ]
 
+  // Share dialogs (portalled to the body): the same on desktop and on a phone.
+  const overlays = (
+    <>
+        {canShare && shareModal && createPortal(
+          <ShareLinkModal
+            resourceType="tax-ledger"
+            selectedRecords={filteredInvoices}
+            title={shareTitle}
+            recordLabel="invoice"
+            enableLiveMode
+            allowEdit={false}
+            viewConfig={sharedViewConfig}
+            onClose={() => setShareModal(false)}
+          />,
+          document.body
+        )}
+        {canShare && manageModal && createPortal(
+          <ManageSharedLinksModal
+            resourceType="tax-ledger"
+            recordLabel="invoice"
+            currentViewConfig={sharedViewConfig}
+            visibleRecords={filteredInvoices}
+            onClose={() => setManageModal(false)}
+          />,
+          document.body
+        )}
+    </>
+  )
+
+  if (isPhone && !phoneFull) {
+    return (
+      <>
+        <TaxLedgerPhone
+          filters={filters}
+          setFilters={setFilters}
+          searchInput={searchInput}
+          setSearch={setSearch}
+          commitSearch={commitSearch}
+          period={period}
+          periods={PERIODS}
+          defaultPeriod={DEFAULT_TAX_PERIOD}
+          records={records}
+          scopeTotal={scopeTotal}
+          nextCursor={nextCursor}
+          loadMore={loadMore}
+          loadingMore={loadingMore}
+          hasData={hasData}
+          totals={totals}
+          openSummary={openSummary}
+          monthlyRows={monthlyRows}
+          clientRows={clientRows}
+          error={error}
+          refresh={refresh}
+          loading={loading}
+          canShare={canShare}
+          onShare={() => setShareModal(true)}
+          onLinks={() => setManageModal(true)}
+          onExport={handleExport}
+          exporting={exporting}
+          onPrint={handlePrint}
+          onFull={() => setPhoneFull(true)}
+          taxParts={taxParts}
+          pageSize={TAX_PAGE_SIZE}
+        />
+        {overlays}
+      </>
+    )
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto pb-24 space-y-5" ref={printRef}>
+      {isPhone && (
+        <button type="button" onClick={() => setPhoneFull(false)} className="btn-ghost" style={{ minHeight: 44 }}>
+          <ChevronLeft size={16} aria-hidden="true" /> Back to summary
+        </button>
+      )}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border p-4 sm:p-5" style={{ background: 'var(--card-bg)', borderColor: 'var(--border)' }}>
@@ -1095,29 +1174,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
           @page { margin: 1.5cm; }
         }
       `}</style>
-      {canShare && shareModal && createPortal(
-        <ShareLinkModal
-          resourceType="tax-ledger"
-          selectedRecords={filteredInvoices}
-          title={shareTitle}
-          recordLabel="invoice"
-          enableLiveMode
-          allowEdit={false}
-          viewConfig={sharedViewConfig}
-          onClose={() => setShareModal(false)}
-        />,
-        document.body
-      )}
-      {canShare && manageModal && createPortal(
-        <ManageSharedLinksModal
-          resourceType="tax-ledger"
-          recordLabel="invoice"
-          currentViewConfig={sharedViewConfig}
-          visibleRecords={filteredInvoices}
-          onClose={() => setManageModal(false)}
-        />,
-        document.body
-      )}
+      {overlays}
     </div>
   )
 }

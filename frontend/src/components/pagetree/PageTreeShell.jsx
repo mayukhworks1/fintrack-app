@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen, ListTree } from 'lucide-react'
 import Drawer from '../Drawer'
 import PageTreePanel from './PageTreePanel'
+import { HeaderActions, RoundIconButton } from '../mobile/MobileUI'
 
 const OPEN_KEY = 'pages_tree_open'
 
@@ -9,7 +10,8 @@ const OPEN_KEY = 'pages_tree_open'
 // desktop, a drawer behind a button on a phone. Everything the panel needs is
 // passed straight through. `fill` makes the column a full-height frame for
 // the page editor instead of a scrolling list. Ctrl/Cmd+\ shows or hides it.
-export default function PageTreeShell({ isMobile, children, fill = false, ...panel }) {
+// `phone` (≤640px) puts the tree's button in the large-title header instead.
+export default function PageTreeShell({ isMobile, phone = false, children, fill = false, ...panel }) {
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(OPEN_KEY) !== '0' } catch { return true } })
   const [drawer, setDrawer] = useState(false)
   useEffect(() => { try { localStorage.setItem(OPEN_KEY, open ? '1' : '0') } catch {} }, [open])
@@ -30,7 +32,12 @@ export default function PageTreeShell({ isMobile, children, fill = false, ...pan
     const close = (fn) => fn && ((...a) => { setDrawer(false); return fn(...a) })
     return (
       <div style={fill ? { height:'100%', display:'flex', flexDirection:'column' } : undefined}>
-        {!fill && (
+        {!fill && phone && (
+          <HeaderActions>
+            <RoundIconButton icon={ListTree} label="Open page tree" onClick={() => setDrawer(true)} aria-haspopup="dialog" />
+          </HeaderActions>
+        )}
+        {!fill && !phone && (
           <div style={{ padding:'12px 16px 0' }}>
             <button type="button" onClick={() => setDrawer(true)} aria-label="Open page tree"
               style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:9, border:'1px solid var(--border)', background:'var(--card-bg)', color:'var(--text-1)', fontSize:13, fontWeight:600, cursor:'pointer' }}>

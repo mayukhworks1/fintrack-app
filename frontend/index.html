@@ -20,6 +20,14 @@
     <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
 
+    <!-- Added to the home screen on an iPhone: full screen, with the page
+         drawn under a translucent status bar. Every shell pads its top by
+         env(safe-area-inset-top), so nothing sits under the Dynamic Island. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FinTrack" />
+
     <!-- SEO / social -->
     <meta name="description" content="AI-powered project finance management — track projects, invoices, and client budgets in real time." />
     <meta name="application-name" content="FinTrack" />

@@ -17,6 +17,8 @@ import { useAutoRefresh, useRelativeTime } from '../hooks/useAutoRefresh'
 import { LiveValue, LiveDot } from '../components/LiveFigures'
 import { formatInr as inr, formatPct } from '../utils/format'
 import clsx from 'clsx'
+import { usePhone } from '../components/mobile/MobileUI'
+import DashboardPhone from './dashboard/DashboardPhone'
 
 /* Count projects whose health does NOT contain 🔴 */
 const countHealthy = (byHealth = {}) =>
@@ -186,6 +188,8 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const greeting = useGreeting()
   const { isEditor } = useAuth()
+  // A phone (≤640px) gets its own layout of the same data; see DashboardPhone.
+  const isPhone = usePhone()
   const [activeWidgetIds, setActiveWidgetIds] = useState(DASHBOARD_DEFAULT_WIDGET_IDS)
   const [activeCustomBlocks, setActiveCustomBlocks] = useState([])
   const [customSourceRows, setCustomSourceRows] = useState({})
@@ -340,6 +344,58 @@ export default function Dashboard() {
     ]
   }, [recent, s, statusEntries])
 
+  // Custom dashboards and report exports: in the header on desktop, at the
+  // foot of the page on a phone.
+  const workbench = (
+    <InsightWorkbench
+      pageKey="dashboard"
+      pageLabel="Dashboard"
+      widgetCatalog={DASHBOARD_WIDGET_CATALOG}
+      defaultWidgetIds={activeWidgetIds}
+      factoryWidgetIds={DASHBOARD_DEFAULT_WIDGET_IDS}
+      sourceOptions={dashboardSourceOptions}
+      currentFilters={{ updated_at: lastUpdated || null }}
+      // lastUpdated moves on every poll; key loaded rows to real changes.
+      rowsKey={changeCount}
+      onApplyWidgets={setActiveWidgetIds}
+      onApplyCustomBlocks={(blocks, rowsByKey) => {
+        setActiveCustomBlocks(blocks)
+        setCustomSourceRows(rowsByKey || {})
+      }}
+    />
+  )
+  const customBlocks = (
+    <Suspense fallback={null}>
+      <CustomInsightBlocks
+        blocks={activeCustomBlocks}
+        sourceOptions={dashboardSourceOptions}
+        sourceRowsByKey={customSourceRows}
+      />
+    </Suspense>
+  )
+
+  if (isPhone) {
+    return (
+      <DashboardPhone
+        summary={s}
+        projects={recent}
+        margin={margin}
+        healthOk={healthOk}
+        loading={loading && !data}
+        error={error}
+        refresh={refresh}
+        isEditor={isEditor}
+        retainerSummary={retainerSummary}
+        kpiFrom={kpiFrom}
+        kpiTo={kpiTo}
+        setKpiFrom={setKpiFrom}
+        setKpiTo={setKpiTo}
+        workbench={workbench}
+        customBlocks={customBlocks}
+      />
+    )
+  }
+
   return (
     <div
       className="p-4 sm:p-5 space-y-5 animate-fade-in rounded-[28px]"
@@ -362,22 +418,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <InsightWorkbench
-              pageKey="dashboard"
-              pageLabel="Dashboard"
-              widgetCatalog={DASHBOARD_WIDGET_CATALOG}
-              defaultWidgetIds={activeWidgetIds}
-              factoryWidgetIds={DASHBOARD_DEFAULT_WIDGET_IDS}
-              sourceOptions={dashboardSourceOptions}
-              currentFilters={{ updated_at: lastUpdated || null }}
-              // lastUpdated moves on every poll; key loaded rows to real changes.
-              rowsKey={changeCount}
-              onApplyWidgets={setActiveWidgetIds}
-              onApplyCustomBlocks={(blocks, rowsByKey) => {
-                setActiveCustomBlocks(blocks)
-                setCustomSourceRows(rowsByKey || {})
-              }}
-            />
+            {workbench}
             <button
               onClick={refresh}
               disabled={loading}
@@ -506,13 +547,7 @@ export default function Dashboard() {
           chunk (plus d3) on the first-paint critical path for every user, for
           content they had to scroll to. Lazy, the KPI strip and tables render
           before the chart library has even started downloading. */}
-      <Suspense fallback={null}>
-        <CustomInsightBlocks
-          blocks={activeCustomBlocks}
-          sourceOptions={dashboardSourceOptions}
-          sourceRowsByKey={customSourceRows}
-        />
-      </Suspense>
+      {customBlocks}
 
 
       {/* ── KPI row — 2 cols mobile → 3 cols tablet → 6 cols desktop ── */}

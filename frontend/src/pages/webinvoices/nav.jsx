@@ -60,7 +60,7 @@ export function MobileBottomNav({ workspace, setWorkspace, isAll, canViewProject
     ...(canViewTax      ? [{ value: 'tax',      label: 'Tax',      icon: Receipt }]   : []),
   ]
   return (
-    <nav className="sm:hidden flex-shrink-0 flex items-stretch border-t"
+    <nav className="sm:hidden web-tabbar flex-shrink-0 flex items-stretch border-t"
       style={{
         background: 'var(--sidebar-bg)',
         borderColor: 'var(--sidebar-border)',

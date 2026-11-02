@@ -74,7 +74,7 @@ function ToastContainer({ toasts, dismiss }) {
   return (
     <div
       aria-label="Notifications"
-      className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-[10050] flex flex-col gap-2 items-end pointer-events-none"
+      className="app-toasts fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-[10050] flex flex-col gap-2 items-end pointer-events-none"
     >
       {toasts.map(t => (
         <div key={t.id} className="pointer-events-auto">

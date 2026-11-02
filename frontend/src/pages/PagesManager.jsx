@@ -37,6 +37,8 @@ import { parseDoc, serializeDoc, docWordCount, docTemplates, markdownToDoc, plai
 // ordinary autosave otherwise.
 const CollabDoc = lazy(() => import('../components/blocks/collab/CollabDoc'))
 const BlockViewer = lazy(() => import('../components/blocks/BlockViewer'))
+import { usePhone } from '../components/mobile/MobileUI'
+import PagesPhone from './pagesmanager/PagesPhone'
 import PageTreeShell from '../components/pagetree/PageTreeShell'
 import { PageBreadcrumbs, SubPagesList } from '../components/pagetree/PageContextBits'
 import CommentsToggle from '../components/comments/CommentsToggle'
@@ -3128,6 +3130,8 @@ function parseRoute(pathname) {
 
 export default function PagesManager() {
   const isMobile = useIsMobile()
+  // ≤640px: the grouped list of pagesmanager/PagesPhone (≤767px keeps its cards).
+  const isPhone = usePhone()
   const location = useLocation()
   const navigate = useNavigate()
   const [pages, setPages] = useState([])
@@ -3507,12 +3511,50 @@ export default function PagesManager() {
   const switcherPages = useMemo(() => pages.filter(p => !p.metadata?.db_row), [pages])
 
   return (
-    <PageTreeShell isMobile={isMobile} refreshKey={listVersion} patch={treePatch} currentId={route.id} fill={editing}
+    <PageTreeShell isMobile={isMobile} phone={isPhone} refreshKey={listVersion} patch={treePatch} currentId={route.id} fill={editing}
       onOpen={openPage} onNewPage={()=>newPage('doc')} onRename={handleTreeRename}
       onCreated={handleTreeCreated} onChanged={refreshList} onToast={showToast} onDuplicate={handleClone}
       onTrashed={(ids) => { if (route.id && ids.includes(route.id)) closeEditor() }}>
     <style>{EDITOR_CSS}</style>
-    {editing ? editorView : (
+    {editing ? editorView : isPhone ? (
+      <PagesPhone
+        pages={pages.filter(p => !p.metadata?.db_row)}
+        visible={visible}
+        filtered={filtered}
+        loading={loading}
+        error={error}
+        onRetry={() => loadPages(false)}
+        search={search}
+        setSearch={setSearch}
+        filterTab={filterTab}
+        setFilterTab={setFilterTab}
+        folderFilter={folderFilter}
+        setFolderFilter={setFolderFilter}
+        folderCounts={folderCounts}
+        unfiledCount={unfiledCount}
+        unfiled={UNFILED}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        clearFilters={clearFilters}
+        onOpen={openPage}
+        onNew={() => newPage('doc')}
+        onNewArtifact={() => newPage('artifact')}
+        onNewDatabase={() => setNewDbOpen(true)}
+        onTrashOpen={() => setTrashOpen(true)}
+        onSwitcher={() => setSwitcherOpen(true)}
+        onPublish={handlePublishToggle}
+        onShare={setSharePage}
+        onAnalytics={setAnalyticsPage}
+        onDelete={trashPage}
+        onClone={handleClone}
+        onMove={setMovePage}
+        onCopied={onCopied}
+        isExpired={p => !!(p.expires_at && msUntil(p.expires_at) <= 0)}
+        typeIcon={p => TYPE_ICONS[p.content_type] || (p.content_type === 'database' ? Database : FileText)}
+        relTime={relTime}
+        onShowMore={() => setShown(n => n + LIST_PAGE * 2)}
+      />
+    ) : (
     <div style={{ padding:isMobile?'16px':'28px 32px', maxWidth:1480, margin:'0 auto' }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:isMobile?16:24, gap:12, flexWrap:'wrap' }}>

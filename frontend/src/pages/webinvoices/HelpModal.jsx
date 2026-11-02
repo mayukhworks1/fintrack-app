@@ -11,7 +11,7 @@ export function HelpModal({ open, onClose }) {
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0" style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'var(--scrim)', WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div {...dialog.panelProps} className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)' }}>
 

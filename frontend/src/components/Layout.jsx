@@ -4,9 +4,11 @@ import {
   MessageSquareText, FileText,
   Sun, Moon, WifiOff, Menu, X, LogOut, Receipt,
   ChevronLeft, ChevronRight, ShieldCheck, Activity,
-  Plus, Landmark, Globe, Sparkles
+  Plus, Landmark, Globe, Sparkles, MoreHorizontal
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
+import { usePhone, useKeyboardWatch, HeaderSlotContext } from './mobile/MobileUI'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
@@ -333,8 +335,20 @@ export default function Layout({ children, style }) {
 
   const sidebarW = collapsed ? 76 : 200
 
+  // Phones (≤640px) get the large-title header and the tab bar; tablets keep
+  // the compact top bar and their bottom nav exactly as they were.
+  const isPhone = usePhone()
+  // The tab bar steps aside while the on-screen keyboard is up.
+  useKeyboardWatch(isPhone)
+  const drawerRef = useRef(null)
+  const moreRef = useRef(null)
+  // Open, the drawer keeps Tab inside it; closed, focus returns to whatever
+  // opened it (the More tab or the menu button).
+  useFocusTrap(drawerRef, drawerOpen)
+  const [headerSlot, setHeaderSlot] = useState(null)
+
   return (
-    <div className="main-app-theme app-layout-shell flex h-screen overflow-hidden" style={style}>
+    <div className={`main-app-theme app-layout-shell flex h-screen overflow-hidden${isPhone ? ' is-phone' : ''}`} style={style}>
 
       {/* ── Skip to content ── */}
       <a
@@ -364,7 +378,7 @@ export default function Layout({ children, style }) {
       {drawerOpen && (
         <div
           className="lg:hidden fixed inset-0 z-40 animate-fade-in"
-          style={{ background: 'var(--scrim)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'var(--scrim)', WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)' }}
           onClick={() => setDrawerOpen(false)}
           aria-hidden="true"
         />
@@ -372,6 +386,7 @@ export default function Layout({ children, style }) {
 
       {/* ── Mobile drawer panel ── */}
       <aside
+        ref={drawerRef}
         id="mobile-nav-drawer"
         className="runey-app-sidebar lg:hidden fixed top-0 left-0 w-64 z-50 flex flex-col transition-transform duration-300"
         style={{
@@ -397,9 +412,12 @@ export default function Layout({ children, style }) {
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
-        {/* ── Mobile top bar ── */}
+        {/* ── Mobile top bar: the large-title header on a phone ── */}
+        {isPhone ? (
+          <PhoneTitleBar onSlot={setHeaderSlot} />
+        ) : (
         <header
-          className="app-bar lg:hidden flex items-center justify-between px-4 py-2.5 flex-shrink-0 sticky top-0 z-30"
+          className="app-bar app-topbar lg:hidden flex items-center justify-between px-4 py-2.5 flex-shrink-0 sticky top-0 z-30"
           style={{
             borderBottom: '1px solid var(--sidebar-border)',
             paddingTop: 'max(0.625rem, env(safe-area-inset-top))',
@@ -436,6 +454,7 @@ export default function Layout({ children, style }) {
           </button>
           </div>
         </header>
+        )}
 
         <main
           ref={mainRef}
@@ -444,11 +463,15 @@ export default function Layout({ children, style }) {
           style={{ background: 'var(--bg-base)' }}
           tabIndex={-1}
         >
-          {children}
+          <HeaderSlotContext.Provider value={isPhone ? headerSlot : null}>
+            {children}
+          </HeaderSlotContext.Provider>
         </main>
 
-        {/* ── Mobile bottom navigation ── */}
-        <MobileBottomNav />
+        {/* ── Mobile bottom navigation: the tab bar on a phone ── */}
+        {isPhone
+          ? <PhoneTabBar moreRef={moreRef} drawerOpen={drawerOpen} onMore={() => setDrawerOpen(o => !o)} />
+          : <MobileBottomNav />}
       </div>
 
       </div>{/* end main area */}
@@ -516,6 +539,105 @@ function MobileBottomNav() {
           )}
         </NavLink>
       ))}
+    </nav>
+  )
+}
+
+/* ── Phone (≤640px): large-title header ─────────────────────────────────
+ * A quiet context line over a big bold title, with small round actions on
+ * the right: the page's own (portalled into the slot) and notifications.
+ * The five list pages are titled here, so they drop their hero blocks; any
+ * other route gets the same bar with a smaller title and no heading, since
+ * those pages still carry their own. */
+export const PHONE_TITLES = [
+  { path: '/',         title: 'Dashboard',  context: 'today', large: true },
+  { path: '/invoices', title: 'Invoices',   context: 'Receivables', large: true },
+  { path: '/projects', title: 'Projects',   context: 'Portfolio', large: true },
+  { path: '/tax',      title: 'Tax Ledger', context: 'GST and TDS', large: true },
+  { path: '/pages',    title: 'Pages',      context: 'Workspace', large: true },
+  { path: '/admin',    title: 'Admin',      context: 'FinTrack' },
+  { path: '/profile',  title: 'Profile',    context: 'FinTrack' },
+]
+
+/** The header's title for a path: the five list pages large, others compact. */
+export function phoneTitleFor(pathname) {
+  const exact = PHONE_TITLES.find(t => t.path === pathname)
+  if (exact) return exact
+  const nav = NAV_ITEMS.find(n => n.to !== '/' && (pathname === n.to || pathname.startsWith(n.to + '/')))
+    || PHONE_TITLES.find(t => t.path !== '/' && pathname.startsWith(t.path + '/'))
+  const title = nav ? (nav.label || nav.title) : 'FinTrack'
+  return { path: pathname, title, context: 'FinTrack', large: false }
+}
+
+function PhoneTitleBar({ onSlot }) {
+  const { pathname } = useLocation()
+  const t = phoneTitleFor(pathname)
+  const context = t.context === 'today'
+    ? new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
+    : t.context
+  const Title = t.large ? 'h1' : 'p'
+  return (
+    <header className={`app-bar m-titlebar${t.large ? '' : ' is-compact'}`}>
+      <div className="m-titlebar-text">
+        <p className="m-titlebar-context">{context}</p>
+        <Title className="m-titlebar-title">{t.title}</Title>
+      </div>
+      <div className="m-titlebar-actions">
+        <span className="m-titlebar-slot" ref={onSlot} />
+        <NotificationBell variant="icon" />
+      </div>
+    </header>
+  )
+}
+
+/* ── Phone (≤640px): bottom tab bar ─────────────────────────────────────
+ * The four most-used destinations and More, which opens the drawer with
+ * everything else (Admin included for those who have it). In the flow at
+ * the bottom of the column, so it never covers content, and padded by the
+ * safe area so it clears the home indicator. */
+export const PHONE_TABS = [
+  { to: '/',         label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/invoices', label: 'Invoices',  icon: Receipt },
+  { to: '/projects', label: 'Projects',  icon: FolderKanban },
+  { to: '/pages',    label: 'Pages',     icon: Globe },
+]
+
+export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
+  const { role, hasPerm } = useAuth()
+  const { pathname } = useLocation()
+  // The same rule as the sidebar: the role must see it and the permission allow it.
+  const allowed = to => {
+    const item = NAV_ITEMS.find(n => n.to === to)
+    return !item || (item.roles.includes(role) && (!item.perm || hasPerm(item.perm)))
+  }
+  const tabs = PHONE_TABS.filter(t => allowed(t.to))
+  const onTab = tabs.some(t => (t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')))
+  const moreActive = drawerOpen || !onTab
+  return (
+    <nav aria-label="Primary navigation" className="app-bar m-tabbar">
+      {tabs.map(({ to, label, icon: Icon, end }) => (
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}>
+          {({ isActive }) => (
+            <>
+              <Icon size={22} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
+              <span className="m-tab-label">{label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
+      <button
+        ref={moreRef}
+        type="button"
+        onClick={onMore}
+        className={`m-tab${moreActive ? ' is-active' : ''}`}
+        aria-haspopup="dialog"
+        aria-expanded={drawerOpen}
+        aria-controls="mobile-nav-drawer"
+        aria-current={moreActive && !drawerOpen ? 'page' : undefined}
+      >
+        <MoreHorizontal size={22} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
+        <span className="m-tab-label">More</span>
+      </button>
     </nav>
   )
 }

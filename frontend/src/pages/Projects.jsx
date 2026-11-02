@@ -12,6 +12,8 @@ import { ExecutiveShell, ExecutiveHero, ExecutiveStatGrid, ExecutiveStatCard, Ex
 import EmptyState from '../components/EmptyState'
 import { formatInr, formatPct } from '../utils/format'
 import { PROJECT_PAGE_SIZE, useProjectFilters, useProjectQuery } from './projects/useProjectQuery'
+import { usePhone } from '../components/mobile/MobileUI'
+import ProjectsPhone from './projects/ProjectsPhone'
 
 const STATUSES = ['🟢 Active', '✅ Completed', '⏸️ On Hold', '🔴 Cancelled']
 const CLIENTS  = ['Birla Open Minds', 'Maitrimetal', 'BG']
@@ -56,6 +58,8 @@ const MemoProjectCard = memo(ProjectCard)
 export default function Projects() {
   const navigate = useNavigate()
   const { isEditor } = useAuth()
+  // A phone (≤640px) gets its own layout of the same data; see ProjectsPhone.
+  const isPhone = usePhone()
   // Search, status, client, sort and loaded pages live in the URL.
   const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch, clearAll } = useProjectFilters()
   const { status, client, sort: sortBy } = filters
@@ -118,6 +122,76 @@ export default function Projects() {
 
   // Under each card, while a search or filter narrows the view: the portfolio figure.
   const ofAll = (text) => hasFilters && ws ? <p className="invoice-kpi-of-all">{text}</p> : null
+
+  // Share dialogs: the same on desktop and on a phone.
+  const overlays = (
+    <>
+        {isEditor && shareModal && (
+          <ShareLinkModal
+            resourceType="projects"
+            selectedRecords={displayed}
+            title={`Projects · ${status || client || 'Current View'}`}
+            recordLabel="project"
+            enableLiveMode
+            viewConfig={{
+              type: 'card',
+              filterClient: client || '',
+              filterStatus: status || '',
+              search,
+            }}
+            onClose={() => setShareModal(false)}
+          />
+        )}
+        {isEditor && manageModal && (
+          <ManageSharedLinksModal
+            resourceType="projects"
+            recordLabel="project"
+            currentViewConfig={{
+              type: 'card',
+              filterClient: client || '',
+              filterStatus: status || '',
+              search,
+            }}
+            visibleRecords={displayed}
+            onClose={() => setManageModal(false)}
+          />
+        )}
+    </>
+  )
+
+  if (isPhone) {
+    return (
+      <>
+        <ProjectsPhone
+          filters={filters}
+          setFilters={setFilters}
+          searchInput={searchInput}
+          setSearchInput={setSearchInput}
+          commitSearch={commitSearch}
+          clearAll={clearEverything}
+          hasFilters={hasFilters}
+          records={displayed}
+          total={total}
+          nextCursor={nextCursor}
+          loadMore={loadMore}
+          loadingMore={loadingMore}
+          hasData={hasData}
+          ws={ws}
+          agg={agg}
+          error={error}
+          refresh={refresh}
+          refreshing={refreshing}
+          isEditor={isEditor}
+          statusOptions={statusOptions}
+          clientOptions={clientOptions}
+          onShare={() => setShareModal(true)}
+          onLinks={() => setManageModal(true)}
+          pageSize={PROJECT_PAGE_SIZE}
+        />
+        {overlays}
+      </>
+    )
+  }
 
   return (
     <ExecutiveShell>
@@ -450,36 +524,7 @@ export default function Projects() {
         </ExecutivePanel>
       )}
 
-      {isEditor && shareModal && (
-        <ShareLinkModal
-          resourceType="projects"
-          selectedRecords={displayed}
-          title={`Projects · ${status || client || 'Current View'}`}
-          recordLabel="project"
-          enableLiveMode
-          viewConfig={{
-            type: 'card',
-            filterClient: client || '',
-            filterStatus: status || '',
-            search,
-          }}
-          onClose={() => setShareModal(false)}
-        />
-      )}
-      {isEditor && manageModal && (
-        <ManageSharedLinksModal
-          resourceType="projects"
-          recordLabel="project"
-          currentViewConfig={{
-            type: 'card',
-            filterClient: client || '',
-            filterStatus: status || '',
-            search,
-          }}
-          visibleRecords={displayed}
-          onClose={() => setManageModal(false)}
-        />
-      )}
+      {overlays}
     </ExecutiveShell>
   )
 }
