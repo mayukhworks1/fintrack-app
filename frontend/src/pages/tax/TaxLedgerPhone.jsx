@@ -1,20 +1,24 @@
 /**
- * The Tax Ledger on a phone (≤640px): a summary card (collected share of the
- * paid register, then GST, TDS and the count), Paid / Open / All segments
+ * The Tax Ledger on a phone (≤640px): the GST return due (an insight card),
+ * a summary card (collected share of the paid register, then GST, TDS and the
+ * count, over GST by month as small columns), Paid / Open / All segments
  * over the register scope, search with the period in a Filters sheet, then
  * grouped lists: the register, the months and the clients. The full tables
  * (drilldowns, reports) stay one tap away in the actions sheet, with share,
  * export and print. Same URL filters and server query as desktop.
  */
 import { useState } from 'react'
-import { MoreHorizontal, Share2, Link2, RefreshCw, Download, Printer, Table2 } from 'lucide-react'
+import { MoreHorizontal, Share2, Link2, RefreshCw, Download, Printer, Table2, ReceiptText } from 'lucide-react'
 import {
   HeaderActions, RoundIconButton, SummaryCard, SegmentedControl, SearchFilterBar, AppliedFilters,
   GroupedList, ListRow, SkeletonRows, ShowMoreRow, Sheet, SheetField, ActionSheet,
 } from '../../components/mobile/MobileUI'
 import { taxSummary, plural } from '../../components/mobile/summary'
 import { formatInr } from '../../utils/format'
-import { STATUS_META, fmtDate } from '../invoices/utils'
+import { effectiveAging, fmtDate } from '../invoices/utils'
+import { Avatar, EmptyState, MiniBars, invoicePill } from '../../components/mobile/Visuals'
+import InsightCards, { useInsights } from '../../components/mobile/InsightCards'
+import { OVERDUE_DAYS } from '../invoices/phoneSegments'
 
 export const TAX_SEGMENTS = [
   { value: 'tax', label: 'Paid' },
@@ -30,6 +34,7 @@ export default function TaxLedgerPhone({
   filters, setFilters, searchInput, setSearch, commitSearch, period, periods, defaultPeriod,
   records, scopeTotal, nextCursor, loadMore, loadingMore, hasData, totals, openSummary, monthlyRows, clientRows,
   error, refresh, loading, canShare, onShare, onLinks, onExport, exporting, onPrint, onFull, taxParts, pageSize,
+  insightScope = null,
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
@@ -37,6 +42,8 @@ export default function TaxLedgerPhone({
   const notDefault = custom || (filters.period && filters.period !== defaultPeriod)
   const chips = notDefault ? [{ key: 'period', label: period.label, onClear: () => setFilters({ period: defaultPeriod, from: '', to: '' }) }] : []
   const summary = taxSummary({ totals, periodLabel: period.label })
+  const { data: insights } = useInsights(insightScope || 'tax', { enabled: !!insightScope })
+  const gstBars = monthlyRows.slice(-6).map(m => ({ label: String(m.label || m.key).split(' ')[0], value: Math.round(m.gstAmt || 0) }))
   const openLine = openSummary.count
     ? `${plural(openSummary.count, 'open invoice')} · ${formatInr(Math.round(openSummary.outstanding))} outstanding`
     : null
@@ -47,8 +54,11 @@ export default function TaxLedgerPhone({
         <RoundIconButton icon={MoreHorizontal} label="Tax ledger actions" onClick={() => setActionsOpen(true)} aria-haspopup="dialog" />
       </HeaderActions>
 
+      {insightScope && <InsightCards cards={insights?.cards} />}
+
       <SummaryCard loading={!hasData} value={summary?.value} ringLabel={summary?.ringLabel} title={summary?.title}
-        sentence={summary && openLine ? `${summary.sentence} · ${openLine}` : summary?.sentence} />
+        sentence={summary && openLine ? `${summary.sentence} · ${openLine}` : summary?.sentence}
+        visual={gstBars.length > 1 ? <MiniBars title="GST by month · paid" bars={gstBars} /> : null} />
 
       <SegmentedControl label="Register" options={TAX_SEGMENTS} value={filters.scope} onChange={v => setFilters({ scope: v })} />
 
@@ -72,9 +82,9 @@ export default function TaxLedgerPhone({
 
       <GroupedList title={hasData ? `${plural(scopeTotal, 'invoice')} · ${period.label}` : 'Register'} label="Register">
         {!hasData
-          ? <SkeletonRows count={5} />
+          ? <SkeletonRows count={5} avatar pill />
           : records.length === 0
-            ? <li className="m-empty"><strong>No invoices</strong>Nothing in this register for {period.label}.</li>
+            ? <EmptyState icon={ReceiptText} title="No invoices">Nothing in this register for {period.label}.</EmptyState>
             : records.map(r => {
               const f = r.fields || {}
               const p = taxParts(f)
@@ -83,11 +93,11 @@ export default function TaxLedgerPhone({
                 <ListRow
                   key={r.id}
                   mono
+                  leading={<Avatar name={f['Client Name'] || f['Project'] || '?'} />}
+                  pill={invoicePill(status, status === 'Pending' ? effectiveAging(f) : 0, OVERDUE_DAYS)}
                   title={f['Invoice Number'] || r.id}
                   meta={[f['Client Name'] || f['Project'], f['Raised Date'] ? fmtDate(f['Raised Date']) : '', p.gstAmt ? `GST ${formatInr(Math.round(p.gstAmt))}` : '', p.tdsAmt ? `TDS ${formatInr(Math.round(p.tdsAmt))}` : '']}
                   value={formatInr(Math.round(p.gross))}
-                  dot={STATUS_META[status]?.color || 'var(--text-3)'}
-                  dotLabel={status || 'No status'}
                 />
               )
             })}

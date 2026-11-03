@@ -1,19 +1,24 @@
 /**
- * Projects on a phone (≤640px): a summary card (share of projects on track),
+ * Projects on a phone (≤640px): insight cards (projects at a loss or at
+ * risk), a summary card (share of projects on track, and the portfolio's
+ * health as one split bar),
  * All / Active / Completed / On hold segments over the status filter, search
  * with a Filters sheet (status, client, sort) and one grouped list. A row is
- * the project, then client · status · margin, then billed and a health dot;
+ * the client's avatar, the project, then client · status · margin, then
+ * billed over a health pill;
  * tapping opens the project. Same URL filters and server query as desktop.
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, ExternalLink, Eye, RefreshCw } from 'lucide-react'
+import { MoreHorizontal, ExternalLink, Eye, RefreshCw, FolderKanban, SearchX } from 'lucide-react'
 import {
   HeaderActions, RoundIconButton, SummaryCard, SegmentedControl, SearchFilterBar, AppliedFilters,
   GroupedList, ListRow, SkeletonRows, InlineAddRow, ShowMoreRow, Sheet, SheetField, ActionSheet,
 } from '../../components/mobile/MobileUI'
 import { projectSummary } from '../../components/mobile/summary'
 import { formatInr, formatPct } from '../../utils/format'
+import { Avatar, EmptyState, ShareBar } from '../../components/mobile/Visuals'
+import InsightCards, { useInsights } from '../../components/mobile/InsightCards'
 
 export const PROJECT_SEGMENTS = [
   { value: '', label: 'All' },
@@ -25,7 +30,7 @@ export const PROJECT_SEGMENTS = [
 /** A status without its leading emoji: "🟢 Active" reads "Active". */
 export const plainStatus = (s) => String(s || '').replace(/^[^\p{L}\p{N}]+/u, '').trim()
 
-/** One project as a row: name; client · status · margin; billed and a health dot. */
+/** One project as a row: avatar; name; client · status · margin; billed over a health pill. */
 export function projectRowProps(r) {
   const f = r.fields || {}
   const profit = Number(f['Profit percentage'])
@@ -42,7 +47,36 @@ export function projectRowProps(r) {
     value: formatInr(f['Amount Billed So far'] || 0),
     dot: tone,
     dotLabel: negative ? 'Negative margin' : health || 'Health not tracked',
+    leading: <Avatar name={f['Client'] || f['Project Name'] || '?'} />,
+    pill: negative
+      ? { tone: 'negative', text: 'Loss', label: 'Negative margin' }
+      : health === 'Critical' || health.includes('🔴')
+        ? { tone: 'negative', text: plainStatus(health) || 'Critical', label: health }
+        : health === 'At Risk'
+          ? { tone: 'warning', text: 'At risk', label: 'At Risk' }
+          : health
+            ? { tone: 'positive', text: plainStatus(health), label: health }
+            : { tone: 'neutral', text: 'Untracked', label: 'Health not tracked' },
   }
+}
+
+/** The portfolio's health as one split bar: on track, at risk, critical, untracked. */
+export function healthParts(byHealth) {
+  const h = byHealth || {}
+  let ok = 0, risk = 0, critical = 0, none = 0
+  for (const [k, n] of Object.entries(h)) {
+    const v = Number(n) || 0
+    if (k === 'Unknown' || !k) none += v
+    else if (k === 'At Risk') risk += v
+    else if (k === 'Critical' || k.includes('🔴')) critical += v
+    else ok += v
+  }
+  return [
+    { key: 'ok', label: 'Healthy', value: ok, tone: 'var(--fin-positive)' },
+    { key: 'risk', label: 'At risk', value: risk, tone: 'var(--fin-warning)' },
+    { key: 'critical', label: 'Critical', value: critical, tone: 'var(--fin-negative)' },
+    { key: 'none', label: 'Untracked', value: none, tone: 'var(--border-strong)' },
+  ]
 }
 
 const SORTS = [
@@ -66,6 +100,8 @@ export default function ProjectsPhone({
   ].filter(Boolean)
   // The card follows the search and filters, like the desktop's cards.
   const summary = projectSummary(hasFilters && agg ? agg : ws)
+  const { data: insights } = useInsights('projects')
+  const scopeTotals = hasFilters && agg ? agg : ws
 
   return (
     <div className="m-page">
@@ -73,7 +109,10 @@ export default function ProjectsPhone({
         <RoundIconButton icon={MoreHorizontal} label="Project actions" onClick={() => setActionsOpen(true)} aria-haspopup="dialog" />
       </HeaderActions>
 
-      <SummaryCard loading={!ws} value={summary?.value} ringLabel={summary?.ringLabel} title={summary?.title} sentence={summary?.sentence} />
+      <InsightCards cards={insights?.cards} />
+
+      <SummaryCard loading={!ws} value={summary?.value} ringLabel={summary?.ringLabel} title={summary?.title} sentence={summary?.sentence}
+        visual={scopeTotals?.count ? <ShareBar title="Health" parts={healthParts(scopeTotals.by_health)} /> : null} />
 
       <SegmentedControl label="Project status" options={PROJECT_SEGMENTS} value={segment} onChange={v => setFilters({ status: v })} />
 
@@ -99,18 +138,20 @@ export default function ProjectsPhone({
 
       <GroupedList title={hasData ? `${total.toLocaleString('en-IN')} project${total === 1 ? '' : 's'}` : 'Projects'} label="Projects">
         {!hasData
-          ? <SkeletonRows count={6} />
+          ? <SkeletonRows count={6} avatar pill />
           : records.length === 0
             ? (
-              <li className="m-empty">
-                <strong>{hasFilters ? 'No projects match' : 'No projects yet'}</strong>
+              <EmptyState
+                icon={hasFilters ? SearchX : FolderKanban}
+                title={hasFilters ? 'No projects match' : 'No projects yet'}
+                action={hasFilters && <button type="button" onClick={clearAll}>Clear filters</button>}
+              >
                 {hasFilters ? 'Nothing matches the current search and filters.' : 'Create a project to start tracking it.'}
-                {hasFilters && <div><button type="button" onClick={clearAll}>Clear filters</button></div>}
-              </li>
+              </EmptyState>
             )
             : records.map(r => {
               const row = projectRowProps(r)
-              return <ListRow key={r.id} {...row} onClick={() => navigate(`/projects/${r.id}`)} ariaLabel={`${row.title}, ${row.dotLabel}, ${row.value} billed`} />
+              return <ListRow key={r.id} {...row} onClick={() => navigate(`/projects/${r.id}`)} ariaLabel={`${row.title}, ${row.pill.label}, ${row.value} billed`} />
             })}
       </GroupedList>
 

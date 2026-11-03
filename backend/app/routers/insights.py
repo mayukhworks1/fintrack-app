@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from ..db import postgres as _pg
 from ..db.postgres import get_pool
+from ..services import insight_cards as ic
 from ..services.insights import build_excel_xml, build_simple_pdf, default_export_meta
 from ..utils.client_ip import client_ip
-from .deps import require_auth, require_editor
+from .deps import get_effective_permissions, owner_scope_email, require_auth, require_editor
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+logger = logging.getLogger("fintrack.insights")
 
 # Export bounds. The rows come from the client, and rendering is CPU-bound:
 # reportlab measured about 1.4 s per 1,000 rows. 50,000 rows is the most the
@@ -210,3 +216,61 @@ async def export_insight(body: ExportBody, request: Request, role: str = Depends
             headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
         )
     raise HTTPException(status_code=400, detail="Unsupported export format")
+
+
+# ── Insight cards (phone screens) ─────────────────────────────────────────────
+
+async def _may(request: Request, permission_key: str) -> bool:
+    """require_permission's test as a yes or no: legacy sessions and superadmin
+    pass; an email session needs the key among its effective permissions."""
+    if not getattr(request.state, "is_email_auth", False):
+        return True
+    if (getattr(request.state, "auth_role", "") or "") == "superadmin":
+        return True
+    return permission_key in await get_effective_permissions(getattr(request.state, "auth_user_id", None))
+
+
+async def _invoice_records(owner: Optional[str]) -> list[dict]:
+    from ..services.invoice import InvoiceService
+    return list(await InvoiceService().get_all_invoices(raised_by=owner))
+
+
+async def _project_records() -> list[dict]:
+    from ..services.teable import TeableService
+    return list(await TeableService().get_all_records())
+
+
+@router.get("")
+async def insight_cards(
+    request: Request,
+    scope: str = Query("dashboard", max_length=20),
+    tz: int = Query(0, ge=-900, le=900),
+    role: str = Depends(require_auth),
+):
+    """Up to five ranked findings for `scope` (dashboard | invoices | projects |
+    tax), each with a one-tap link, plus the summary cards' series (cash in by
+    month, pending invoices by age) for dashboard and invoices.
+
+    Each source is read only with its module's view permission, and invoice
+    figures keep the caller's owner scope. The GST card is the whole
+    workspace's return, so owner-scoped sessions and viewers (who cannot open
+    the Tax Ledger) do not get it."""
+    if scope not in ic.SCOPES:
+        raise HTTPException(status_code=400, detail=f"scope must be one of {', '.join(ic.SCOPES)}")
+    rules = set(ic.SCOPE_RULES[scope])
+    now = datetime.now(timezone.utc)
+    pool = _pg.get_pool()
+    owner = owner_scope_email(request)
+    inv = prj = None
+    if (rules & ic.INVOICE_RULES or scope in ic.CHART_SCOPES) and await _may(request, "module.invoices.view"):
+        try:
+            inv = await ic.cached_invoice_facts(pool, now, tz, owner, with_gst=not owner and role != "viewer",
+                                                load_records=lambda: _invoice_records(owner))
+        except Exception as exc:
+            logger.warning("insight cards: invoice facts unavailable: %s", exc)
+    if rules & ic.PROJECT_RULES and await _may(request, "module.projects.view"):
+        try:
+            prj = await ic.cached_project_facts(pool, now, load_records=_project_records)
+        except Exception as exc:
+            logger.warning("insight cards: project facts unavailable: %s", exc)
+    return ic.respond(scope, inv, prj, tz=tz)

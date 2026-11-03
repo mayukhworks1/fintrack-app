@@ -1,6 +1,8 @@
 /**
- * The Dashboard on a phone (≤640px): one summary card (the collection rate as
- * a ring and a sentence about what is still owed), then grouped lists: the
+ * The Dashboard on a phone (≤640px): up to three insight cards (overdue
+ * invoices, GST due, follow-ups, projects at a loss…), one summary card (the
+ * collection rate as a ring, a sentence about what is still owed, six months
+ * of cash in and pending invoices by age), then grouped lists: the
  * invoices that need chasing, the portfolio's figures and the top projects.
  * Custom dashboards and report exports sit at the foot; the date range for the
  * portfolio figures is behind the header's calendar button.
@@ -19,6 +21,9 @@ import { DEFAULT_INVOICE_FILTERS, useInvoiceQuery } from '../invoices/useInvoice
 import { projectRowProps } from '../projects/ProjectsPhone'
 import { formatInr, formatPct } from '../../utils/format'
 import { OVERDUE_DAYS } from '../invoices/phoneSegments'
+import { InvoiceCharts } from '../invoices/InvoicesPhone'
+import InsightCards, { useInsights } from '../../components/mobile/InsightCards'
+import { Avatar, invoicePill } from '../../components/mobile/Visuals'
 
 export default function DashboardPhone({
   summary: s, projects, margin, healthOk, loading, error, refresh, isEditor, retainerSummary,
@@ -28,6 +33,7 @@ export default function DashboardPhone({
   const [datesOpen, setDatesOpen] = useState(false)
   // One small page of the invoice list for its workspace totals.
   const { workspace: ws, error: invError } = useInvoiceQuery(DEFAULT_INVOICE_FILTERS, { pageSize: 1 })
+  const { data: insights } = useInsights('dashboard')
   const receivables = invoiceSummary(ws)
   const chase = ws?.overdue_top || []
   const total = s?.total_projects ?? 0
@@ -46,12 +52,15 @@ export default function DashboardPhone({
         <RoundIconButton icon={CalendarDays} label="Date range" onClick={() => setDatesOpen(true)} active={!!(kpiFrom || kpiTo)} aria-haspopup="dialog" />
       </HeaderActions>
 
+      <InsightCards cards={insights?.cards} />
+
       <SummaryCard
         loading={!ws}
         value={receivables?.value}
         ringLabel={receivables?.ringLabel}
         title={receivables?.title}
         sentence={receivables?.sentence}
+        visual={insights?.charts ? <InvoiceCharts charts={insights.charts} onBucket={b => navigate(b.href)} /> : null}
       />
 
       {(error || invError) && (
@@ -65,16 +74,18 @@ export default function DashboardPhone({
           title="Needs a follow-up"
           action={<button type="button" onClick={() => navigate('/invoices?status=Pending')}>See all</button>}
         >
-          {!ws ? <SkeletonRows count={3} /> : chase.map(inv => {
+          {!ws ? <SkeletonRows count={3} avatar pill /> : chase.map(inv => {
             const aging = Math.round(Number(inv.aging || 0))
             const late = aging > OVERDUE_DAYS
             return (
               <ListRow
                 key={inv.id}
+                leading={<Avatar name={inv.client || inv.project || '?'} />}
                 title={inv.invoice_no || 'Draft invoice'}
                 mono
-                meta={[inv.client, inv.project, plural(aging, 'day')]}
+                meta={[inv.client, inv.project]}
                 value={formatInr(inv.outstanding || inv.amount || 0)}
+                pill={invoicePill('Pending', aging, OVERDUE_DAYS)}
                 dot={late ? 'var(--fin-negative)' : 'var(--fin-warning)'}
                 dotLabel={late ? `Overdue, ${aging} days` : `Pending, ${aging} days`}
                 onClick={() => navigate(`/invoices?q=${encodeURIComponent(inv.invoice_no || '')}`)}

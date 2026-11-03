@@ -20,6 +20,7 @@ import { activeConditions as activeRules, invoiceQueryParams, useInvoiceFilters,
 import { usePhone, useKeyboardWatch, joinMeta } from '../components/mobile/MobileUI'
 import { invoiceSummary } from '../components/mobile/summary'
 import InvoicesPhone from './invoices/InvoicesPhone'
+import { MiniBars, monthSeries } from '../components/mobile/Visuals'
 import { invoiceFilterChips } from './invoices/phoneSegments'
 
 import clsx from 'clsx'
@@ -766,6 +767,9 @@ export default function WebInvoices() {
             allCount={allCount}
             options={{ projects: picklists.Project || [], months: monthOptions, categories: picklists.Category || [], raisedBy: picklists['Raised By'] || [] }}
             summary={webPhoneSummary(agg)}
+            visual={ws ? <MiniBars title="Invoices raised" format={v => Number(v).toLocaleString('en-IN')}
+              bars={monthSeries(ws.raised_months, m => m.count)} /> : null}
+            sectionAmounts={false}
             amount={f => fmtCurrency(f['Amount Raised'], f['Currency'] || 'RS')}
             actions={[
               { label: `Export filtered CSV (${scopeTotal})`, icon: Download, onClick: () => exportCsv(true) },

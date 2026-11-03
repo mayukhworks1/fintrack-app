@@ -585,7 +585,313 @@
   }
 }
 
+/* ── Visuals: mini charts, avatars, pills, sections, insight cards ──
+   Same rules as above: phone only, palette tokens only. */
+@media (max-width: 640px) {
+  /* The ring sweeps from empty on load (MobileUI.ProgressRing). */
+  .m-ring-fill { transition: stroke-dashoffset 0.9s var(--ease-out); }
+
+  /* Summary card visuals sit full width under the ring and sentence. */
+  .m-summary { flex-wrap: wrap; }
+  .m-summary-visual {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding-top: 12px;
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+  }
+  .m-summary-visual > :only-child { grid-column: 1 / -1; }
+  .m-chart { position: relative; margin: 0; min-width: 0; }
+  .m-chart-cap {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+    margin: 0 0 6px;
+    font-size: 13px;
+    line-height: 16px;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+  .m-chart-cap > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+  .m-chart-figure { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .m-chart-when { color: var(--text-3); font-weight: 500; }
+  .m-chart-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 16px;
+    color: var(--text-3);
+  }
+  .m-chart-axis > span:not(:first-child):not(:last-child) { visibility: hidden; }
+
+  /* Sparkline */
+  .m-spark-plot { position: relative; }
+  .m-spark-svg { display: block; overflow: visible; }
+  .m-spark-area { fill: var(--accent-dim); }
+  .m-spark-line { stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .m-spark-dot {
+    position: absolute;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--card-bg);
+  }
+
+  /* Aging bars: four tappable columns. */
+  .m-aging-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .m-aging-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    border-radius: var(--radius-xs);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-aging-bar:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 2px; }
+  .m-aging-bar:disabled { opacity: 1; }
+  .m-aging-track {
+    position: relative;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--bg-2);
+    overflow: hidden;
+  }
+  .m-aging-fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 6px;
+    transform-origin: bottom;
+    animation: m-grow-up 0.6s var(--ease-out) both;
+  }
+  .m-aging-bar:not(:disabled):active .m-aging-track { opacity: 0.7; }
+  .m-aging-label, .m-aging-count {
+    font-size: 13px;
+    line-height: 15px;
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .m-aging-count { color: var(--text-1); font-weight: 600; }
+  .m-aging-bar:disabled .m-aging-count { color: var(--text-3); font-weight: 500; }
+
+  /* Column bars */
+  .m-bars-row { display: flex; align-items: flex-end; gap: 4px; }
+  .m-bars-col {
+    flex: 1;
+    min-height: 2px;
+    border-radius: 4px 4px 2px 2px;
+    background: var(--accent-soft);
+    transform-origin: bottom;
+    animation: m-grow-up 0.6s var(--ease-out) both;
+  }
+  .m-bars-col.is-last { background: var(--accent); }
+
+  /* Share bar */
+  .m-share-bar {
+    display: flex;
+    gap: 2px;
+    height: 10px;
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--bg-2);
+  }
+  .m-share-bar > span { min-width: 4px; flex-basis: 0; }
+  .m-share-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-2);
+  }
+  .m-share-legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .m-share-legend strong { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .m-share-swatch { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Avatars: initials on the client's palette colour. */
+  .m-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    user-select: none;
+  }
+
+  /* Status pills */
+  .m-row-trail.is-stacked { flex-direction: column; align-items: flex-end; gap: 4px; }
+  .m-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+    line-height: 22px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .m-pill.is-positive { background: var(--fin-pos-bg); color: var(--fin-positive); }
+  .m-pill.is-warning { background: var(--fin-warn-bg); color: var(--fin-warning); }
+  .m-pill.is-negative { background: var(--fin-neg-bg); color: var(--fin-negative); }
+  .m-pill.is-neutral { background: var(--bg-2); color: var(--text-3); }
+
+  /* Sticky section headers: they stick under the large title (the header
+     sits outside the scrolling column) and keep the side safe areas of the
+     page they are in. */
+  .m-sections { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .m-section { min-width: 0; }
+  .m-section-head {
+    position: sticky;
+    top: var(--m-sticky-top, 0px);
+    z-index: 5;
+    margin: 0 -4px;
+    padding: 8px 8px 6px;
+    background: var(--bg-base);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .m-section-figure { text-transform: none; letter-spacing: 0; }
+  .m-section-head .m-section-figure:last-child { color: var(--text-2); }
+
+  /* Row-shaped skeletons */
+  .m-skel-avatar { display: block; width: 32px; height: 32px; border-radius: 50%; }
+  .m-skel-line { display: block; height: 14px; border-radius: 6px; }
+  .m-skel-line.is-meta { height: 12px; margin-top: 7px; }
+  .m-skel-value { display: block; width: 64px; height: 14px; border-radius: 6px; }
+  .m-skel-pill { display: block; width: 54px; height: 20px; border-radius: var(--radius-pill); }
+
+  /* Empty states with an icon */
+  .m-empty-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  /* Insight cards: a swipeable row (scroll snap), up to three. */
+  .m-insights { margin: 0 calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left))); }
+  .m-insights-row {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+    padding: 2px max(16px, env(safe-area-inset-right)) 4px max(16px, env(safe-area-inset-left));
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 max(16px, env(safe-area-inset-left));
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .m-insights-row::-webkit-scrollbar { display: none; }
+  .m-insight {
+    flex: 0 0 84%;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 12px 14px 6px 16px;
+    background: var(--card-bg);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .m-insights-row.is-single .m-insight { flex-basis: 100%; }
+  .m-insight-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -8px -6px 0; }
+  .m-insight-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+  .m-insight.is-negative .m-insight-icon { background: var(--fin-neg-bg); color: var(--fin-negative); }
+  .m-insight.is-warning .m-insight-icon { background: var(--fin-warn-bg); color: var(--fin-warning); }
+  .m-insight.is-positive .m-insight-icon { background: var(--fin-pos-bg); color: var(--fin-positive); }
+  .m-insight-dismiss {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-3);
+  }
+  .m-insight-title {
+    margin: 0;
+    font-size: 16px;
+    line-height: 21px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+  .m-insight-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .m-insight-detail {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-3);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .m-insight-action {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-height: 44px;
+    margin-top: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
 @media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  .m-aging-fill, .m-bars-col { animation: none; }
   .m-ring-fill, .m-round-btn, .m-tab, .m-segment { transition: none; }
   .m-round-btn:active, .m-tab:active { scale: 1; }
 }

@@ -8,13 +8,14 @@
  * (accent, card, text levels); the styles live in styles/app-mobile.css,
  * inside the phone media query.
  */
-import { createContext, useContext, useEffect, useId, useRef } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, ChevronDown, RefreshCw, Search, X, SlidersHorizontal } from 'lucide-react'
 import clsx from 'clsx'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import Modal from '../Modal'
-import { prefersReducedMotion } from '../../hooks/useReducedMotion'
+import { prefersReducedMotion, useReducedMotion } from '../../hooks/useReducedMotion'
+import { RowSkeletons, StatusPill } from './Visuals'
 
 /** The phone breakpoint: the same 640px edge the rest of the app uses. */
 export const PHONE_QUERY = '(max-width: 640px)'
@@ -123,9 +124,23 @@ export function RoundIconButton({ icon: Icon, label, onClick, badge = false, act
 
 /* ── Summary card ────────────────────────────────────────────────────────── */
 
-/** A ring that fills to `value` percent (0–100), the percentage in its middle. */
+/**
+ * A ring that fills to `value` percent (0–100), the percentage in its middle.
+ * It sweeps up from empty when it first has a value; with reduced motion it
+ * is drawn at its value straight away.
+ */
 export function ProgressRing({ value, size = 56, stroke = 5, label }) {
   const v = Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Number(value))) : 0
+  const reduced = useReducedMotion()
+  const [shown, setShown] = useState(reduced ? v : 0)
+  useEffect(() => {
+    if (reduced) { setShown(v); return undefined }
+    // One frame at the old value, then the target, so the CSS transition runs.
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16)
+    const cancel = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout
+    const id = raf(() => setShown(v))
+    return () => cancel(id)
+  }, [v, reduced])
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   return (
@@ -134,7 +149,7 @@ export function ProgressRing({ value, size = 56, stroke = 5, label }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="m-ring-track" />
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} className="m-ring-fill"
-          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)}
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - shown / 100)}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </svg>
@@ -146,8 +161,9 @@ export function ProgressRing({ value, size = 56, stroke = 5, label }) {
 /**
  * One card: a ring and a plain-language sentence, in place of KPI tiles.
  * `title` is the short headline ("80% collected"), `sentence` the line under it.
+ * `visual` (mini charts) sits full width under them.
  */
-export function SummaryCard({ value, ringLabel, title, sentence, loading = false, children }) {
+export function SummaryCard({ value, ringLabel, title, sentence, loading = false, children, visual }) {
   return (
     <section className="m-summary" aria-label="Summary" aria-busy={loading || undefined}>
       <ProgressRing value={loading ? 0 : value} label={ringLabel} />
@@ -156,6 +172,7 @@ export function SummaryCard({ value, ringLabel, title, sentence, loading = false
         {sentence && !loading && <p className="m-summary-sentence">{sentence}</p>}
       </div>
       {children}
+      {visual && !loading && <div className="m-summary-visual">{visual}</div>}
     </section>
   )
 }
@@ -227,7 +244,7 @@ export function GroupedList({ title, action, children, label }) {
  */
 export function ListRow({
   title, meta, value, valueTone, dot, dotLabel, leading, onClick, href, ariaLabel,
-  strike = false, mono = false, className, accessory,
+  strike = false, mono = false, className, accessory, pill,
 }) {
   const metaText = Array.isArray(meta) ? joinMeta(meta) : meta
   const body = (
@@ -237,10 +254,11 @@ export function ListRow({
         <span className={clsx('m-row-title', strike && 'is-done', mono && 'is-mono')}>{title}</span>
         {metaText && <span className="m-row-meta">{metaText}</span>}
       </span>
-      {(value != null || dot) && (
-        <span className="m-row-trail">
+      {(value != null || dot || pill) && (
+        <span className={clsx('m-row-trail', pill && 'is-stacked')}>
           {value != null && <span className="m-row-value" style={valueTone ? { color: valueTone } : undefined}>{value}</span>}
-          {dot && (
+          {pill && <StatusPill tone={pill.tone} label={pill.label}>{pill.text}</StatusPill>}
+          {dot && !pill && (
             <span className="m-row-dot" style={{ background: dot }} role={dotLabel ? 'img' : undefined}
               aria-label={dotLabel} aria-hidden={dotLabel ? undefined : 'true'} />
           )}
@@ -260,18 +278,9 @@ export function ListRow({
   )
 }
 
-/** Placeholder rows while the first answer is on its way. */
-export function SkeletonRows({ count = 5 }) {
-  return Array.from({ length: count }).map((_, i) => (
-    <li key={i} className="m-row-item" aria-hidden="true">
-      <div className="m-row is-static">
-        <span className="m-row-text">
-          <span className="skeleton h-3.5 w-3/5 rounded" />
-          <span className="skeleton h-3 w-2/5 rounded mt-2" />
-        </span>
-      </div>
-    </li>
-  ))
+/** Placeholder rows while the first answer is on its way, shaped like the rows. */
+export function SkeletonRows({ count = 5, avatar = false, pill = false }) {
+  return <RowSkeletons count={count} avatar={avatar} pill={pill} />
 }
 
 /** The primary create action, as a row in the content: "+ New invoice". */

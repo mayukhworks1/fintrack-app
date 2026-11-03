@@ -1,5 +1,6 @@
 /**
- * The Pages list on a phone (≤640px): a summary card (share published), All /
+ * The Pages list on a phone (≤640px): a summary card (share published, and
+ * live / live with edits / drafts / expired as one split bar), All /
  * Live / Drafts / Expired segments, search with folder and sort in a Filters
  * sheet, an inline "New page" row and one grouped list. A row is the page's
  * type icon, its title, then folder · status · last edit · views, and a status
@@ -7,12 +8,13 @@
  * share, copy link, analytics, duplicate, move, trash) as a sheet.
  */
 import { useState } from 'react'
-import { MoreHorizontal, Puzzle, Database, Trash2, Search, ExternalLink, Share2, Link2, BarChart2, Copy, FolderInput, Globe, EyeOff } from 'lucide-react'
+import { MoreHorizontal, Puzzle, Database, Trash2, Search, ExternalLink, Share2, Link2, BarChart2, Copy, FolderInput, Globe, EyeOff, FileText, SearchX } from 'lucide-react'
 import {
   HeaderActions, RoundIconButton, SummaryCard, SegmentedControl, SearchFilterBar, AppliedFilters,
   GroupedList, ListRow, InlineAddRow, Sheet, SheetField, ActionSheet, SkeletonRows,
 } from '../../components/mobile/MobileUI'
 import { pagesSummary, plural } from '../../components/mobile/summary'
+import { EmptyState, ShareBar } from '../../components/mobile/Visuals'
 
 export const PAGE_SEGMENTS = [
   { value: 'all', label: 'All' },
@@ -20,6 +22,23 @@ export const PAGE_SEGMENTS = [
   { value: 'drafts', label: 'Drafts' },
   { value: 'expired', label: 'Expired' },
 ]
+
+/** The pages by status, for the summary card's split bar. */
+export function pageStatusParts(pages, isExpired = () => false) {
+  const n = { live: 0, edits: 0, drafts: 0, expired: 0 }
+  for (const p of pages || []) {
+    if (isExpired(p)) n.expired++
+    else if (p.is_published && p.has_unpublished_changes) n.edits++
+    else if (p.is_published) n.live++
+    else n.drafts++
+  }
+  return [
+    { key: 'live', label: 'Live', value: n.live, tone: 'var(--fin-positive)' },
+    { key: 'edits', label: 'Unpublished edits', value: n.edits, tone: 'var(--fin-warning)' },
+    { key: 'drafts', label: 'Drafts', value: n.drafts, tone: 'var(--border-strong)' },
+    { key: 'expired', label: 'Expired', value: n.expired, tone: 'var(--fin-negative)' },
+  ]
+}
 
 /** A page's status as a dot colour and a word, the same rule as the desktop pill. */
 export function pageStatus(page, expired) {
@@ -63,7 +82,8 @@ export default function PagesPhone({
         <RoundIconButton icon={MoreHorizontal} label="Page actions" onClick={() => setActionsOpen(true)} aria-haspopup="dialog" />
       </HeaderActions>
 
-      <SummaryCard loading={loading} value={summary.value} ringLabel={summary.ringLabel} title={summary.title} sentence={summary.sentence} />
+      <SummaryCard loading={loading} value={summary.value} ringLabel={summary.ringLabel} title={summary.title} sentence={summary.sentence}
+        visual={pages.length ? <ShareBar title="Status" parts={pageStatusParts(pages, isExpired)} /> : null} />
 
       <SegmentedControl label="Page status" options={PAGE_SEGMENTS} value={filterTab} onChange={setFilterTab} />
 
@@ -87,14 +107,16 @@ export default function PagesPhone({
       ) : (
         <GroupedList title={loading ? 'Pages' : plural(filtered.length, 'page')} label="Pages">
           {loading
-            ? <SkeletonRows count={4} />
+            ? <SkeletonRows count={4} avatar />
             : !filtered.length
               ? (
-                <li className="m-empty">
-                  <strong>{pages.length ? 'No pages match' : 'No pages yet'}</strong>
+                <EmptyState
+                  icon={pages.length ? SearchX : FileText}
+                  title={pages.length ? 'No pages match' : 'No pages yet'}
+                  action={pages.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}
+                >
                   {pages.length ? 'Try other words or clear the filters.' : 'Create a doc, database or web page and share it by link.'}
-                  {pages.length > 0 && <div><button type="button" onClick={clearFilters}>Clear filters</button></div>}
-                </li>
+                </EmptyState>
               )
               : visible.map(page => {
                 const Icon = typeIcon(page)

@@ -526,6 +526,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
           onFull={() => setPhoneFull(true)}
           taxParts={taxParts}
           pageSize={TAX_PAGE_SIZE}
+          insightScope={isWebSource ? null : 'tax'}
         />
         {overlays}
       </>

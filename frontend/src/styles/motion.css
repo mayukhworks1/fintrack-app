@@ -416,3 +416,9 @@
   .ft-m-skeleton::after { display: none; }
   .ft-m-ink-bar, .ft-m-rail-fill, .ft-m-spot-dot { transition: none; }
 }
+
+/* The phone summary cards' bars rise from their baseline (app-mobile.css). */
+@keyframes m-grow-up {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}

@@ -30,6 +30,7 @@ import { activeConditions as activeRules, invoiceQueryParams, useInvoiceFilters,
 import { tint } from '../utils/color'
 import { usePhone } from '../components/mobile/MobileUI'
 import InvoicesPhone from './invoices/InvoicesPhone'
+import { useInsights } from '../components/mobile/InsightCards'
 
 const AGING_BAND_KEYS = ['0-14d', '15-30d', '31-60d', '60d+']
 const CHART_PRESETS = [
@@ -67,6 +68,7 @@ export default function Invoices() {
   const toast = useToast()
   // A phone (≤640px) gets its own layout of the same data; see InvoicesPhone.
   const isPhone = usePhone()
+  const { data: insights } = useInsights('invoices', { enabled: isPhone })
   // Search, filters, sort and the number of loaded pages live in the URL, so
   // a link reopens the same view and back / forward step through changes.
   const { filters, pages, setFilters, setPages, searchInput, setSearchInput, commitSearch, clearAll } = useInvoiceFilters()
@@ -1097,6 +1099,7 @@ export default function Invoices() {
           workspace={workspace}
           setWorkspace={setWorkspace}
           retainerWorkspace={retainerWorkspace}
+          insights={insights}
         />
         {overlays}
       </>

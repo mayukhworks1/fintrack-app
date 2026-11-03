@@ -810,6 +810,9 @@ export const api = {
     },
   },
   insights: {
+    // The phone screens' insight cards and summary series for one scope.
+    cards: (scope, tz = -new Date().getTimezoneOffset(), opts = {}) =>
+      request(`/api/insights?scope=${encodeURIComponent(scope)}&tz=${encodeURIComponent(tz)}`, opts),
     listConfigs: (p = {}) => { const q = new URLSearchParams(); Object.entries(p).forEach(([k, v]) => v != null && v !== '' && q.set(k, v)); return request(`/api/insights/configs?${q}`) },
     createConfig: (data) => request('/api/insights/configs', { method: 'POST', body: JSON.stringify(data) }),
     updateConfig: (id, data) => request(`/api/insights/configs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) }),
