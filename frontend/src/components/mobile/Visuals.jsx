@@ -16,6 +16,14 @@ import { formatInr } from '../../utils/format'
 /* ── Formatting ───────────────────────────────────────────────────────── */
 
 const inr = (n) => formatInr(Math.round(Number(n) || 0))
+// A bar's label has room for a few characters only: ₹45K, ₹1.5L, ₹2.1Cr.
+export const inrShort = (n) => {
+  const v = Math.round(Number(n) || 0)
+  if (v >= 1e7) return `₹${+(v / 1e7).toFixed(1)}Cr`
+  if (v >= 1e5) return `₹${+(v / 1e5).toFixed(1)}L`
+  if (v >= 1e3) return `₹${Math.round(v / 1e3)}K`
+  return `₹${v}`
+}
 const count = (n, one, many = `${one}s`) => `${Number(n || 0).toLocaleString('en-IN')} ${Number(n) === 1 ? one : many}`
 
 /* ── Sparkline ────────────────────────────────────────────────────────── */
@@ -71,7 +79,8 @@ export function Sparkline({ points, title, format = inr, height = 40 }) {
 /**
  * Pending invoices by age: buckets [{ key, label, count, amount, href }].
  * Each bar is a button; tapping it calls onSelect(bucket) (the list filtered
- * to that age). Bar heights follow the amount; the hot buckets warm up.
+ * to that age). Bar heights and labels follow the amount (the count is in
+ * the button's name); the hot buckets warm up.
  */
 const BUCKET_TONE = ['var(--accent)', 'var(--fin-warning)', 'var(--fin-negative)', 'var(--fin-negative)']
 
@@ -100,7 +109,7 @@ export function AgingBars({ buckets, onSelect, title = 'Pending by age (days)' }
                 <span className="m-aging-fill" style={{ height: `${pct}%`, background: BUCKET_TONE[i] || 'var(--accent)' }} />
               </span>
               <span className="m-aging-label" aria-hidden="true">{b.label}</span>
-              <span className="m-aging-count" aria-hidden="true">{Number(b.count || 0).toLocaleString('en-IN')}</span>
+              <span className="m-aging-count" aria-hidden="true">{amount ? inrShort(amount) : '—'}</span>
             </button>
           )
         })}

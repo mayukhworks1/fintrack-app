@@ -82,6 +82,8 @@ describe('mini charts', () => {
     const fills = [...document.querySelectorAll('.m-aging-fill')].map(el => el.style.height)
     expect(fills[1]).toBe('100%')
     expect(fills[2]).toBe('0%')
+    // Labels show what the heights show: the amount.
+    expect([...document.querySelectorAll('.m-aging-count')].map(el => el.textContent)).toEqual(['₹70K', '₹1.7L', '—', '—'])
   })
 
   it('column bars and the share bar describe their numbers', () => {
