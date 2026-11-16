@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  CheckCheck, Clock, Copy, ExternalLink, Globe, Link2,
+  CheckCheck, Clock, Copy, ExternalLink, Globe, Link2, Lock,
   Loader2, MapPin, Monitor, Shield, Smartphone, ToggleLeft,
   ToggleRight, Trash2, X, Share2, Search, Filter, CheckSquare, Square, RefreshCw,
 } from 'lucide-react'
@@ -10,6 +10,10 @@ import { useToast } from '../context/ToastContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useDialog } from '../hooks/useDialog'
 import { EXPIRY_OPTS, fmtDate, fmtDateTime, isExpired } from '../utils/dates'
+import { parseDomains } from '../utils/viewUnlock'
+import SharePasswordFields, { CopyButton, LinksTabs, LockBadge, domainsProblem, passwordProblem } from './share/SharePasswordFields'
+import LinkProtectionModal from './share/LinkProtectionModal'
+import AccessRequestsPanel from './share/AccessRequestsPanel'
 
 const MAX_SHARED_VIEW_RECORDS = 50
 
@@ -136,6 +140,10 @@ export function ShareLinkModal({
   const [error, setError] = useState(null)
   const [shareData, setShareData] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [pwEnabled, setPwEnabled] = useState(false)
+  const [password, setPassword] = useState('')
+  const [domains, setDomains] = useState('')
+  const [pwTried, setPwTried] = useState(false)
   const noun = recordLabel || DEFAULT_LABELS[resourceType] || 'record'
   const shareUrl = shareData ? `${window.location.origin}/view/${shareData.token}` : ''
 
@@ -156,6 +164,8 @@ export function ShareLinkModal({
   }, [viewConfig, highlightableColumns])
 
   async function createShare() {
+    setPwTried(true)
+    if (passwordProblem(pwEnabled, password) || (pwEnabled && domainsProblem(domains))) return
     setSaving(true)
     setError(null)
     const isLive = enableLiveMode && mode === 'live'
@@ -170,6 +180,11 @@ export function ShareLinkModal({
         expires_hours: expiry || null,
         access_mode: accessMode,
         resource_type: resourceType,
+      }
+      if (pwEnabled) {
+        payload.password = password
+        const list = parseDomains(domains)
+        if (list.length) payload.auto_approve_domains = list
       }
       if (viewConfig) payload.view_config = { ...viewConfig, highlightColumns, utcOffsetMinutes: ownerUtcOffsetMinutes() }
       const data = await api.sharedViews.create(payload)
@@ -215,7 +230,7 @@ export function ShareLinkModal({
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? 'Share Current View' : 'Link Ready'}</h2>
               <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                {selectedRecords.length} {noun}{selectedRecords.length !== 1 ? 's' : ''} · no login needed
+                {selectedRecords.length} {noun}{selectedRecords.length !== 1 ? 's' : ''} · {pwEnabled ? 'password required' : 'no login needed'}
               </p>
             </div>
           </div>
@@ -343,7 +358,15 @@ export function ShareLinkModal({
                   ))}
                 </div>
               </div>
-              {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', color: 'var(--fin-negative)' }}>{error}</p>}
+              <SharePasswordFields
+                enabled={pwEnabled} password={password} domains={domains}
+                error={pwTried ? passwordProblem(pwEnabled, password) : ''}
+                onChange={(p) => {
+                  if ('enabled' in p) setPwEnabled(p.enabled)
+                  if ('password' in p) setPassword(p.password)
+                  if ('domains' in p) setDomains(p.domains)
+                }} />
+              {error && <p role="alert" className="text-xs p-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', color: 'var(--fin-negative)' }}>{error}</p>}
               <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: 'color-mix(in srgb, var(--chart-2) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--chart-2) 15%, transparent)' }}>
                 <Shield size={13} style={{ color: 'var(--chart-2)', marginTop: 1, flexShrink: 0 }} />
                 <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>
@@ -364,7 +387,9 @@ export function ShareLinkModal({
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    {shareData.is_password_protected ? 'Share this URL and the password separately.' : 'Share this URL — no login required.'}
+                  </p>
                   {enableLiveMode && mode === 'live' && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
                       style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
@@ -382,6 +407,13 @@ export function ShareLinkModal({
                   {copied ? <CheckCheck size={11} /> : <Copy size={11} />} {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
+              {shareData.is_password_protected && (
+                <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <Lock size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} aria-hidden="true" />
+                  <p className="text-xs font-mono flex-1 truncate" style={{ color: 'var(--text-1)' }} aria-label="Password">{password}</p>
+                  <CopyButton value={password} />
+                </div>
+              )}
               {shareData.expires_at && (
                 <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
                   <Clock size={11} /> Expires {fmtDate(shareData.expires_at)}
@@ -579,8 +611,11 @@ function ScopeEditorModal({ view, resourceType, currentViewConfig, visibleRecord
   )
 }
 
-export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = NO_COLUMNS, onClose }) {
+export function ManageSharedLinksModal({ resourceType = 'status', currentViewConfig = null, visibleRecords = [], recordLabel, highlightableColumns = NO_COLUMNS, initialTab = 'links', onClose }) {
   const dialog = useDialog({ label: 'Manage share links' })
+  const [tab, setTab] = useState(initialTab)
+  const [pendingRequests, setPendingRequests] = useState(0)
+  const [protecting, setProtecting] = useState(null)
   const confirm = useConfirm()
   const { showToast } = useToast()
   const [views, setViews] = useState([])
@@ -598,10 +633,14 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
 
   useEffect(() => { loadViews() }, [resourceType])
   useEffect(() => {
-    const h = e => { if (e.key === 'Escape') onClose() }
+    api.sharedViews.accessRequests({ resource_type: resourceType, status: 'pending' })
+      .then(r => setPendingRequests(r?.pending || 0)).catch(() => {})
+  }, [resourceType])
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape' && !protecting) onClose() }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [onClose])
+  }, [onClose, protecting])
 
   async function loadViews() {
     setLoading(true)
@@ -817,7 +856,15 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
           </div>
           <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
+        <div className="px-4 pt-3 flex-shrink-0">
+          <LinksTabs tab={tab} onTab={setTab} pending={pendingRequests} />
+        </div>
 
+        {tab === 'requests' ? (
+          <div className="overflow-y-auto flex-1 p-4">
+            <AccessRequestsPanel resourceType={resourceType} onPendingChange={setPendingRequests} />
+          </div>
+        ) : (
         <div className="overflow-y-auto flex-1 p-4 space-y-2">
           {loading && <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>}
           {!loading && views.length === 0 && <div className="text-center py-10 text-sm" style={{ color: 'var(--text-3)' }}>No share links yet.</div>}
@@ -849,6 +896,7 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                           {(v.resource_type || resourceType || 'status').toUpperCase()}
                         </span>
                         {v.is_dynamic && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'color-mix(in srgb, var(--fin-positive) 10%, transparent)', color: 'var(--fin-positive)' }}>LIVE</span>}
+                        {v.is_password_protected && <LockBadge />}
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: v.access_mode === 'edit' ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'color-mix(in srgb, var(--text-3) 12%, transparent)', color: v.access_mode === 'edit' ? 'var(--accent)' : 'var(--text-3)' }}>
                           {v.access_mode === 'edit' ? 'CAN EDIT' : 'READ ONLY'}
                         </span>
@@ -879,6 +927,10 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
                           {updatingMode && <Loader2 size={9} className="animate-spin" />}
                         </button>
                       </div>
+                      <button onClick={() => setProtecting(v)} className="btn-icon p-1.5" title="Password" aria-label={v.is_password_protected ? 'Change or remove password' : 'Add a password'}
+                        style={{ color: v.is_password_protected ? 'var(--chart-2)' : 'var(--text-3)' }}>
+                        <Lock size={12} aria-hidden="true" />
+                      </button>
                       <button onClick={() => viewAccesses(v.token)} className="btn-icon p-1.5" style={{ color: selected === v.token ? 'var(--accent)' : 'var(--text-3)' }}>
                         {loadingAccessToken === v.token ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />}
                       </button>
@@ -977,7 +1029,12 @@ export function ManageSharedLinksModal({ resourceType = 'status', currentViewCon
             )
           })}
         </div>
+        )}
       </div>
+      {protecting && (
+        <LinkProtectionModal view={protecting} onClose={() => setProtecting(null)}
+          onSaved={(updated) => setViews(vs => vs.map(x => x.token === updated.token ? { ...x, ...updated } : x))} />
+      )}
       {scopeEditor && (
         <ScopeEditorModal
           view={scopeEditor}

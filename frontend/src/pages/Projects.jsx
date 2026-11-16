@@ -1,4 +1,5 @@
 import { memo, useCallback, useState, useEffect, useMemo, useRef } from 'react'
+import { useLinksDeepLink } from '../hooks/useLinksDeepLink'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, X, RefreshCw, AlertCircle, Loader2, SlidersHorizontal, FolderKanban, Activity, IndianRupee, Link2, ArrowRight, AlertTriangle, ChevronDown } from 'lucide-react'
 import ProjectCard from '../components/ProjectCard'
@@ -72,6 +73,7 @@ export default function Projects() {
   const [showFilters, setShowFilters] = useState(false)
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
+  const [linksTab, setLinksTab] = useLinksDeepLink(setManageModal)
   const searchInputRef = useRef(null)
 
   // The changed time, not the polled time: the chip says when the portfolio
@@ -153,7 +155,8 @@ export default function Projects() {
               search,
             }}
             visibleRecords={displayed}
-            onClose={() => setManageModal(false)}
+            initialTab={linksTab}
+          onClose={() => { setManageModal(false); setLinksTab('links') }}
           />
         )}
     </>

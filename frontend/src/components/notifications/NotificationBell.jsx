@@ -17,7 +17,13 @@ function verb(kind) {
   return 'commented on'
 }
 
+// Where each shared view type's Links manager lives.
+const LINKS_PAGE = { status: '/status', projects: '/projects', invoices: '/invoices', 'tax-ledger': '/tax' }
+
 export function notificationHref(n) {
+  if (n?.kind === 'access_request') {
+    return `${LINKS_PAGE[n.access_request?.resource_type] || '/status'}?links=requests`
+  }
   if (!n?.page_id) return '/pages'
   const q = new URLSearchParams({ page: n.page_id, comments: '1' })
   if (n.thread_id) q.set('thread', n.thread_id)
@@ -68,7 +74,7 @@ function Dropdown({ anchorRect, variant, onClose }) {
         {s.error && <p role="alert" style={{ margin: 0, padding: 16, fontSize: 13, color: 'var(--fin-negative, #d70015)' }}>{s.error}</p>}
         {s.loaded && !s.error && s.items.length === 0 && (
           <p style={{ margin: 0, padding: '24px 16px', fontSize: 13, color: 'var(--text-2)', textAlign: 'center' }}>
-            You're all caught up. Mentions and replies on pages show up here.
+            You're all caught up. Mentions, replies and password requests show up here.
           </p>
         )}
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -80,10 +86,12 @@ function Dropdown({ anchorRect, variant, onClose }) {
                   borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'inherit',
                   background: n.read ? 'transparent' : 'var(--accent-dim, rgba(0,113,227,0.06))',
                 }}>
-                <Avatar person={n.actor} size={28} />
+                <Avatar person={n.kind === 'access_request' ? { name: n.access_request?.requester_name || 'Visitor' } : n.actor} size={28} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 12.5, lineHeight: 1.4 }}>
-                    <strong>{n.actor?.name || 'Someone'}</strong> {verb(n.kind)} <strong>{n.page_title || 'Untitled'}</strong>
+                    {n.kind === 'access_request'
+                      ? <><strong>{n.access_request?.requester_name || 'Someone'}</strong> asked for the password to <strong>{n.access_request?.view_title || 'a shared link'}</strong></>
+                      : <><strong>{n.actor?.name || 'Someone'}</strong> {verb(n.kind)} <strong>{n.page_title || 'Untitled'}</strong></>}
                   </span>
                   {n.excerpt && (
                     <span style={{ display: 'block', fontSize: 12, color: 'var(--text-2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

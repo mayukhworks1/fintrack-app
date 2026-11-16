@@ -10,6 +10,8 @@ import { useDialog } from '../hooks/useDialog'
 import SkeletonList from '../components/SkeletonList'
 import { hexToRgba } from '../utils/color'
 import { fmtDate, fmtDateTime, isExpired } from '../utils/dates'
+import { setViewUnlock } from '../utils/viewUnlock'
+import ProtectedLink from './sharedview/ProtectedLink'
 
 const THEME_PRESETS = {
   cobalt: { accent: '#2563eb', accentDim: 'rgba(37,99,235,0.12)', accentSoft: 'rgba(37,99,235,0.24)' },
@@ -1342,6 +1344,8 @@ export default function SharedView() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
+  // The link has a password and this tab holds no valid unlock token.
+  const [locked, setLocked] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [search, setSearch] = useState('')
   const [filterPrimary, setFilterPrimary] = useState('')
@@ -1422,6 +1426,14 @@ export default function SharedView() {
       setFollowupDueOnly(prev => prev || vc.followupDueOnly === true)
     } catch (e) {
       if (e?.name === 'AbortError') return
+      if (e?.code === 'password_required') {
+        // No unlock token, or one from before a password change.
+        setViewUnlock(token, '')
+        setLocked(true)
+        setData(null)
+        setRecords([])
+        return
+      }
       setError(e.message || 'This link is unavailable')
       setData(null)
       setRecords([])
@@ -1585,6 +1597,7 @@ export default function SharedView() {
       setRecords(rs => rs.map(r => r.id === record.id ? { ...r, fields: { ...r.fields, ...fieldPatch } } : r))
       setEditRecord(null)
     } catch (e) {
+      if (e?.code === 'password_required') { setViewUnlock(token, ''); setLocked(true); return }
       setSaveError(e.message || 'Failed to update')
     } finally {
       setSavingRecordId('')
@@ -1613,6 +1626,16 @@ export default function SharedView() {
         return next
       })
     }
+  }
+
+  if (locked) {
+    return (
+      <ProtectedLink
+        token={token}
+        onUnlocked={() => { setLocked(false); load() }}
+        onGone={(msg) => { setLocked(false); setError(msg || 'This link is unavailable') }}
+      />
+    )
   }
 
   if (loading) {

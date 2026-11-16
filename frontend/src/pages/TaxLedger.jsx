@@ -17,6 +17,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useLinksDeepLink } from '../hooks/useLinksDeepLink'
 import { createPortal } from 'react-dom'
 import {
   Download, Printer, ChevronDown, ChevronUp,
@@ -196,6 +197,7 @@ export default function TaxLedger({ source = 'main' } = {}) {
   const [activeTab, setActiveTab] = useState('summary') // summary | monthly | clients | invoices
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
+  const [linksTab, setLinksTab] = useLinksDeepLink(setManageModal)
   const [exporting, setExporting] = useState(false)
   const printRef = useRef(null)
   // A phone (≤640px) opens on its own summary; the full tables are one tap away.
@@ -485,7 +487,8 @@ export default function TaxLedger({ source = 'main' } = {}) {
             recordLabel="invoice"
             currentViewConfig={sharedViewConfig}
             visibleRecords={filteredInvoices}
-            onClose={() => setManageModal(false)}
+            initialTab={linksTab}
+          onClose={() => { setManageModal(false); setLinksTab('links') }}
           />,
           document.body
         )}

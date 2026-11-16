@@ -1,4 +1,5 @@
 import { getDeviceHintHeader, currentDeviceHint } from '../utils/deviceInfo'
+import { getViewUnlock, viewUnlockHeader } from '../utils/viewUnlock'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 /** Absolute base URL for the API — needed when constructing non-fetch connections
@@ -704,19 +705,41 @@ export const api = {
       body: JSON.stringify({ access_ids: accessIds }),
     }),
     // Public — no auth header needed (still uses request() but no token will be found for public users)
+    // A password-protected link needs the unlock token from publicUnlock,
+    // kept for this tab in sessionStorage (utils/viewUnlock.js).
     publicGet: (token, opts = {}) => {
       const path = opts.fresh
         ? `/api/public/view/${token}?bust=${Date.now()}`
         : `/api/public/view/${token}`
-      return request(path, { signal: opts.signal }, 1)
+      return request(path, { signal: opts.signal, fresh: !!opts.fresh, headers: viewUnlockHeader(token) }, 1)
     },
     publicUpdate: (token, recordId, data) => request(`/api/public/view/${token}/records/${recordId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+      headers: viewUnlockHeader(token),
+    }),
+    publicUnlock: (token, password) => request(`/api/public/view/${encodeURIComponent(token)}/unlock`, {
+      method: 'POST', body: JSON.stringify({ password }),
+    }, 0),
+    requestAccess: (token, data) => request(`/api/public/view/${encodeURIComponent(token)}/access-request`, {
+      method: 'POST', body: JSON.stringify(data),
+    }, 0),
+    revealPassword: (token) => request(`/api/shared-views/${token}/password`, { fresh: true }),
+    accessRequests: (params = {}) => {
+      const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v))
+      return request(`/api/shared-views/access-requests${q.toString() ? `?${q}` : ''}`, { fresh: true })
+    },
+    approveRequest: (id, data = {}) => request(`/api/shared-views/access-requests/${id}/approve`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+    denyRequest: (id, data = {}) => request(`/api/shared-views/access-requests/${id}/deny`, {
+      method: 'POST', body: JSON.stringify(data),
     }),
     // Fire-and-forget event (record_detail, attachment_open). Uses sendBeacon if available.
     recordEvent: (token, data) => {
-      const url = `${BASE_URL}/api/public/view/${encodeURIComponent(token)}/event`
+      // sendBeacon cannot set headers: a protected link's unlock token rides as ?u=.
+      const unlock = getViewUnlock(token)
+      const url = `${BASE_URL}/api/public/view/${encodeURIComponent(token)}/event${unlock ? `?u=${encodeURIComponent(unlock)}` : ''}`
       const body = JSON.stringify(data)
       if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
         navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))

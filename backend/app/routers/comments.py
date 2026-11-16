@@ -452,7 +452,13 @@ async def mention_search(page_id: PageId, request: Request, q: str = "",
 
 def _notification_dict(r: Any) -> dict:
     payload = C.load_json(r["payload"]) or {}
+    extra: dict = {}
+    if r["kind"] == "access_request":
+        # A request for a shared link's password (services/share_access.py).
+        extra["access_request"] = {k: payload.get(k) for k in (
+            "view_token", "view_title", "resource_type", "request_id", "requester_name", "requester_email")}
     return {
+        **extra,
         "id": str(r["id"]),
         "kind": r["kind"],
         "page_id": str(r["page_id"]) if r["page_id"] else None,

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useLinksDeepLink } from '../hooks/useLinksDeepLink'
 
 import { useSearchParams } from 'react-router-dom'
 import { Receipt, RefreshCw, Plus, X, ChevronDown, AlertTriangle, CheckCircle2, Search, ExternalLink, FileText, ArrowUpDown, Filter, CalendarDays, User, Tag, Eye, IndianRupee, TrendingUp, Percent, CalendarClock, RotateCcw, Paperclip, Download, Columns3 } from 'lucide-react'
@@ -109,6 +110,7 @@ export default function Invoices() {
   const [previewDocs, setPreviewDocs] = useState(null)
   const [shareModal, setShareModal] = useState(false)
   const [manageModal, setManageModal] = useState(false)
+  const [linksTab, setLinksTab] = useLinksDeepLink(setManageModal)
   const [columnWidths, setColumnWidths] = useState(DEFAULT_INVOICE_COLUMN_WIDTHS)
   const [columnVisibility, setColumnVisibility] = useState(() => {
     // Restore the user's column choice; a corrupt or stale entry falls back to
@@ -831,7 +833,8 @@ export default function Invoices() {
           currentViewConfig={sharedViewConfig}
           visibleRecords={records}
           highlightableColumns={INVOICE_SHARED_HIGHLIGHTABLE_COLUMNS}
-          onClose={() => setManageModal(false)}
+          initialTab={linksTab}
+          onClose={() => { setManageModal(false); setLinksTab('links') }}
         />
       )}
       <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />

@@ -139,6 +139,19 @@ def _row(row) -> dict:
         except Exception:
             record_ids = []
     out["is_dynamic"] = record_ids == ["__dynamic__"]
+    # The password never leaves in any form: only whether there is one.
+    out["is_password_protected"] = bool(out.pop("password_hash", None))
+    out.pop("password_enc", None)
+    if "auto_approve_domains" in out:
+        domains = out["auto_approve_domains"]
+        if isinstance(domains, str):
+            try:
+                domains = json.loads(domains)
+            except Exception:
+                domains = []
+        out["auto_approve_domains"] = domains if isinstance(domains, list) else []
+    if out.get("owner_user_id") is not None:
+        out["owner_user_id"] = str(out["owner_user_id"])
     return out
 
 
@@ -406,7 +419,11 @@ class SharedViewService:
         access_mode: str = "read",
         view_config: Optional[dict] = None,
         resource_type: str = "status",
+        password: Optional[str] = None,
+        auto_approve_domains: Optional[list[str]] = None,
+        owner_user_id: Optional[str] = None,
     ) -> dict:
+        from . import share_access as SA
         pool = get_pool()
         if not pool:
             raise RuntimeError("PostgreSQL unavailable — cannot create shared view")
@@ -424,25 +441,73 @@ class SharedViewService:
         safe_view_config = _sanitize_view_config(view_config)
         if is_dynamic and _live_unsupported(resource_type, safe_view_config):
             raise ValueError(_LIVE_UNSUPPORTED_MESSAGE)
+        domains = SA.normalize_domains(auto_approve_domains)
+        if not password and not domains:
+            row = await self._insert(pool, token, title, record_ids, role, ip, expires_at, access_mode,
+                                     safe_view_config, resource_type)
+            if owner_user_id and SA._uuid_or_none(owner_user_id):
+                # Best effort: before migration 0011 there is no owner column.
+                try:
+                    async with pool.acquire() as conn:
+                        row = await conn.fetchrow(
+                            "UPDATE shared_views SET owner_user_id = $2::uuid WHERE token = $1 RETURNING *",
+                            token, SA._uuid_or_none(owner_user_id)) or row
+                except Exception as exc:
+                    logger.debug("shared view owner not recorded: %s", exc)
+            return _row(row)
+        secret = SA.password_columns(password) if password else {"password_hash": None, "password_enc": None}
+        try:
+            return await self._create_protected(pool, token, title, record_ids, role, ip, expires_at, access_mode,
+                                                safe_view_config, resource_type, secret, domains, owner_user_id)
+        except Exception as exc:
+            if type(exc).__name__ == "UndefinedColumnError":
+                raise RuntimeError("Password protection is not available until the database migration runs") from exc
+            raise
+
+    async def _create_protected(self, pool, token, title, record_ids, role, ip, expires_at, access_mode,
+                                safe_view_config, resource_type, secret, domains, owner_user_id) -> dict:
+        from . import share_access as SA
+        password = bool(secret["password_hash"])
         async with pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO shared_views
-                    (token, title, record_ids, created_by, created_from_ip, expires_at, access_mode, view_config, resource_type)
-                VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9)
-                RETURNING *
-                """,
-                token,
-                title,
-                json.dumps(record_ids),
-                role,
-                ip,
-                expires_at,
-                access_mode,
-                json.dumps(safe_view_config) if safe_view_config is not None else None,
-                resource_type,
-            )
+            async with conn.transaction():
+                row = await self._insert(conn, token, title, record_ids, role, ip, expires_at, access_mode,
+                                         safe_view_config, resource_type)
+                row = await conn.fetchrow(
+                    "UPDATE shared_views SET password_hash = $2, password_enc = $3, "
+                    "password_updated_at = CASE WHEN $2::text IS NULL THEN NULL ELSE NOW() END, "
+                    "auto_approve_domains = $4::jsonb, owner_user_id = $5::uuid WHERE token = $1 RETURNING *",
+                    token, secret["password_hash"], secret["password_enc"], json.dumps(domains),
+                    SA._uuid_or_none(owner_user_id),
+                )
+                if password:
+                    await SA.audit(conn, "share_password.set", actor_user_id=owner_user_id,
+                                   metadata={"view_token": token, "on": "create"})
         return _row(row)
+
+    @staticmethod
+    async def _insert(db, token, title, record_ids, role, ip, expires_at, access_mode, safe_view_config, resource_type):
+        """INSERT one link on `db`: a pool (its own connection) or a connection."""
+        if hasattr(db, "acquire"):
+            async with db.acquire() as conn:
+                return await SharedViewService._insert(conn, token, title, record_ids, role, ip, expires_at,
+                                                       access_mode, safe_view_config, resource_type)
+        return await db.fetchrow(
+            """
+            INSERT INTO shared_views
+                (token, title, record_ids, created_by, created_from_ip, expires_at, access_mode, view_config, resource_type)
+            VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8::jsonb, $9)
+            RETURNING *
+            """,
+            token,
+            title,
+            json.dumps(record_ids),
+            role,
+            ip,
+            expires_at,
+            access_mode,
+            json.dumps(safe_view_config) if safe_view_config is not None else None,
+            resource_type,
+        )
 
     async def update(self, token: str, data: dict) -> Optional[dict]:
         pool = get_pool()
@@ -484,6 +549,24 @@ class SharedViewService:
             safe_view_config = _sanitize_view_config(data["view_config"])
             parts.append(f"view_config = ${idx}::jsonb")
             params.append(json.dumps(safe_view_config) if safe_view_config is not None else None)
+            idx += 1
+
+        if "password" in data:
+            # A string sets or changes the password, None removes it. Either
+            # way the version moves on, which ends every unlock token issued.
+            from . import share_access as SA
+            secret = SA.password_columns(data["password"])
+            parts.append(f"password_hash = ${idx}")
+            parts.append(f"password_enc = ${idx + 1}")
+            parts.append("password_version = password_version + 1")
+            parts.append(f"password_updated_at = CASE WHEN ${idx}::text IS NULL THEN NULL ELSE NOW() END")
+            params.extend([secret["password_hash"], secret["password_enc"]])
+            idx += 2
+
+        if "auto_approve_domains" in data:
+            from . import share_access as SA
+            parts.append(f"auto_approve_domains = ${idx}::jsonb")
+            params.append(json.dumps(SA.normalize_domains(data["auto_approve_domains"])))
             idx += 1
 
         for field in ("title", "is_active", "expires_at", "access_mode"):
@@ -604,7 +687,7 @@ class SharedViewService:
 
     # ── Public access ─────────────────────────────────────────────────────────
 
-    async def get_public_data(self, token: str, request) -> dict:
+    async def get_public_data(self, token: str, request, unlock: Optional[str] = None) -> dict:
         """
         Public endpoint — no auth required.
         Validates token, checks expiry + active state, fetches records,
@@ -615,6 +698,8 @@ class SharedViewService:
             raise RuntimeError("Database unavailable")
 
         view = await self.get_public_view(token)
+        from .share_access import require_unlocked
+        require_unlocked(view, unlock)
 
         resource_type = view.get("resource_type") or "status"
         if resource_type not in _ALLOWED_RESOURCE_TYPES:
@@ -669,10 +754,14 @@ class SharedViewService:
             "total": len(records),
             "view_config": public_vc,
             "shared_fields": sorted(shared_fields),
+            "is_password_protected": bool(view.get("is_password_protected")),
         }
 
-    async def update_public_record(self, token: str, record_id: str, fields: dict, request=None) -> dict[str, Any]:
+    async def update_public_record(self, token: str, record_id: str, fields: dict, request=None,
+                                   unlock: Optional[str] = None) -> dict[str, Any]:
         view = await self.get_public_view(token)
+        from .share_access import require_unlocked
+        require_unlocked(view, unlock)
         if (view.get("access_mode") or "read") != "edit":
             raise PermissionError("This link is view-only")
         resource_type = view.get("resource_type") or "status"

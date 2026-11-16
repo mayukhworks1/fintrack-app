@@ -1,10 +1,14 @@
 // Extracted from StatusBoard.jsx — StatusModals.
 import { useToast } from '../../context/ToastContext'
 import { api } from '../../services/api'
-import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
+import { Activity, AlertCircle, BookmarkPlus, Check, CheckCheck, CheckSquare, Clock, Copy, ExternalLink, Eye, Filter, Globe, Link2, Loader2, Lock, Monitor, Pencil, Plus, RefreshCw, Search, Share2, Shield, Smartphone, Sparkles, Square, ToggleLeft, ToggleRight, Trash, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useDialog } from '../../hooks/useDialog'
 import { liveFiltersDropped } from '../../components/SharedLinks'
+import SharePasswordFields, { CopyButton, LinksTabs, LockBadge, domainsProblem, passwordProblem } from '../../components/share/SharePasswordFields'
+import LinkProtectionModal from '../../components/share/LinkProtectionModal'
+import AccessRequestsPanel from '../../components/share/AccessRequestsPanel'
+import { parseDomains } from '../../utils/viewUnlock'
 import { ComboBox, StatusAttachmentField } from './StatusFields'
 import { ALL_COLUMNS, EXPIRY_OPTS, MAX_SHARED_VIEW_RECORDS, THEME_PRESETS, fmtDate, isExpired, parseAttachments, statusStyle, summarizeShareScope } from './utils'
 
@@ -336,9 +340,21 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
   const [copied,    setCopied]    = useState(false)
   // Set when the server refused a live link it could not re-apply: offer the visible records instead.
   const [snapshotOffer, setSnapshotOffer] = useState(false)
+  const [pwEnabled, setPwEnabled] = useState(false)
+  const [password, setPassword] = useState('')
+  const [domains, setDomains] = useState('')
+  const [pwTried, setPwTried] = useState(false)
+  // Added to every payload this dialog sends.
+  const protection = () => {
+    if (!pwEnabled) return {}
+    const list = parseDomains(domains)
+    return { password, ...(list.length ? { auto_approve_domains: list } : {}) }
+  }
   const shareUrl = shareData ? `${window.location.origin}/view/${shareData.token}` : ''
 
   async function createShare(asSnapshot = false) {
+    setPwTried(true)
+    if (passwordProblem(pwEnabled, password) || (pwEnabled && domainsProblem(domains))) return
     setSaving(true); setError(null); setSnapshotOffer(false)
     const live = isViewShare && !asSnapshot
     try {
@@ -351,6 +367,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
           expires_hours: expiry || null,
           access_mode: 'read',
           resource_type: 'status',
+          ...protection(),
         }
         if (viewConfig) {
           // The whole filter state travels, advanced rules included: the server
@@ -371,6 +388,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
           expires_hours: expiry || null,
           access_mode: accessMode,
           resource_type: 'status',
+          ...protection(),
         }
         if (viewConfig) payload.view_config = viewConfig   // layout and theme for a snapshot of this view
         const data = await api.sharedViews.create(payload)
@@ -395,7 +413,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       style={{ background: 'var(--scrim)', backdropFilter: 'blur(8px)' }}>
       <div {...dialog.panelProps} className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl"
-        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', maxHeight: '92vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -404,7 +422,7 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{step === 'form' ? (isViewShare ? 'Share Current View' : 'Share Selected Projects') : 'Link Ready!'}</h2>
-              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} · no login needed</p>
+              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>{selectedRecords.length} project{selectedRecords.length !== 1 ? 's' : ''} · {pwEnabled ? 'password required' : 'no login needed'}</p>
             </div>
           </div>
           <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
@@ -465,7 +483,15 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                   </div>
                 </div>
               )}
-              {error && <p className="text-xs p-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', color: 'var(--fin-negative)' }}>{error}</p>}
+              <SharePasswordFields
+                enabled={pwEnabled} password={password} domains={domains}
+                error={pwTried ? passwordProblem(pwEnabled, password) : ''}
+                onChange={(p) => {
+                  if ('enabled' in p) setPwEnabled(p.enabled)
+                  if ('password' in p) setPassword(p.password)
+                  if ('domains' in p) setDomains(p.domains)
+                }} />
+              {error && <p role="alert" className="text-xs p-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--fin-negative) 8%, transparent)', color: 'var(--fin-negative)' }}>{error}</p>}
               {snapshotOffer && (
                 <button type="button" onClick={() => createShare(true)} disabled={saving}
                   className="btn-ghost w-full text-xs px-3 py-2 flex items-center justify-center gap-2"
@@ -508,7 +534,9 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                 </div>
                 <div className="text-center">
                   <p className="font-bold text-base" style={{ color: 'var(--text-1)' }}>Link ready!</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>Share this URL — no login required.</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
+                    {shareData.is_password_protected ? 'Share this URL and the password separately.' : 'Share this URL — no login required.'}
+                  </p>
                   {isViewShare && (
                     <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold"
                       style={{ background: 'color-mix(in srgb, var(--fin-positive) 12%, transparent)', color: 'var(--fin-positive)', border: '1px solid color-mix(in srgb, var(--fin-positive) 30%, transparent)' }}>
@@ -526,6 +554,13 @@ export function ShareModal({ selectedRecords, viewConfig = null, title: defaultT
                   {copied ? <CheckCheck size={11} /> : <Copy size={11} />} {copied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
+              {shareData.is_password_protected && (
+                <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
+                  <Lock size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} aria-hidden="true" />
+                  <p className="text-xs font-mono flex-1 truncate" style={{ color: 'var(--text-1)' }} aria-label="Password">{password}</p>
+                  <CopyButton value={password} />
+                </div>
+              )}
               {shareData.expires_at && (
                 <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-3)' }}>
                   <Clock size={11} /> Expires {fmtDate(shareData.expires_at)}
@@ -671,8 +706,11 @@ function ScopeEditorModal({ view, currentConfig, visibleRecords, onClose, onSave
   )
 }
 
-export function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, visibleRecords = [] }) {
+export function ManageSharesModal({ onClose, currentConfig = null, visibleCount = 0, visibleRecords = [], initialTab = 'links' }) {
   const dialog = useDialog({ label: 'Manage share links' })
+  const [tab, setTab] = useState(initialTab)
+  const [pendingRequests, setPendingRequests] = useState(0)
+  const [protecting, setProtecting] = useState(null)
   const { showToast } = useToast()
   const [views,         setViews]         = useState([])
   const [loading,       setLoading]       = useState(true)
@@ -692,10 +730,14 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
 
   useEffect(() => { loadViews() }, [])
   useEffect(() => {
-    const h = e => { if (e.key === 'Escape') onClose() }
+    api.sharedViews.accessRequests({ resource_type: 'status', status: 'pending' })
+      .then(r => setPendingRequests(r?.pending || 0)).catch(() => {})
+  }, [])
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape' && !protecting) onClose() }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [onClose])
+  }, [onClose, protecting])
 
   async function loadViews() {
     setLoading(true)
@@ -866,7 +908,16 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
           <button aria-label="Close" onClick={onClose} className="btn-icon p-1.5" style={{ color: 'var(--text-3)' }}><X size={16} /></button>
         </div>
 
-        {/* Body */}
+        <div className="px-4 pt-3 flex-shrink-0">
+          <LinksTabs tab={tab} onTab={setTab} pending={pendingRequests} />
+        </div>
+
+        {tab === 'requests' ? (
+          <div className="overflow-y-auto flex-1 p-4">
+            <AccessRequestsPanel resourceType="status" onPendingChange={setPendingRequests} />
+          </div>
+        ) : (
+        /* Body */
         <div className="overflow-y-auto flex-1 p-4 space-y-3">
           {loading && <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin" style={{ color: 'var(--text-3)' }} /></div>}
           {!loading && views.length === 0 && (
@@ -952,6 +1003,7 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
                           LIVE
                         </span>
                       )}
+                      {v.is_password_protected && <LockBadge />}
                       {inactive && (
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
                           style={{ background: 'color-mix(in srgb, var(--fin-negative) 10%, transparent)', color: 'var(--fin-negative)' }}>DISABLED</span>
@@ -1045,6 +1097,11 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
                           {expired ? 'Expired' : 'Expires'} {fmtDate(v.expires_at)}
                         </span>
                       )}
+                      <button onClick={() => setProtecting(v)} className="btn-icon p-1.5" title="Password"
+                        aria-label={v.is_password_protected ? 'Change or remove password' : 'Add a password'}
+                        style={{ color: v.is_password_protected ? 'var(--chart-2)' : 'var(--text-3)' }}>
+                        <Lock size={13} aria-hidden="true" />
+                      </button>
                       {/* Viewer activity toggle */}
                       <button onClick={() => loadAccesses(v.token)}
                         className="btn-icon p-1.5"
@@ -1189,6 +1246,12 @@ export function ManageSharesModal({ onClose, currentConfig = null, visibleCount 
             )
           })}
         </div>
+        )}
+
+        {protecting && (
+          <LinkProtectionModal view={protecting} onClose={() => setProtecting(null)}
+            onSaved={(updated) => setViews(vs => vs.map(x => x.token === updated.token ? { ...x, ...updated } : x))} />
+        )}
 
         {scopeEditor && (
           <ScopeEditorModal

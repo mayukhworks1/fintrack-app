@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     frontend_url: str = "*"
+    # Public origin of this API, used in links emailed to people (the signed
+    # Approve / Deny links of a shared view password request). Falls back to
+    # the origin the request arrived on.
+    public_api_url: Optional[str] = None
     # CORS fail-closed policy: when FRONTEND_URL is unset/"*" the API restricts
     # to localhost dev origins by default. Set CORS_ALLOW_ALL=true only if you
     # explicitly need to accept every origin (not recommended in production).

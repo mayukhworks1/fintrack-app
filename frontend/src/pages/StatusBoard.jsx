@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLinksDeepLink } from '../hooks/useLinksDeepLink'
 
 import { Activity, Plus, X, Check, ChevronDown, ChevronUp, RefreshCw, Search, AlertCircle, ClipboardList, Sparkles, Share2, Link2, LayoutGrid, List, Columns, Bookmark, SlidersHorizontal, GripVertical } from 'lucide-react'
 import { api, clientCacheBust, getAuthToken, API_BASE_URL } from '../services/api'
@@ -87,6 +88,7 @@ export default function StatusBoard() {
   const [aiModal,           setAiModal]           = useState(false)
   const [shareModal,    setShareModal]    = useState(false)
   const [manageModal,   setManageModal]   = useState(false)
+  const [linksTab, setLinksTab] = useLinksDeepLink(setManageModal)
   const [showViews,     setShowViews]     = useState(false)
   const [showCols,      setShowCols]      = useState(false)
   const [showSettings,  setShowSettings]  = useState(false)
@@ -1101,7 +1103,8 @@ export default function StatusBoard() {
       )}
         {manageModal && (
         <ManageSharesModal
-          onClose={() => setManageModal(false)}
+          initialTab={linksTab}
+          onClose={() => { setManageModal(false); setLinksTab('links') }}
           currentConfig={currentConfig}
           visibleCount={filtered.length}
           visibleRecords={filtered}
