@@ -29,7 +29,6 @@ def email_wrap_html(title: str, preheader: str, body_html: str, to_email: str = 
     chance of spam/newsletter classification.
     """
     from_name = settings.smtp_from_name or "FinTrack"
-    footer_addr = "Works Media and Allied Services LLP &bull; Mumbai, India"
     recipient_line = f"This transactional email was sent to {to_email}." if to_email else "This is a transactional email."
 
     # Preheader is hidden text shown as preview in inbox — keeps it out of spam
@@ -65,8 +64,7 @@ def email_wrap_html(title: str, preheader: str, body_html: str, to_email: str = 
           <tr>
             <td style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;border-radius:0 0 8px 8px">
               <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.6;font-family:Inter,Arial,sans-serif">
-                {recipient_line}<br>
-                {footer_addr}
+                {recipient_line}
               </p>
             </td>
           </tr>
