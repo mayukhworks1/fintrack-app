@@ -22,6 +22,7 @@ const LINKS_PAGE = { status: '/status', projects: '/projects', invoices: '/invoi
 
 export function notificationHref(n) {
   if (n?.kind === 'access_request') {
+    if (n.access_request?.page_id) return `/pages/${n.access_request.page_id}?share=requests`
     return `${LINKS_PAGE[n.access_request?.resource_type] || '/status'}?links=requests`
   }
   if (!n?.page_id) return '/pages'

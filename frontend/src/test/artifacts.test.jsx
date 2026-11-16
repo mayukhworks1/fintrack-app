@@ -76,10 +76,11 @@ async function openNewArtifact() {
 const GST = ARTIFACT_TEMPLATES.find(t => t.id === 'gst-calculator')
 
 describe('Artifact templates', () => {
-  it('ships twelve complete single-file apps', () => {
-    expect(ARTIFACT_TEMPLATES).toHaveLength(12)
+  it('ships thirteen complete single-file apps, the cost tracker first', () => {
+    expect(ARTIFACT_TEMPLATES).toHaveLength(13)
+    expect(ARTIFACT_TEMPLATES[0].id).toBe('cost-tracker')
     const ids = new Set(ARTIFACT_TEMPLATES.map(t => t.id))
-    expect(ids.size).toBe(12)
+    expect(ids.size).toBe(13)
     for (const t of ARTIFACT_TEMPLATES) {
       expect(t.html.startsWith('<!DOCTYPE html>')).toBe(true)
       expect(t.html).toMatch(/<title>[^<]+<\/title>/)

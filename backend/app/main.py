@@ -26,6 +26,7 @@ from .routers import storage as storage_router
 from .routers import page_tree as page_tree_router
 from .routers import comments as comments_router
 from .routers import pages as pages_router
+from .routers import page_access as page_access_router
 from .routers import artifacts as artifacts_router
 from .routers import artifact_data as artifact_data_router
 from .routers import databases as databases_router
@@ -385,6 +386,7 @@ app.include_router(storage_router.router)
 app.include_router(page_tree_router.router)
 app.include_router(comments_router.router)
 app.include_router(pages_router.router)
+app.include_router(page_access_router.router)
 app.include_router(artifacts_router.router)
 app.include_router(artifact_data_router.router)
 app.include_router(databases_router.router)

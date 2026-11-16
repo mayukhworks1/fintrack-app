@@ -285,7 +285,7 @@ function PasswordPrompt({ title, slug, onSubmit, error, loading, onGone }) {
   if (pane === 'request') return (
     <BrandScreen headingRef={heading} icon={<MailIcon />} title="Request the password"
       message="Tell the owner who you are. If they approve, you’ll get the password by email.">
-      <RequestPane owner="page" send={(data) => api.pages.publicRequestAccess(slug, data)}
+      <RequestPane token={slug} noun="page" sendRequest={(data) => api.pages.publicRequestAccess(slug, data)}
         onBack={() => setPane('password')} onGone={onGone}
         onSent={(email) => { setSentTo(email); setPane('sent') }} />
     </BrandScreen>

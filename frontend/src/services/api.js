@@ -1005,6 +1005,23 @@ export const api = {
       const data = await r.json().catch(() => ({}))
       return r.status === 410 ? { ...(data || {}), expired: true } : data
     }),
+    // "Request the password" for a protected page, and the owner's side of it.
+    publicRequestAccess: (slug, data) => request(`/api/public/pages/${encodeURIComponent(slug)}/access-request`, {
+      method: 'POST', body: JSON.stringify(data),
+    }, 0),
+    access:        (id)        => request(`/api/pages/${id}/access`, { fresh: true }),
+    updateAccess:  (id, data)  => request(`/api/pages/${id}/access`, { method: 'PUT', body: JSON.stringify(data) }),
+    revealPassword: (id)       => request(`/api/pages/${id}/password`, { fresh: true }),
+    accessRequests: (id, params = {}) => {
+      const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v))
+      return request(`/api/pages/${id}/access-requests${q.toString() ? `?${q}` : ''}`, { fresh: true })
+    },
+    approveRequest: (id, requestId, data = {}) => request(`/api/pages/${id}/access-requests/${requestId}/approve`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+    denyRequest:   (id, requestId, data = {}) => request(`/api/pages/${id}/access-requests/${requestId}/deny`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
     publicLogView: (slug, data) => fetch(`${BASE_URL}/api/public/pages/${slug}/view`, { method: 'POST', body: JSON.stringify(data || {}), headers: { 'Content-Type': 'application/json' } }),
     // Parks unsaved editor content so the public renderer can serve it. The
     // preview and the published page then come out of the same pipeline.

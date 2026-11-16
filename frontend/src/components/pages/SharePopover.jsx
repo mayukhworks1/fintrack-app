@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Copy, ExternalLink, Globe, Lock, ShieldCheck, X } from 'lucide-react'
 import { toIstInput, fromIstInput, formatIst, countdown, msUntil, expiryPreset } from '../../utils/ist'
+import PageAccessSection from './PageAccessSection'
 
 // Everything about how a page is shared, kept out of the editor's way: its
 // link, search description, folder, expiry, password and code protection,
@@ -74,6 +75,7 @@ export default function SharePopover({
   form, set, onSlugEdit, slugStatus, folders = [], shareUrl,
   isPublished, hasUnpublished, canPublish, busy, onPublish, onUnpublish,
   onSavePassword, onCopied, collectsData = false,
+  pageId = null, openRequests = false, onPendingRequests,
 }) {
   const ref = useRef(null)
   const [pos, setPos] = useState(null)
@@ -206,6 +208,9 @@ export default function SharePopover({
             </div>
           )}
           {pwNote && <div role="status" style={{ fontSize:11, color:'var(--text-2)' }}>{pwNote}</div>}
+          {pageId && form.is_password_protected && (
+            <PageAccessSection key={`${pageId}-${pwNote}`} pageId={pageId} openRequests={openRequests} onPending={onPendingRequests} />
+          )}
           <label title="Visitors cannot right-click, save the page, or open its source with keyboard shortcuts, and the code is not sent outside the page itself."
             style={{ display:'flex', alignItems:'center', gap:6, fontSize:12.5, cursor:'pointer', userSelect:'none' }}>
             <input type="checkbox" checked={form.protect_source} onChange={e=>set('protect_source', e.target.checked)} />

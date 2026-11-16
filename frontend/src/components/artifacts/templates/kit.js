@@ -1,7 +1,7 @@
 /**
  * Templates written on the artifact design kit.
  *
- * These three are complete single-file apps built exactly the way the
+ * These are complete single-file apps built exactly the way the
  * generation brief tells an artifact to be built (backend
  * services/artifact_design.py): the kit stylesheet, a design direction, the
  * icon sprite and real features. They live as plain .html files so they can be
@@ -10,6 +10,7 @@
 import taskOrganiser from './task-organiser.html?raw'
 import expenseSplitter from './expense-splitter.html?raw'
 import sipPlanner from './sip-planner.html?raw'
+import costTracker from './cost-tracker.html?raw'
 
 export const todo = {
   id: 'task-organiser',
@@ -33,4 +34,12 @@ export const sip = {
   description: 'Monthly SIP needed for a goal, with step-ups, a growth chart and yearly table.',
   icon: '📈',
   html: sipPlanner,
+}
+
+export const costs = {
+  id: 'cost-tracker',
+  name: 'Cost tracker',
+  description: 'Project costs and cash flow for an agency: retainers, one-time fees, licences, receivables and a 12-month forecast, shared live.',
+  icon: '💼',
+  html: costTracker,
 }

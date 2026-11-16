@@ -48,7 +48,7 @@ function PasswordPane({ token, onUnlocked, onGone, onRequest }) {
       setViewUnlock(token, res?.unlock_token || '')
       onUnlocked()
     } catch (err) {
-      if (err?.status === 404 || err?.status === 410) { onGone?.(err.message); return }
+      if (err?.status === 404) { onGone(err.message); return }
       setError(err?.status === 429 ? (err.message || 'Too many attempts. Wait a few minutes and try again.')
         : err?.code === 'incorrect_password' ? 'That password isn’t right. Check it and try again.'
           : (err?.message || 'Something went wrong. Please try again.'))
@@ -84,11 +84,8 @@ function PasswordPane({ token, onUnlocked, onGone, onRequest }) {
   )
 }
 
-/**
- * The "request the password" form. `send(data)` posts it; by default to the
- * shared view `token`, and published pages pass their own.
- */
-export function RequestPane({ token, send, owner = 'link', onSent, onBack, onGone }) {
+/** The "request the password" form. `sendRequest(data)` sends it (a shared view's by default; a page passes its own). */
+export function RequestPane({ token, onSent, onBack, onGone, sendRequest, noun = 'link' }) {
   const id = useId()
   const [form, setForm] = useState({ name: '', email: '', message: '', website: '' })
   const [errors, setErrors] = useState({})
@@ -122,11 +119,11 @@ export function RequestPane({ token, send, owner = 'link', onSent, onBack, onGon
     if (first) { refs[first].current?.focus(); return }
     setLoading(true)
     try {
-      const data = { name: form.name.trim(), email: form.email.trim(), message: form.message.trim() || null, website: form.website }
-      await (send ? send(data) : api.sharedViews.requestAccess(token, data))
+      const payload = { name: form.name.trim(), email: form.email.trim(), message: form.message.trim() || null, website: form.website }
+      await (sendRequest ? sendRequest(payload) : api.sharedViews.requestAccess(token, payload))
       onSent(form.email.trim())
     } catch (err) {
-      if (err?.status === 404 || err?.status === 410) { onGone?.(err.message); return }
+      if (err?.status === 404) { onGone(err.message); return }
       setFormError(err?.message || 'Couldn’t send the request. Please try again.')
     } finally { setLoading(false) }
   }
@@ -163,7 +160,7 @@ export function RequestPane({ token, send, owner = 'link', onSent, onBack, onGon
       {formError && <div id={`${id}-form-err`} role="alert" style={{ ...errText, marginTop: 12 }}>{formError}</div>}
       <button type="submit" disabled={loading} style={primary(loading)}>{loading ? 'Sending…' : 'Send request'}</button>
       <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--pv-mute)', lineHeight: 1.5 }}>
-        The owner of this {owner} will see your name, email and message. If they approve, the password is emailed to you.
+        The owner of this {noun} will see your name, email and message. If they approve, the password is emailed to you.
       </p>
       <div style={{ textAlign: 'center', marginTop: 4 }}>
         <button type="button" onClick={onBack} style={linkBtn}>I have the password</button>

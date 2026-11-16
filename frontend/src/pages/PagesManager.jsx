@@ -2115,6 +2115,16 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
   const [conflictBusy, setConflictBusy] = useState(false)
   const [notice, setNotice] = useState(null)          // { kind: 'published' | 'restored', text }
   const [shareOpen, setShareOpen] = useState(false)
+  // A notification about a password request links to /pages/<id>?share=requests.
+  const [openRequests] = useState(() => { try { return new URLSearchParams(window.location.search).get('share') === 'requests' } catch { return false } })
+  const [pendingRequests, setPendingRequests] = useState(0)
+  useEffect(() => { if (openRequests) setShareOpen(true) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!currentId || !form.is_password_protected) { setPendingRequests(0); return undefined }
+    let live = true
+    Promise.resolve(api.pages.access?.(currentId)).then(r => { if (live && r) setPendingRequests(r.pending || 0) }).catch(() => {})
+    return () => { live = false }
+  }, [currentId, form.is_password_protected])
   const [publishing, setPublishing] = useState(false)
   const publishingRef = useRef(false)
   const [studioOpen, setStudioOpen] = useState(false)
@@ -2616,6 +2626,10 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
           <button ref={shareBtnRef} type="button" onClick={() => setShareOpen(o => !o)} aria-expanded={shareOpen} aria-haspopup="dialog"
             style={{ ...btnSecondary, padding:'7px 12px', display:'inline-flex', alignItems:'center', gap:6, flexShrink:0 }}>
             <Share2 size={14} /> Share
+            {pendingRequests > 0 && (
+              <span aria-label={`${pendingRequests} access request${pendingRequests === 1 ? '' : 's'} waiting`}
+                style={{ minWidth:18, height:18, padding:'0 5px', borderRadius:999, background:'var(--fin-negative)', color:'#fff', fontSize:10.5, fontWeight:700, display:'inline-grid', placeItems:'center' }}>{pendingRequests}</span>
+            )}
           </button>
         )}
         {publishBtn}
@@ -2789,7 +2803,8 @@ function PageEditor({ page, ctx, initialType, initialTitle, folders = [], onClos
         isPublished={isPublished} hasUnpublished={hasUnpublished || (isPublished && dirty)} canPublish={!!form.title.trim()}
         busy={publishing} onPublish={publish} onUnpublish={unpublish} onSavePassword={savePassword}
         onCopied={() => onToast?.('Link copied')}
-        collectsData={isArtifact && /fintrack\.db\b/.test(form.content || '')} />
+        collectsData={isArtifact && /fintrack\.db\b/.test(form.content || '')}
+        pageId={currentId} openRequests={openRequests} onPendingRequests={setPendingRequests} />
     </div>
   )
   return fullscreen ? <Overlay>{body}</Overlay> : body

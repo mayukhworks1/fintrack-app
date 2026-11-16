@@ -6,7 +6,7 @@ import margin from './margin'
 import feedback from './feedback'
 import currency from './currency'
 import pomodoro from './pomodoro'
-import { sip, splitter, todo } from './kit'
+import { costs, sip, splitter, todo } from './kit'
 import signup from './signup'
 
 /**
@@ -15,7 +15,7 @@ import signup from './signup'
  * list (the task organiser) and the sign-up sheet keep their data in the
  * cloud (window.fintrack.db), shared live with everyone who has the link.
  */
-export const ARTIFACT_TEMPLATES = [todo, signup, splitter, sip, gst, tds, emi, ageing, margin, feedback, currency, pomodoro]
+export const ARTIFACT_TEMPLATES = [costs, todo, signup, splitter, sip, gst, tds, emi, ageing, margin, feedback, currency, pomodoro]
 
 export function templateTitle(t) {
   return t.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || t.name

@@ -575,10 +575,7 @@ async def unlock_public_view(token: str, body: UnlockBody, request: Request):
 
 # ── Request the password (public) ──────────────────────────────────────────────
 
-_REQUEST_ACCEPTED = {
-    "ok": True,
-    "message": "Request sent. If it's approved, the password will be emailed to you.",
-}
+_REQUEST_ACCEPTED = SA.REQUEST_ACCEPTED
 
 
 @router.post("/api/public/view/{token}/access-request", status_code=202)
@@ -597,20 +594,7 @@ async def request_public_view_access(token: str, body: AccessRequestBody, reques
     if (body.website or "").strip():
         return _REQUEST_ACCEPTED
 
-    errors: dict[str, str] = {}
-    name = SA.clean_text(body.name, SA.NAME_MAX + 1, single_line=True)
-    if not name:
-        errors["name"] = "Enter your name"
-    elif len(name) > SA.NAME_MAX:
-        errors["name"] = f"Use at most {SA.NAME_MAX} characters"
-    try:
-        email = SA.validate_email(body.email)
-    except ValueError as e:
-        errors["email"] = str(e)
-        email = ""
-    message = SA.clean_text(body.message, SA.MESSAGE_MAX + 1, single_line=False)
-    if len(message) > SA.MESSAGE_MAX:
-        errors["message"] = f"Use at most {SA.MESSAGE_MAX} characters"
+    fields, errors = SA.validate_request(body.name, body.email, body.message)
     if errors:
         raise HTTPException(status_code=422, detail={
             "code": "invalid", "message": next(iter(errors.values())), "fields": errors,
@@ -619,38 +603,13 @@ async def request_public_view_access(token: str, body: AccessRequestBody, reques
     view = await _protected_view_or_404(token)
     if not view.get("is_password_protected"):
         raise HTTPException(status_code=404, detail="This link does not need a password")
-    if not await SA.rate_ok(f"request-email:{token}:{email.lower()}", 3, 24 * 60 * 60):
-        return _REQUEST_ACCEPTED
 
     pool = _pool_or_503()
     async with pool.acquire() as conn:
-        dup = await conn.fetchval(
-            "SELECT 1 FROM shared_view_access_requests WHERE view_token = $1 AND lower(email) = lower($2) "
-            "AND status = 'pending' LIMIT 1", token, email)
-        if dup:
-            return _REQUEST_ACCEPTED
-        row = await conn.fetchrow(
-            "INSERT INTO shared_view_access_requests (view_token, name, email, message, ip, user_agent, link_origin) "
-            "VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, NULLIF($7, '')) RETURNING id",
-            token, name, email, message, ip[:45], request.headers.get("user-agent", "")[:500],
-            SA.origin_from_headers(request),
-        )
         secret = await conn.fetchrow(SA.SECRET_SQL, token)
-        await SA.audit(conn, "share_access.requested", request=request, email=email,
-                       metadata={"view_token": token, "request_id": str(row["id"]), "name": name})
-
-    req = {"id": str(row["id"]), "name": name, "email": email, "message": message}
-    domains = SA.load_json_list(secret["auto_approve_domains"])
-    if SA.domain_auto_approved(email, domains) and SA.mailer_configured():
-        try:
-            await SA.decide(pool, req["id"], "approve", request=request, via="auto")
-            return _REQUEST_ACCEPTED
-        except (ValueError, LookupError) as exc:
-            # Fall back to asking the owner (e.g. the stored password cannot be read).
-            SA.logger.warning("auto-approve failed for %s: %s", token, exc)
-    owner_view = {"token": token, "title": secret["title"], "resource_type": secret["resource_type"],
-                  "owner_user_id": secret["owner_user_id"]}
-    await SA.notify_owners(pool, owner_view, req, request)
+    if not secret:
+        raise HTTPException(status_code=404, detail="Shared view not found")
+    await SA.submit_request(pool, SA.view_target(secret), fields, request)
     return _REQUEST_ACCEPTED
 
 
@@ -697,8 +656,10 @@ async def _signed_request(r: str, a: str, e: str, s: str):
     pool = _pool_or_503()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT r.id, r.name, r.email, r.status, v.title FROM shared_view_access_requests r "
-            "JOIN shared_views v ON v.token = r.view_token WHERE r.id = $1::uuid", r)
+            "SELECT r.id, r.name, r.email, r.status, r.page_id, COALESCE(v.title, p.title) AS title "
+            "FROM shared_view_access_requests r "
+            "LEFT JOIN shared_views v ON v.token = r.view_token "
+            "LEFT JOIN published_pages p ON p.id = r.page_id WHERE r.id = $1::uuid", r)
     if not row:
         return None, _decide_page("Request not found", "The link or the request has been deleted.", tone="warn",
                                   status=404)
@@ -715,7 +676,7 @@ async def decide_from_email_confirm(r: str = "", a: str = "", e: str = "", s: st
         return err
     esc = SA.html.escape
     who = f"<strong>{esc(row['name'])}</strong> ({esc(row['email'])})"
-    link = f"<strong>{esc(row['title'] or 'Shared view')}</strong>"
+    link = f"<strong>{esc(row['title'] or ('Untitled page' if row['page_id'] else 'Shared view'))}</strong>"
     if row["status"] != "pending":
         return _decide_page(f"Already {row['status']}", f"The request from {who} for {link} was already {row['status']}.")
     qs = esc(urlencode({"r": r, "a": a, "e": e, "s": s}))
@@ -750,6 +711,7 @@ async def decide_from_email(request: Request, r: str = "", a: str = "", e: str =
         return _decide_page("Request denied", f"{who} {said}.", tone="ok")
     if result.get("sent"):
         return _decide_page("Password sent", f"{who} was emailed the link and its password.", tone="ok")
+    where = "the page's Share → Access requests" if row["page_id"] else "Links → Access requests"
     return _decide_page("Approved, but not emailed",
-                        "The email couldn't be sent. Open FinTrack → Links → Access requests to see the password "
+                        f"The email couldn't be sent. Open FinTrack → {where} to see the password "
                         "and share it yourself.", tone="warn")

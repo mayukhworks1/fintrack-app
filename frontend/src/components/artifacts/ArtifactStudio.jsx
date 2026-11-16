@@ -31,6 +31,7 @@ export const PROMPT_SUGGESTIONS = [
   { label: 'SIP goal planner', prompt: 'A savings goal planner that shows the monthly SIP needed to reach a target amount by a date, at an expected return' },
   { label: 'Cash runway', prompt: 'A cash runway calculator: cash in bank, monthly costs and expected income, showing how many months the cash lasts' },
   { label: 'Expense splitter', prompt: 'An expense splitter for a team trip: add people and expenses, and see who owes whom' },
+  { label: 'Finance', prompt: 'A project cost and cash-flow planner for an agency: projects by client with one-time fees, monthly retainers, advances and licence resale, cost lines by category, receivables aging and a 12-month forecast' },
   { label: 'Client onboarding checklist', prompt: 'A client onboarding checklist with progress, a note per step and a reset button' },
 ]
 

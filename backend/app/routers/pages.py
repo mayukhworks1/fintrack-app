@@ -139,6 +139,15 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+def _password_columns(password: str | None) -> tuple[str | None, str | None]:
+    """(password_hash, password_enc) for a page password, or (None, None).
+    The encrypted copy is the shared views scheme (services/share_access.py)."""
+    if not password:
+        return None, None
+    from ..services.share_access import encrypt_password
+    return _hash_password(password), encrypt_password(password)
+
+
 async def _geo_lookup(ip: str) -> dict:
     if not ip or ip in ("127.0.0.1", "::1", "localhost"):
         return {}
@@ -928,17 +937,21 @@ async def _create_page(body: CreatePageBody, request: Request, role: str, parent
                 if row:
                     return _page_dict(row)
 
-        pw_hash = _hash_password(body.password) if body.is_password_protected and body.password else None
+        pw_hash, pw_enc = _password_columns(body.password if body.is_password_protected else None)
         _, expires_at = _parse_expiry(body.expires_at)
         cols = ("slug, title, content_type, content, metadata, "
                 "is_password_protected, password_hash, created_by, updated_by, expires_at")
         vals = "$1,$2,$3,$4,$5,$6,$7,$8,$8,$9"
         args: list[Any] = [slug, body.title, body.content_type, content, json.dumps(metadata),
                            body.is_password_protected, pw_hash, user_id, expires_at]
+        if pw_enc:
+            cols += ", password_enc"
+            args.append(pw_enc)
+            vals += f",${len(args)}"
         if parent_id is not None:
             cols += ", parent_id"
-            vals += ",$10"
             args.append(parent_id)
+            vals += f",${len(args)}"
 
         async with (conn.transaction() if dedupe_table else contextlib.nullcontext()):
             if dedupe_table:
@@ -1590,7 +1603,9 @@ async def update_page(
         if body.is_password_protected is not None:
             updates["is_password_protected"] = body.is_password_protected
         if body.password is not None:
-            updates["password_hash"] = _hash_password(body.password)
+            # The hash checks visitors; the encrypted copy lets an approved
+            # access request be emailed the password (routers/page_access.py).
+            updates["password_hash"], updates["password_enc"] = _password_columns(body.password)
         given, expires_at = _parse_expiry(body.expires_at)
         if given:
             updates["expires_at"] = expires_at
@@ -2420,6 +2435,8 @@ def _page_dict(row) -> dict:
     d["expires_at"] = _dt(d.get("expires_at"))
     d["metadata"] = _meta(d.get("metadata"))
     d.pop("password_hash", None)
+    d.pop("password_enc", None)
+    d.pop("auto_approve_domains", None)
     d.pop("asset_paths", None)
     _drafts_fields(d)
     if "parent_id" in d and d["parent_id"] is not None:

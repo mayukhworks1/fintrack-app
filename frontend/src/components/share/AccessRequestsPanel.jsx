@@ -1,6 +1,8 @@
 // Links → Access requests: people who asked for a protected link's password.
 // Approve emails them the link and its current password; Deny can send a
 // short note. Without a mailer, approving shows the password to pass on.
+// A published page's Share popover shows the same list for that page
+// (pass `pageId`): its requests go to the page routes.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Inbox, Loader2, Mail, RefreshCw, X } from 'lucide-react'
 import { api } from '../../services/api'
@@ -28,7 +30,7 @@ function ManualShare({ result, onDone }) {
   useEffect(() => { ref.current?.focus() }, [])
   const why = result.reason === 'email_not_configured'
     ? 'Email isn’t set up on this server, so nothing was sent.'
-    : 'The email couldn’t be sent.'
+    : result.reason === 'manual' ? 'Approved without an email.' : 'The email couldn’t be sent.'
   return (
     <div ref={ref} tabIndex={-1} role="alert" className="mt-2 rounded-xl p-3 space-y-2 outline-none"
       style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)' }}>
@@ -45,39 +47,46 @@ function ManualShare({ result, onDone }) {
           <code className="flex-1 min-w-0 text-sm font-mono truncate px-2 py-1.5 rounded-lg" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}>{result.password}</code>
           <CopyButton value={result.password} />
         </div>
-      ) : <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>This link no longer has a password.</p>}
+      ) : result.reason === 'manual'
+        ? <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>Send them the link and the password yourself.</p>
+        : <p className="text-[11px]" style={{ color: 'var(--text-2)' }}>This link no longer has a password.</p>}
       <button type="button" onClick={onDone} className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>Done</button>
     </div>
   )
 }
 
-function RequestRow({ r, onDecided }) {
+function RequestRow({ r, onDecided, actions }) {
   const { showToast } = useToast()
   const [busy, setBusy] = useState('')
   const [denying, setDenying] = useState(false)
   const [note, setNote] = useState('')
   const [notify, setNotify] = useState(true)
   const [manual, setManual] = useState(null)
+  const [notStored, setNotStored] = useState('')
   const noteRef = useRef(null)
 
   useEffect(() => { if (denying) noteRef.current?.focus() }, [denying])
 
-  async function approve() {
+  async function approve(opts = {}) {
     setBusy('approve')
     try {
-      const res = await api.sharedViews.approveRequest(r.id)
+      const res = await actions.approve(r, opts)
+      setNotStored('')
       if (res?.sent) showToast(`Password emailed to ${r.email}`, 'success')
       else setManual(res)
       onDecided({ ...r, ...(res?.request || {}), status: 'approved' }, !res?.sent)
     } catch (e) {
-      showToast(e.message || 'Could not approve', 'error')
+      // A page password set before encrypted copies were kept cannot be
+      // emailed: set it again, or approve and share it by hand.
+      if (e?.code === 'password_not_stored') setNotStored(e.message || 'Set the password again, then approve.')
+      else showToast(e.message || 'Could not approve', 'error')
     } finally { setBusy('') }
   }
 
   async function deny() {
     setBusy('deny')
     try {
-      await api.sharedViews.denyRequest(r.id, { note: note.trim() || null, notify })
+      await actions.deny(r, { note: note.trim() || null, notify })
       showToast('Request denied', 'success')
       setDenying(false)
       onDecided({ ...r, status: 'denied', decision_note: note.trim() || null })
@@ -134,12 +143,35 @@ function RequestRow({ r, onDecided }) {
           </div>
         </div>
       )}
+      {notStored && pending && (
+        <div role="alert" className="mt-2 rounded-xl p-3 space-y-2" style={{ background: 'color-mix(in srgb, var(--fin-warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)' }}>
+          <p className="text-xs" style={{ color: 'var(--text-1)' }}>{notStored}</p>
+          <button type="button" onClick={() => approve({ manual: true })} disabled={!!busy} className="btn-ghost text-xs px-3 py-1.5">
+            Approve without email, I’ll share it
+          </button>
+        </div>
+      )}
       {manual && <ManualShare result={manual} onDone={() => setManual(null)} />}
     </li>
   )
 }
 
-export default function AccessRequestsPanel({ resourceType = '', onPendingChange }) {
+const VIEW_ACTIONS = {
+  load: (resourceType) => api.sharedViews.accessRequests({ resource_type: resourceType }),
+  approve: (r) => api.sharedViews.approveRequest(r.id),
+  deny: (r, data) => api.sharedViews.denyRequest(r.id, data),
+}
+
+function pageActions(pageId) {
+  return {
+    load: () => api.pages.accessRequests(pageId),
+    approve: (r, opts = {}) => api.pages.approveRequest(pageId, r.id, opts.manual ? { manual: true } : {}),
+    deny: (r, data) => api.pages.denyRequest(pageId, r.id, data),
+  }
+}
+
+export default function AccessRequestsPanel({ resourceType = '', pageId = '', onPendingChange, compact = false }) {
+  const actions = pageId ? pageActions(pageId) : VIEW_ACTIONS
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -152,7 +184,7 @@ export default function AccessRequestsPanel({ resourceType = '', onPendingChange
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const res = await api.sharedViews.accessRequests({ resource_type: resourceType })
+      const res = await actions.load(resourceType)
       setItems(res?.requests || [])
       setRecent(new Set())
       setMailer(res?.mailer_configured !== false)
@@ -160,7 +192,7 @@ export default function AccessRequestsPanel({ resourceType = '', onPendingChange
     } catch (e) {
       setError(e.message || 'Could not load requests')
     } finally { setLoading(false) }
-  }, [resourceType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [resourceType, pageId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
@@ -203,11 +235,11 @@ export default function AccessRequestsPanel({ resourceType = '', onPendingChange
         <div className="text-center py-8">
           <Inbox size={22} className="mx-auto mb-2 opacity-40" style={{ color: 'var(--text-3)' }} aria-hidden="true" />
           <p className="text-sm" style={{ color: 'var(--text-3)' }}>{filter === 'pending' ? 'No requests waiting.' : 'No requests here.'}</p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>When someone asks for a protected link’s password, it shows up here.</p>
+          {!compact && <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>When someone asks for a protected {pageId ? 'page' : 'link'}’s password, it shows up here.</p>}
         </div>
       )}
       <ul className="space-y-2">
-        {shown.map(r => <RequestRow key={r.id} r={r} onDecided={decided} />)}
+        {shown.map(r => <RequestRow key={r.id} r={r} onDecided={decided} actions={actions} />)}
       </ul>
     </section>
   )

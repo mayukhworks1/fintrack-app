@@ -15,6 +15,11 @@ Password protection for shared view links, and "request the password".
 
 Signed email links open a confirmation page; only its POST acts. Mail
 scanners that prefetch links therefore cannot approve anything.
+
+Published pages (routers/page_access.py) use the same requests table, the same
+validation, limits, emails and decisions: a request row points at either a
+shared view (view_token) or a page (page_id). load_target() hides the
+difference from decide() and notify_owners().
 """
 
 from __future__ import annotations
@@ -92,6 +97,12 @@ def decrypt_password(token: Optional[str]) -> Optional[str]:
 
 class PasswordRequired(Exception):
     """The link has a password and the request carried no valid unlock token."""
+
+
+class PasswordNotStored(ValueError):
+    """A page password set before encrypted copies were kept: only its hash
+    exists, so it cannot be emailed. The owner sets it again, or approves
+    without an email and shares it by hand."""
 
 
 def require_unlocked(view: dict, unlock: Optional[str]) -> None:
@@ -405,17 +416,19 @@ def _fmt_expiry(expires_at: Any) -> str:
 
 
 def owner_email(*, link_title: str, name: str, email: str, message: str, approve_href: str,
-                deny_href: str, review_href: str, to_email: str) -> tuple[str, str, str]:
+                deny_href: str, review_href: str, to_email: str, kind: str = "view") -> tuple[str, str, str]:
     from .emailer import email_wrap_html
     subject = f"{name} asked for the password to “{link_title}”"
     msg_html = (
         f'<p style="margin:16px 0 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #2563eb;'
         f'border-radius:6px;color:#334155;white-space:pre-wrap">{_e(message)}</p>' if message else ""
     )
+    where = "Share → Access requests" if kind == "page" else "Links → Access requests"
+    what = "a published page" if kind == "page" else "a shared link"
     review = (f'<p style="margin:16px 0 0;font-size:13px;color:#64748b">Or review it in FinTrack: '
-              f'<a href="{_e(review_href)}" style="color:#2563eb">Links → Access requests</a></p>') if review_href else ""
+              f'<a href="{_e(review_href)}" style="color:#2563eb">{where}</a></p>') if review_href else ""
     body = f"""
-      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a">Password request for a shared link</h1>
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a">Password request for {what}</h1>
       <p style="margin:0">Someone asked for the password to <strong>{_e(link_title)}</strong>.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 0;font-size:14px;color:#334155">
         <tr><td style="padding:2px 12px 2px 0;color:#64748b">Name</td><td><strong>{_e(name)}</strong></td></tr>
@@ -438,7 +451,7 @@ def owner_email(*, link_title: str, name: str, email: str, message: str, approve
 
 
 def approved_email(*, link_title: str, name: str, url: str, password: Optional[str], expires_at: Any,
-                   to_email: str) -> tuple[str, str, str]:
+                   to_email: str, kind: str = "view") -> tuple[str, str, str]:
     from .emailer import email_wrap_html
     subject = f"Your access to “{link_title}”"
     pw_block = (
@@ -448,11 +461,12 @@ def approved_email(*, link_title: str, name: str, url: str, password: Optional[s
         if password else
         '<p style="margin:20px 0 0;color:#334155">This link no longer needs a password.</p>'
     )
+    open_label = "Open the page" if kind == "page" else "Open the shared view"
     body = f"""
       <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a">You're in, {_e(name)}</h1>
       <p style="margin:0">Your request to view <strong>{_e(link_title)}</strong> was approved.</p>
       {pw_block}
-      <div style="margin:22px 0 8px">{_button(url, "Open the shared view", "#2563eb")}</div>
+      <div style="margin:22px 0 8px">{_button(url, open_label, "#2563eb")}</div>
       <p style="margin:0;font-size:13px;color:#64748b;word-break:break-all">{_e(url)}</p>
       <p style="margin:16px 0 0;font-size:13px;color:#64748b">{_e(_fmt_expiry(expires_at))}
       Please keep the password to yourself; it may be changed at any time.</p>
@@ -497,7 +511,7 @@ def mailer_configured() -> bool:
 # ── Requests ─────────────────────────────────────────────────────────────────
 
 REQUEST_COLUMNS = (
-    "r.id, r.view_token, r.name, r.email, r.message, r.ip, r.user_agent, r.status, r.decided_via, "
+    "r.id, r.view_token, r.page_id, r.name, r.email, r.message, r.ip, r.user_agent, r.status, r.decided_via, "
     "r.decision_note, r.sent_at, r.decided_at, r.created_at, r.updated_at, r.decided_by"
 )
 
@@ -507,7 +521,7 @@ def request_dict(row) -> dict:
     for k, v in dict(row).items():
         if hasattr(v, "isoformat"):
             out[k] = v.isoformat()
-        elif k in ("id", "decided_by") and v is not None:
+        elif k in ("id", "decided_by", "page_id") and v is not None:
             out[k] = str(v)
         else:
             out[k] = v
@@ -531,16 +545,22 @@ async def recipients(conn, owner_user_id: Optional[str]) -> list[dict]:
 
 async def notify_owners(pool, view: dict, req: dict, request) -> None:
     """In-app notification and email for one new request. Runs after the
-    request is stored; a failure is logged and never reaches the visitor."""
-    title = view.get("title") or "Shared view"
+    request is stored; a failure is logged and never reaches the visitor.
+    `view` is a shared view ({token, title, resource_type, owner_user_id})
+    or a page target from load_target() ({kind: 'page', page_id, ...})."""
+    is_page = view.get("kind") == "page"
+    title = view.get("title") or ("Untitled page" if is_page else "Shared view")
     try:
         async with pool.acquire() as conn:
             people = await recipients(conn, view.get("owner_user_id"))
             payload = {
-                "view_token": view["token"], "view_title": title, "resource_type": view.get("resource_type"),
+                "view_token": view.get("token"), "view_title": title,
+                "resource_type": "page" if is_page else view.get("resource_type"),
                 "request_id": req["id"], "requester_name": req["name"], "requester_email": req["email"],
                 "excerpt": f"{req['name']} ({req['email']}) asked for the password",
             }
+            if is_page:
+                payload.update(page_id=view["page_id"], page_slug=view.get("slug"))
             if people:
                 await conn.executemany(
                     "INSERT INTO notifications (user_id, kind, payload) VALUES ($1::uuid, 'access_request', $2::jsonb)",
@@ -554,12 +574,15 @@ async def notify_owners(pool, view: dict, req: dict, request) -> None:
         return
     base = api_origin(request)
     fe = frontend_origin()
-    review = f"{fe}/{_PAGE_FOR.get(view.get('resource_type') or 'status', 'status')}?links=requests" if fe else ""
+    if is_page:
+        review = f"{fe}/pages/{view['page_id']}?share=requests" if fe else ""
+    else:
+        review = f"{fe}/{_PAGE_FOR.get(view.get('resource_type') or 'status', 'status')}?links=requests" if fe else ""
     for p in people:
         subject, text, body = owner_email(
             link_title=title, name=req["name"], email=req["email"], message=req.get("message") or "",
             approve_href=action_url(base, req["id"], "approve"), deny_href=action_url(base, req["id"], "deny"),
-            review_href=review, to_email=p["email"],
+            review_href=review, to_email=p["email"], kind="page" if is_page else "view",
         )
         try:
             await send_mail(p["email"], subject, text, body)
@@ -570,14 +593,76 @@ async def notify_owners(pool, view: dict, req: dict, request) -> None:
 _PAGE_FOR = {"status": "status", "projects": "projects", "invoices": "invoices", "tax-ledger": "tax"}
 
 
-async def decide(pool, request_id: str, action: str, *, request=None, via: str = "app",
-                 actor_user_id: Optional[str] = None, note: str = "", notify: bool = True) -> dict:
-    """Approve or deny one request.
+PAGE_SECRET_SQL = (
+    "SELECT id, slug, title, is_published, expires_at, deleted_at, is_password_protected, password_hash, "
+    "password_enc, auto_approve_domains, created_by FROM published_pages WHERE id = $1::uuid"
+)
 
-    Approval emails the requester the link and the link's CURRENT password
+
+def page_target(row) -> dict:
+    """A published page as decide() and notify_owners() see it."""
+    return {
+        "kind": "page", "page_id": str(row["id"]), "slug": row["slug"], "title": row["title"] or "Untitled page",
+        "owner_user_id": str(row["created_by"]) if row["created_by"] else None,
+        "protected": bool(row["is_password_protected"] and row["password_hash"]),
+        "password_hash": row["password_hash"], "password_enc": row["password_enc"],
+        "auto_approve_domains": load_json_list(row["auto_approve_domains"]),
+        "active": bool(row["is_published"]) and row["deleted_at"] is None,
+        "expires_at": row["expires_at"],
+    }
+
+
+def view_target(row) -> dict:
+    return {
+        "kind": "view", "token": row["token"], "title": row["title"] or "Shared view",
+        "resource_type": row["resource_type"],
+        "owner_user_id": str(row["owner_user_id"]) if row["owner_user_id"] else None,
+        "protected": bool(row["password_hash"]),
+        "password_hash": row["password_hash"], "password_enc": row["password_enc"],
+        "auto_approve_domains": load_json_list(row["auto_approve_domains"]),
+        "active": bool(row["is_active"]), "expires_at": row["expires_at"],
+    }
+
+
+async def load_target(conn, row) -> Optional[dict]:
+    """The shared view or page a request row is for, or None if it is gone."""
+    if row["page_id"]:
+        page = await conn.fetchrow(PAGE_SECRET_SQL, str(row["page_id"]))
+        return page_target(page) if page else None
+    view = await conn.fetchrow(SECRET_SQL, row["view_token"])
+    return view_target(view) if view else None
+
+
+def target_meta(target: dict) -> dict:
+    """The audit metadata that names what a request is for."""
+    return {"page_id": target["page_id"]} if target["kind"] == "page" else {"view_token": target["token"]}
+
+
+def target_url(target: dict, origin: str) -> str:
+    if target["kind"] == "page":
+        return f"{origin}/p/{target['slug']}"
+    return f"{origin}/view/{target['token']}"
+
+
+PAGE_PASSWORD_NOT_STORED = (
+    "This page's password was set before FinTrack kept a copy it can email. Set the password again "
+    "in Share → Password, then approve, or approve without emailing and share it yourself."
+)
+
+
+async def decide(pool, request_id: str, action: str, *, request=None, via: str = "app",
+                 actor_user_id: Optional[str] = None, note: str = "", notify: bool = True,
+                 manual: bool = False) -> dict:
+    """Approve or deny one request, for a shared view or a published page.
+
+    Approval emails the requester the link and its CURRENT password
     (decrypted now, so a request made before a password change gets the new
     one). Without a mailer, or when sending fails, the request is still
     approved and the password comes back for the owner to pass on.
+
+    `manual` approves without emailing anything: the owner shares the
+    password themselves (the fallback for a page whose password predates
+    encrypted copies, which raises PasswordNotStored otherwise).
 
     Returns {status, sent, reason?, password?, request}. `password` is only
     present when it could not be emailed; the email-link route never shows it.
@@ -594,31 +679,38 @@ async def decide(pool, request_id: str, action: str, *, request=None, via: str =
                 raise LookupError("Request not found")
             if row["status"] != "pending":
                 return {"status": row["status"], "already": True, "sent": False, "request": request_dict(row)}
-            view = await conn.fetchrow(SECRET_SQL, row["view_token"])
-            if not view:
-                raise LookupError("Link not found")
+            target = await load_target(conn, row)
+            if not target:
+                raise LookupError("Page not found" if row["page_id"] else "Link not found")
+            is_page = target["kind"] == "page"
             password = None
             if action == "approve":
-                if not view["is_active"]:
-                    raise ValueError("This link is disabled. Enable it before approving requests.")
-                if link_expired(view["expires_at"]):
-                    raise ValueError("This link has expired. Extend it before approving requests.")
-                if view["password_hash"]:
-                    password = decrypt_password(view["password_enc"])
+                if not target["active"]:
+                    raise ValueError("This page is not published. Publish it before approving requests." if is_page
+                                     else "This link is disabled. Enable it before approving requests.")
+                if link_expired(target["expires_at"]):
+                    raise ValueError(("This page's link has expired." if is_page else "This link has expired.")
+                                     + " Extend it before approving requests.")
+                if target["protected"] and not manual:
+                    password = decrypt_password(target["password_enc"])
                     if not password:
+                        if is_page and not target["password_enc"]:
+                            raise PasswordNotStored(PAGE_PASSWORD_NOT_STORED)
                         raise ValueError("The stored password can't be read (the encryption secret changed). "
-                                         "Set a new password on this link, then approve.")
+                                         f"Set a new password on this {'page' if is_page else 'link'}, then approve.")
             updated = await conn.fetchrow(
                 "UPDATE shared_view_access_requests SET status = $2, decided_by = $3::uuid, decided_via = $4, "
                 "decision_note = NULLIF($5, ''), decided_at = NOW(), updated_at = NOW() WHERE id = $1::uuid "
                 f"RETURNING {REQUEST_COLUMNS.replace('r.', '')}",
                 request_id, "approved" if action == "approve" else "denied", _uuid_or_none(actor_user_id), via, note,
             )
+            meta = {**target_meta(target), "request_id": str(row["id"]), "via": via}
             await audit(conn, f"share_access.{'approved' if action == 'approve' else 'denied'}", request=request,
                         actor_user_id=actor_user_id, email=row["email"],
-                        metadata={"view_token": row["view_token"], "request_id": str(row["id"]), "via": via})
+                        metadata={**meta, **({"manual": True} if manual and action == "approve" else {})})
 
-    title = view["title"] or "Shared view"
+    title = target["title"]
+    kind = target["kind"]
     result: dict[str, Any] = {"status": updated["status"], "sent": False, "request": request_dict(updated)}
     if action == "deny":
         if notify and mailer_configured():
@@ -627,17 +719,17 @@ async def decide(pool, request_id: str, action: str, *, request=None, via: str =
             result["sent"] = bool(sent.get("sent"))
         return result
 
-    url = f"{frontend_origin(stored=row['link_origin'])}/view/{row['view_token']}"
-    if not mailer_configured():
-        result.update(reason="email_not_configured", password=password, url=url)
+    url = target_url(target, frontend_origin(stored=row["link_origin"]))
+    if manual or not mailer_configured():
+        reason = "manual" if manual else "email_not_configured"
+        result.update(reason=reason, password=password, url=url)
         async with pool.acquire() as conn:
             await audit(conn, "share_access.send_skipped", request=request, actor_user_id=actor_user_id,
                         email=row["email"], status="manual",
-                        metadata={"view_token": row["view_token"], "request_id": str(row["id"]),
-                                  "reason": "email_not_configured"})
+                        metadata={**target_meta(target), "request_id": str(row["id"]), "reason": reason})
         return result
     subject, text, body = approved_email(link_title=title, name=row["name"], url=url, password=password,
-                                         expires_at=view["expires_at"], to_email=row["email"])
+                                         expires_at=target["expires_at"], to_email=row["email"], kind=kind)
     sent = await send_mail(row["email"], subject, text, body)
     ok = bool(sent.get("sent"))
     async with pool.acquire() as conn:
@@ -646,9 +738,77 @@ async def decide(pool, request_id: str, action: str, *, request=None, via: str =
                                "WHERE id = $1::uuid", request_id)
         await audit(conn, "share_access.sent" if ok else "share_access.send_failed", request=request,
                     actor_user_id=actor_user_id, email=row["email"], status="ok" if ok else "error",
-                    metadata={"view_token": row["view_token"], "request_id": str(row["id"]), "via": via,
+                    metadata={**target_meta(target), "request_id": str(row["id"]), "via": via,
                               **({} if ok else {"reason": sent.get("reason")})})
     result["sent"] = ok
     if not ok:
         result.update(reason=sent.get("reason") or "send_failed", password=password, url=url)
     return result
+
+
+# ── The visitor's request (shared by shared views and pages) ─────────────────
+
+REQUEST_ACCEPTED = {
+    "ok": True,
+    "message": "Request sent. If it's approved, the password will be emailed to you.",
+}
+
+
+def validate_request(name: Any, email: Any, message: Any) -> tuple[dict, dict]:
+    """({name, email, message}, errors by field). Errors empty means valid."""
+    errors: dict[str, str] = {}
+    clean_name = clean_text(name, NAME_MAX + 1, single_line=True)
+    if not clean_name:
+        errors["name"] = "Enter your name"
+    elif len(clean_name) > NAME_MAX:
+        errors["name"] = f"Use at most {NAME_MAX} characters"
+    try:
+        clean_email = validate_email(email)
+    except ValueError as e:
+        errors["email"] = str(e)
+        clean_email = ""
+    clean_message = clean_text(message, MESSAGE_MAX + 1, single_line=False)
+    if len(clean_message) > MESSAGE_MAX:
+        errors["message"] = f"Use at most {MESSAGE_MAX} characters"
+    return {"name": clean_name, "email": clean_email, "message": clean_message}, errors
+
+
+async def submit_request(pool, target: dict, fields: dict, request) -> None:
+    """Store a validated request for `target` (view_target / page_target),
+    then auto-approve it (its email domain is on the target's list and a
+    mailer is set up) or tell the owners. Duplicates (a pending request from
+    the same address, or a fourth in a day) are dropped without a word, so
+    the visitor's answer never reveals anything."""
+    name, email, message = fields["name"], fields["email"], fields["message"]
+    is_page = target["kind"] == "page"
+    key = target["page_id"] if is_page else target["token"]
+    if not await rate_ok(f"request-email:{'page:' if is_page else ''}{key}:{email.lower()}", 3, 24 * 60 * 60):
+        return
+    ip = (client_ip(request) or "unknown") if request is not None else "unknown"
+    col = "page_id" if is_page else "view_token"
+    cast = "::uuid" if is_page else ""
+    async with pool.acquire() as conn:
+        dup = await conn.fetchval(
+            f"SELECT 1 FROM shared_view_access_requests WHERE {col} = $1{cast} AND lower(email) = lower($2) "
+            "AND status = 'pending' LIMIT 1", key, email)
+        if dup:
+            return
+        row = await conn.fetchrow(
+            f"INSERT INTO shared_view_access_requests ({col}, name, email, message, ip, user_agent, link_origin) "
+            f"VALUES ($1{cast}, $2, $3, NULLIF($4, ''), $5, $6, NULLIF($7, '')) RETURNING id",
+            key, name, email, message, ip[:45],
+            (request.headers.get("user-agent", "")[:500] if request is not None else ""),
+            origin_from_headers(request) if request is not None else "",
+        )
+        await audit(conn, "share_access.requested", request=request, email=email,
+                    metadata={**target_meta(target), "request_id": str(row["id"]), "name": name})
+
+    req = {"id": str(row["id"]), "name": name, "email": email, "message": message}
+    if domain_auto_approved(email, target["auto_approve_domains"]) and mailer_configured():
+        try:
+            await decide(pool, req["id"], "approve", request=request, via="auto")
+            return
+        except (ValueError, LookupError) as exc:
+            # Fall back to asking the owner (e.g. the stored password cannot be read).
+            logger.warning("auto-approve failed for %s: %s", key, exc)
+    await notify_owners(pool, target, req, request)
