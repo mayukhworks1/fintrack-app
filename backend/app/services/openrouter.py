@@ -1349,7 +1349,7 @@ def _regex_extract_invoice(text: str) -> dict:
 
 # ── AI prompt (explicit about Indian invoice conventions) ─────────────
 _INVOICE_EXTRACT_SYSTEM = """\
-You are an invoice data extractor for TheWorks (Works Media and Allied Services LLP), an Indian digital agency.
+You are an invoice data extractor for TheWorks, an Indian digital agency.
 Extract invoice fields from the document text or image provided.
 
 CRITICAL FORMAT RULES — these are non-negotiable:
