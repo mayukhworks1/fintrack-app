@@ -834,6 +834,7 @@ export const api = {
     },
   },
   insights: {
+    revenueSheet: () => request('/api/insights/revenue-sheet', { fresh: true }),
     // The phone screens' insight cards and summary series for one scope.
     cards: (scope, tz = -new Date().getTimezoneOffset(), opts = {}) =>
       request(`/api/insights?scope=${encodeURIComponent(scope)}&tz=${encodeURIComponent(tz)}`, opts),

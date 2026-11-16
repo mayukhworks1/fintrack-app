@@ -3379,6 +3379,28 @@ export default function PagesManager() {
 
   // ── List actions ──────────────────────────────────────────────────────────
   const [cloning, setCloning] = useState(null)
+  const [buildingRevenue, setBuildingRevenue] = useState(false)
+
+  // A spreadsheet page filled from the workspace's own invoices, projects and
+  // status board, opened straight away.
+  const handleRevenueSheet = useStableCallback(async () => {
+    if (buildingRevenue) return
+    setBuildingRevenue(true)
+    try {
+      const sheet = await api.insights.revenueSheet()
+      const created = await api.pages.create({
+        title: sheet.title, content_type: 'csv', content: sheet.content,
+        slug: slugify(`project-revenue-${Date.now().toString(36)}`), metadata: { sheet: sheet.sheet },
+        client_request_id: newRequestId(),
+      })
+      if (created?.detail||created?.error) throw new Error(created.detail||created.error)
+      setPages(prev=>[listRow(created), ...prev])
+      refreshList()
+      openPage(created)
+      showToast(`Revenue sheet ready: ${sheet.projects} projects from your data`)
+    } catch (e) { showToast(friendlyError(e), false) }
+    finally { setBuildingRevenue(false) }
+  })
   const handlePublishToggle = useStableCallback(async (page) => {
     try {
       const updated = await api.pages.publish(page.id, !page.is_published)
@@ -3604,6 +3626,10 @@ export default function PagesManager() {
               <Search size={14} /> Go to page <kbd style={{ fontSize:10, color:'var(--text-3)', border:'1px solid var(--border)', borderRadius:4, padding:'0 4px', fontFamily:'inherit' }}>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
           )}
+          <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={handleRevenueSheet}
+            disabled={buildingRevenue} title="A spreadsheet of every project's billed, received, outstanding, costs and profit, filled from your invoices">
+            <BarChart2 size={15} strokeWidth={2} /> {buildingRevenue ? 'Building…' : 'Revenue sheet'}
+          </button>
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>newPage('artifact')}>
             <Puzzle size={15} strokeWidth={2} /> New artifact
           </button>

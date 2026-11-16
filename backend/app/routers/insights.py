@@ -16,7 +16,7 @@ from ..db.postgres import get_pool
 from ..services import insight_cards as ic
 from ..services.insights import build_excel_xml, build_simple_pdf, default_export_meta
 from ..utils.client_ip import client_ip
-from .deps import get_effective_permissions, owner_scope_email, require_auth, require_editor
+from .deps import get_effective_permissions, owner_scope_email, require_auth, require_editor, require_permission
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 logger = logging.getLogger("fintrack.insights")
@@ -274,3 +274,17 @@ async def insight_cards(
         except Exception as exc:
             logger.warning("insight cards: project facts unavailable: %s", exc)
     return ic.respond(scope, inv, prj, tz=tz)
+
+
+@router.get("/revenue-sheet")
+async def revenue_sheet(
+    _: str = Depends(require_auth),
+    _perm: str = Depends(require_permission("module.invoices.view")),
+):
+    """A project revenue spreadsheet filled from the workspace's invoices,
+    projects and status board, ready to save as a spreadsheet page."""
+    from ..services.revenue_sheet import build_sheet
+    pool = get_pool()
+    if pool is None:
+        raise HTTPException(503, "The database is not available right now.")
+    return await build_sheet(pool)
