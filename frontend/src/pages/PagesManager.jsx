@@ -777,6 +777,26 @@ const SHEET_TEMPLATES = [
     ['Column A','Column B','Column C','Column D','Column E','Column F'],
     ...Array.from({ length:20 }, () => ['','','','','','']),
   ]),
+  // The agency's own projects (Current Status, Nov 2026). Only amounts the
+  // status notes state are filled in; the rest are left for the owner.
+  sheetTemplate('Project revenue', '₹', [
+    ['Client','Project','Type','Contract value','Billed','Received','Outstanding','Costs','Profit','Margin','Status','Notes'],
+    ...[
+      ['Birla Open Minds','PMS – Phase 1.3','One-time','','','','','In progress','Final invoice 15 Sep 2026, overdue. Maintenance retainer proposed; CR V3 awaiting approval'],
+      ['Birla Open Minds','Innovine','Retainer','',40000,'','','In progress','₹40,000 one-time deployment + monthly retainer billed in advance (5 Oct, 5 Nov)'],
+      ['Birla Open Minds','Innovine Smart Path – Zoho CRM','Implementation + licences','',20000,'','','In progress','₹20,000 advance; balance on completion; commission on licences'],
+      ['Jacarti','Zoho Bigin','Licence resale','','','','','In progress','3 Zoho licences bought; billing structure pending'],
+      ['The Works (Inhouse)','AI Ranking Tracker','Non-billable','','','','','Paused','Free-tier credits exhausted'],
+      ['The Works (Inhouse)','Operation Management Console','Non-billable','','','','','Paused','Free-tier credits exhausted'],
+      ['The Works (Inhouse)','Zoho People – Internal','Non-billable','','','','','In progress','Internal configuration and maintenance'],
+    ].map(([client, project, type, contract, billed, received, costs, status, notes], i) => {
+      const r = i + 2
+      return [client, project, type, String(contract), String(billed), String(received), `=E${r}-F${r}`, String(costs),
+        `=F${r}-H${r}`, `=IF(F${r}=0,0,I${r}/F${r})`, status, notes]
+    }),
+    ['Total','','','=SUM(D2:D8)','=SUM(E2:E8)','=SUM(F2:F8)','=SUM(G2:G8)','=SUM(H2:H8)','=SUM(I2:I8)','=IF(F9=0,0,I9/F9)','',''],
+  ], { colWidths:{ 0:160, 1:220, 2:170, 11:380 },
+       colFormats:{ 3:INR, 4:INR, 5:INR, 6:INR, 7:INR, 8:INR, 9:{ type:'percent', decimals:1 } }, colAlign:{ 10:'center' } }),
   sheetTemplate('Budget vs actual', '💰', [
     ['Category','Budget','Actual','Difference','Variance %','Notes'],
     ...[['Rent',45000,45000,''],['Salaries',350000,362000,'Two contractors this quarter'],['Software',18000,21500,''],
