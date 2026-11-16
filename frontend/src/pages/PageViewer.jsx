@@ -8,6 +8,7 @@ import { docHeadings, docWordCount, docExcerpt } from '../components/blocks/docT
 import ArtifactFrame from '../components/artifacts/ArtifactFrame'
 import { PublicBreadcrumbs, PublicSubPages } from '../components/pagetree/PublicPageFamily'
 import { PV_THEME, BrandScreen, LockIcon, ClockIcon, SearchIcon } from '../components/public/BrandScreen'
+import { RequestPane, MailIcon, SentIcon, primary, linkBtn } from './sharedview/ProtectedLink'
 
 // Block documents render through the editor's own schema in read-only mode,
 // loaded only when a page of that type is opened.
@@ -267,11 +268,39 @@ function TableOfContents({ items }) {
 // ---------------------------------------------------------------------------
 // Password prompt
 // ---------------------------------------------------------------------------
-function PasswordPrompt({ title, onSubmit, error, loading }) {
+function PasswordPrompt({ title, slug, onSubmit, error, loading, onGone }) {
   const [pw, setPw] = useState('')
   const [show, setShow] = useState(false)
+  const [pane, setPane] = useState('password')
+  const [sentTo, setSentTo] = useState('')
+  const heading = useRef(null)
+  const moved = useRef(false)
+  // Moving between screens puts focus on the new heading, so a screen reader
+  // announces where the visitor is.
+  useEffect(() => {
+    if (!moved.current) { moved.current = true; return }
+    if (pane !== 'request') heading.current?.focus()
+  }, [pane])
+
+  if (pane === 'request') return (
+    <BrandScreen headingRef={heading} icon={<MailIcon />} title="Request the password"
+      message="Tell the owner who you are. If they approve, you’ll get the password by email.">
+      <RequestPane owner="page" send={(data) => api.pages.publicRequestAccess(slug, data)}
+        onBack={() => setPane('password')} onGone={onGone}
+        onSent={(email) => { setSentTo(email); setPane('sent') }} />
+    </BrandScreen>
+  )
+  if (pane === 'sent') return (
+    <BrandScreen headingRef={heading} icon={<SentIcon />} title="Request sent">
+      <p role="status" style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: 'var(--pv-mute)' }}>
+        If the owner approves, the password will be emailed to <strong style={{ color: 'var(--pv-ink)', overflowWrap: 'anywhere' }}>{sentTo}</strong>.
+        You can close this page.
+      </p>
+      <button type="button" onClick={() => setPane('password')} style={{ ...primary(false), marginTop: 22 }}>I have the password</button>
+    </BrandScreen>
+  )
   return (
-    <BrandScreen icon={<LockIcon />} title={title || 'Protected page'} message="This page is password protected. Enter the password you were given to open it.">
+    <BrandScreen headingRef={heading} icon={<LockIcon />} title={title || 'Protected page'} message="This page is password protected. Enter the password you were given to open it.">
       <form onSubmit={e => { e.preventDefault(); if (pw) onSubmit(pw) }} style={{ marginTop: 24, textAlign: 'left' }}>
         <label htmlFor="pv-pw" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--pv-text)', marginBottom: 6 }}>Password</label>
         <div style={{ position: 'relative' }}>
@@ -289,6 +318,10 @@ function PasswordPrompt({ title, onSubmit, error, loading }) {
           {loading ? 'Checking…' : 'Open page'}
         </button>
       </form>
+      <p style={{ margin: '14px 0 0', fontSize: 14, color: 'var(--pv-mute)' }}>
+        Don’t have the password?{' '}
+        <button type="button" onClick={() => setPane('request')} style={linkBtn}>Request it</button>
+      </p>
     </BrandScreen>
   )
 }
@@ -662,7 +695,8 @@ export default function PageViewer() {
 
   if (state === 'requires_password') return (
     <><style>{PV_THEME}</style>
-      <PasswordPrompt title={page?.title} onSubmit={handlePasswordSubmit} error={pwError} loading={pwLoading} />
+      <PasswordPrompt title={page?.title} slug={slug} onSubmit={handlePasswordSubmit} error={pwError} loading={pwLoading}
+        onGone={() => setState('expired')} />
     </>
   )
 

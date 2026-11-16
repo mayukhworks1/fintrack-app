@@ -6,12 +6,12 @@ import { api } from '../../services/api'
 import { emailError, setViewUnlock } from '../../utils/viewUnlock'
 import { PV_THEME, BrandScreen, LockIcon } from '../../components/public/BrandScreen'
 
-const MailIcon = () => (
+export const MailIcon = () => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" />
   </svg>
 )
-const SentIcon = () => (
+export const SentIcon = () => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 6 9 17l-5-5" />
   </svg>
@@ -23,11 +23,11 @@ const input = (bad) => ({
   borderRadius: 10, fontSize: 16, boxSizing: 'border-box', outline: 'none', background: 'var(--pv-subtle)', color: 'var(--pv-ink)',
   fontFamily: 'inherit',
 })
-const primary = (off) => ({
+export const primary = (off) => ({
   width: '100%', marginTop: 14, padding: '12px 0', minHeight: 44, background: 'linear-gradient(90deg,#2563eb,#4f46e5)',
   opacity: off ? 0.6 : 1, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: off ? 'default' : 'pointer',
 })
-const linkBtn = {
+export const linkBtn = {
   background: 'none', border: 'none', padding: '10px 4px', minHeight: 44, color: '#2563eb', fontSize: 14, fontWeight: 600, cursor: 'pointer',
 }
 const errText = { color: '#ef4444', fontSize: 13, marginTop: 6 }
@@ -48,7 +48,7 @@ function PasswordPane({ token, onUnlocked, onGone, onRequest }) {
       setViewUnlock(token, res?.unlock_token || '')
       onUnlocked()
     } catch (err) {
-      if (err?.status === 404) { onGone(err.message); return }
+      if (err?.status === 404 || err?.status === 410) { onGone?.(err.message); return }
       setError(err?.status === 429 ? (err.message || 'Too many attempts. Wait a few minutes and try again.')
         : err?.code === 'incorrect_password' ? 'That password isn’t right. Check it and try again.'
           : (err?.message || 'Something went wrong. Please try again.'))
@@ -84,7 +84,11 @@ function PasswordPane({ token, onUnlocked, onGone, onRequest }) {
   )
 }
 
-function RequestPane({ token, onSent, onBack, onGone }) {
+/**
+ * The "request the password" form. `send(data)` posts it; by default to the
+ * shared view `token`, and published pages pass their own.
+ */
+export function RequestPane({ token, send, owner = 'link', onSent, onBack, onGone }) {
   const id = useId()
   const [form, setForm] = useState({ name: '', email: '', message: '', website: '' })
   const [errors, setErrors] = useState({})
@@ -118,12 +122,11 @@ function RequestPane({ token, onSent, onBack, onGone }) {
     if (first) { refs[first].current?.focus(); return }
     setLoading(true)
     try {
-      await api.sharedViews.requestAccess(token, {
-        name: form.name.trim(), email: form.email.trim(), message: form.message.trim() || null, website: form.website,
-      })
+      const data = { name: form.name.trim(), email: form.email.trim(), message: form.message.trim() || null, website: form.website }
+      await (send ? send(data) : api.sharedViews.requestAccess(token, data))
       onSent(form.email.trim())
     } catch (err) {
-      if (err?.status === 404) { onGone(err.message); return }
+      if (err?.status === 404 || err?.status === 410) { onGone?.(err.message); return }
       setFormError(err?.message || 'Couldn’t send the request. Please try again.')
     } finally { setLoading(false) }
   }
@@ -160,7 +163,7 @@ function RequestPane({ token, onSent, onBack, onGone }) {
       {formError && <div id={`${id}-form-err`} role="alert" style={{ ...errText, marginTop: 12 }}>{formError}</div>}
       <button type="submit" disabled={loading} style={primary(loading)}>{loading ? 'Sending…' : 'Send request'}</button>
       <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--pv-mute)', lineHeight: 1.5 }}>
-        The owner of this link will see your name, email and message. If they approve, the password is emailed to you.
+        The owner of this {owner} will see your name, email and message. If they approve, the password is emailed to you.
       </p>
       <div style={{ textAlign: 'center', marginTop: 4 }}>
         <button type="button" onClick={onBack} style={linkBtn}>I have the password</button>
