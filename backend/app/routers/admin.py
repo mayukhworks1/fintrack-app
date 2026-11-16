@@ -1825,6 +1825,7 @@ async def admin_test_email(
 
 @router.post("/sync/trigger")
 async def admin_trigger_sync(
+    apply_deletions: bool = False,
     _: str = Depends(require_admin),
     _perm: str = Depends(require_permission("system.sync.trigger")),
 ):
@@ -1844,8 +1845,11 @@ async def admin_trigger_sync(
             content={"error": "No Teable API token configured — set TEABLE_API_TOKEN or TEABLE_WEB_API_TOKEN"},
         )
 
-    asyncio.create_task(run_sync(incremental=False))
-    return {"status": "sync_started", "message": "Full sync triggered — check Sync Log in a few seconds"}
+    # apply_deletions: records removed in Teable are removed here even when
+    # they are many at once (the sync's guard otherwise waits a pass to be sure).
+    asyncio.create_task(run_sync(incremental=False, apply_deletions=apply_deletions))
+    return {"status": "sync_started", "apply_deletions": apply_deletions,
+            "message": "Full sync triggered — check Sync Log in a few seconds"}
 
 
 @router.post("/sync/aging-refresh")

@@ -244,6 +244,41 @@ class TestReconcileGuard:
         assert len(db.live()) == 40
         assert "reconcile skipped" in db.sync_log[-1][1]
 
+    def test_a_large_deletion_still_missing_on_a_later_pass_is_applied(self, monkeypatch, db):
+        S._held_missing.clear()
+        for i in range(40):
+            db.seed(f"rec{i:02}", _fields(_rec(f"rec{i:02}")))
+        kept = [_rec(f"rec{i:02}") for i in range(10)]
+        clock = [1000.0]
+        monkeypatch.setattr(S.time, "monotonic", lambda: clock[0])
+
+        _full_sync(monkeypatch, db, kept)
+        assert len(db.live()) == 40 and "held" in db.sync_log[-1][1]
+
+        clock[0] += 60                       # too soon: still held
+        _full_sync(monkeypatch, db, kept)
+        assert len(db.live()) == 40
+
+        clock[0] += S._HOLD_CONFIRM_S         # the next full pass agrees: applied
+        _full_sync(monkeypatch, db, kept)
+        assert len(db.live()) == 10
+        assert "recA" not in S._held_missing
+
+    def test_an_admin_can_apply_a_large_deletion_at_once(self, db):
+        S._held_missing.clear()
+        for i in range(40):
+            db.seed(f"rec{i:02}", _fields(_rec(f"rec{i:02}")))
+        deleted = asyncio.run(S.reconcile_missing_records(
+            db, "web_invoices", "web_invoices_mirror", [f"rec{i:02}" for i in range(10)], force=True))
+        assert deleted == 30 and len(db.live()) == 10
+
+    def test_an_empty_fetch_is_never_applied_even_when_forced(self, db):
+        S._held_missing.clear()
+        for i in range(3):
+            db.seed(f"rec{i}", _fields(_rec(f"rec{i}")))
+        with pytest.raises(S.ReconcileSkipped):
+            asyncio.run(S.reconcile_missing_records(db, "web_invoices", "web_invoices_mirror", [], force=True))
+
     def test_ordinary_deletions_still_go_through(self, monkeypatch, db):
         for i in range(40):
             db.seed(f"rec{i:02}", _fields(_rec(f"rec{i:02}")))

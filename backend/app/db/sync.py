@@ -545,6 +545,16 @@ async def _mark_deleted_if_unseen(
         return True
 
 
+# Rows a full pass found missing but held back because the guard tripped,
+# per source: (the missing ids, when they were first held). Many records
+# deleted in Teable at once trip the ratio guard on every pass, so a large
+# deletion was never applied. A deletion that is still missing, unchanged, on
+# a later full pass is real rather than a short Teable response: it is
+# applied then.
+_held_missing: dict[str, tuple[frozenset, float]] = {}
+_HOLD_CONFIRM_S = 240.0
+
+
 class ReconcileSkipped(Exception):
     """The reconcile sanity guard refused to soft-delete this pass's missing rows."""
 
@@ -566,6 +576,7 @@ async def reconcile_missing_records(
     mirror_table: str,
     seen_ids: list[str],
     started_at: Optional[datetime.datetime] = None,
+    force: bool = False,
 ) -> int:
     """Full sync healer: mark rows deleted when they no longer exist in Teable.
 
@@ -576,7 +587,10 @@ async def reconcile_missing_records(
     is missing from the snapshot only because the snapshot predates it, and was
     being tombstoned along with its creator's attribution.
 
-    Raises ReconcileSkipped, deleting nothing, when the sanity guard trips.
+    Raises ReconcileSkipped, deleting nothing, when the sanity guard trips,
+    unless the same rows were already held as missing by a full pass at least
+    _HOLD_CONFIRM_S earlier, or `force` (an admin's explicit request) is set.
+    An empty Teable response is never applied.
     """
     async with pool.acquire() as conn:
         if started_at is None:
@@ -594,9 +608,22 @@ async def reconcile_missing_records(
     missing = sorted(live_ids - seen)
     if missing:
         reason = _reconcile_skip_reason(len(live_ids), len(seen), len(missing))
+        if reason and seen:
+            held = _held_missing.get(source)
+            now = time.monotonic()
+            confirmed = held is not None and set(missing) <= held[0] and now - held[1] >= _HOLD_CONFIRM_S
+            if force or confirmed:
+                logger.warning("%s: applying %d deletions (%s)", source, len(missing),
+                               "admin request" if force else "still missing on a later full pass")
+                reason = None
+            else:
+                if held is None or not set(missing) <= held[0]:
+                    _held_missing[source] = (frozenset(missing), now)
+                reason += "; held, and applied if they are still missing on the next full pass"
         if reason:
             logger.warning("%s: %s", source, reason)
             raise ReconcileSkipped(reason)
+    _held_missing.pop(source, None)
     deleted = 0
     for teable_id in missing:
         if started_at is None:
@@ -830,7 +857,7 @@ async def _sync_records(
 
 # ── Sync entry points ────────────────────────────────────────────────────────
 
-async def run_sync(incremental: bool = False) -> None:
+async def run_sync(incremental: bool = False, apply_deletions: bool = False) -> None:
     """
     Full or incremental sync of projects, main invoices, AND web invoices.
 
@@ -931,7 +958,7 @@ async def run_sync(incremental: bool = False) -> None:
                 try:
                     deleted = await reconcile_missing_records(
                         pool, source, mirror_table, [r.get("id", "") for r in records if r.get("id")],
-                        started_at=pass_started,
+                        started_at=pass_started, force=apply_deletions,
                     )
                 except ReconcileSkipped as exc:
                     reconcile_skipped = str(exc)

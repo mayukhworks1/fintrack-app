@@ -768,7 +768,7 @@ export const api = {
     sharedLinkAccesses: (token, limit = 200) => request(`/api/admin/shared-links/${token}/accesses?limit=${limit}`),
     sharedLinkStats: (token) => request(`/api/admin/shared-links/${token}/stats`),
     watchdog:      ()           => request('/api/admin/watchdog',      { method: 'POST' }),
-    triggerSync:   ()           => request('/api/admin/sync/trigger', { method: 'POST' }),
+    triggerSync:   (opts = {})  => request(`/api/admin/sync/trigger${opts.applyDeletions ? '?apply_deletions=true' : ''}`, { method: 'POST' }),
     triggerAgingRefresh:    ()   => request('/api/admin/sync/aging-refresh',    { method: 'POST' }),
     triggerDurationRefresh: ()   => request('/api/admin/sync/duration-refresh', { method: 'POST' }),
     diagnoseSync:  ()           => request('/api/admin/sync/diagnose'),

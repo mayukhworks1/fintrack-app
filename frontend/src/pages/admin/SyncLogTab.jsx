@@ -44,11 +44,14 @@ export function SyncLogTab() {
   useEffect(() => { setOffset(0) }, [filterSource, filterError, limit])
   useEffect(() => { load() }, [load])
 
-  const triggerSync = useCallback(async () => {
+  const triggerSync = useCallback(async (applyDeletions = false) => {
+    if (applyDeletions && !window.confirm('Remove from FinTrack every record that has been deleted in Teable, even if many were deleted at once?')) return
     setTrig(true); setTrigMsg(null)
     try {
-      await api.admin.triggerSync()
-      setTrigMsg({ ok: true, text: 'Full sync triggered — results appear in a few seconds' })
+      await api.admin.triggerSync({ applyDeletions })
+      setTrigMsg({ ok: true, text: applyDeletions
+        ? 'Full sync triggered — records deleted in Teable will be removed here in a few seconds'
+        : 'Full sync triggered — results appear in a few seconds' })
       setTimeout(() => { load(); setTrigMsg(null) }, 4000)
     } catch (e) {
       setTrigMsg({ ok: false, text: e.message || 'Trigger failed' })
@@ -146,7 +149,7 @@ export function SyncLogTab() {
       {data && <div className="text-xs" style={{ color: 'var(--text-3)' }}>{data.total} runs</div>}
 
       <div className="flex flex-wrap gap-2 items-center">
-        <button onClick={triggerSync} disabled={triggering}
+        <button onClick={() => triggerSync(false)} disabled={triggering}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
           style={{
             background: triggering ? 'var(--bg-input)' : 'color-mix(in srgb, var(--accent) 8%, transparent)',
@@ -155,6 +158,17 @@ export function SyncLogTab() {
             opacity: triggering ? 0.6 : 1,
           }}>
           <Play size={11} /> {triggering ? 'Triggering…' : 'Trigger Full Sync Now'}
+        </button>
+        <button onClick={() => triggerSync(true)} disabled={triggering}
+          title="Large deletions are otherwise applied on the next full sync, about 5 minutes later"
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: triggering ? 'var(--bg-input)' : 'color-mix(in srgb, var(--fin-negative) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--fin-negative) 25%, transparent)',
+            color: triggering ? 'var(--text-3)' : 'var(--fin-negative)',
+            opacity: triggering ? 0.6 : 1,
+          }}>
+          <RefreshCw size={11} /> Apply Teable Deletions Now
         </button>
         <button onClick={triggerAgingRefresh} disabled={agingRefreshing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
