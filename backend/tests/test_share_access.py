@@ -608,3 +608,15 @@ def env_rid(env):
 
 def env_status(env):
     return env.sql("SELECT status FROM shared_view_access_requests ORDER BY created_at DESC LIMIT 1")[0][0]
+
+
+def test_auto_approve_takes_whole_emails_as_well_as_domains():
+    from app.services import share_access as SA
+    allowed = SA.normalize_domains("Sakshi@TheWorks.in, client.com")
+    assert allowed == ["sakshi@theworks.in", "client.com"]
+    assert SA.domain_auto_approved("sakshi@theworks.in", allowed)
+    assert not SA.domain_auto_approved("rahul@theworks.in", allowed)
+    assert SA.domain_auto_approved("anyone@client.com", allowed)
+    import pytest
+    with pytest.raises(ValueError, match="not a valid email"):
+        SA.normalize_domains("sakshi@")

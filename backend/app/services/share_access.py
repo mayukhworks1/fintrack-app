@@ -229,11 +229,18 @@ def normalize_domains(raw: Any) -> list[str]:
     for item in raw:
         if isinstance(item, str) and not item.strip():
             continue
-        d = normalize_domain(item)
+        # A whole address approves that person only; a domain, everyone there.
+        if isinstance(item, str) and "@" in item.strip().lstrip("@"):
+            try:
+                d = validate_email(item).lower()
+            except ValueError:
+                raise ValueError(f"{item.strip()[:60]} is not a valid email address") from None
+        else:
+            d = normalize_domain(item)
         if d not in out:
             out.append(d)
     if len(out) > MAX_AUTO_DOMAINS:
-        raise ValueError(f"At most {MAX_AUTO_DOMAINS} auto-approve domains")
+        raise ValueError(f"At most {MAX_AUTO_DOMAINS} auto-approve emails or domains")
     return out
 
 
@@ -242,9 +249,10 @@ def email_domain(email: str) -> str:
 
 
 def domain_auto_approved(email: str, domains: list[str]) -> bool:
-    """Exact domain match only: theworks.in does not cover evil-theworks.in
-    or mail.theworks.in."""
-    return email_domain(email) in {d.lower() for d in (domains or [])}
+    """An exact address, or an exact domain: theworks.in does not cover
+    evil-theworks.in or mail.theworks.in."""
+    allowed = {d.lower() for d in (domains or [])}
+    return email.strip().lower() in allowed or email_domain(email) in allowed
 
 
 # ── Rate limiting ────────────────────────────────────────────────────────────

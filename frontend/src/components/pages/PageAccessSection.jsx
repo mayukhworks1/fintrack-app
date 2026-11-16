@@ -67,9 +67,9 @@ export default function PageAccessSection({ pageId, openRequests = false, onPend
         </div>
       )}
       <div>
-        <label style={labelStyle} htmlFor="ft-auto-domains">Auto-approve requests from (optional)</label>
+        <label style={labelStyle} htmlFor="ft-auto-domains">Auto-approve requests from emails or domains (optional)</label>
         <div style={{ display:'flex', gap:6 }}>
-          <input id="ft-auto-domains" style={{ ...inputStyle, flex:1, fontSize:12 }} placeholder="e.g. theworks.in, client.com"
+          <input id="ft-auto-domains" style={{ ...inputStyle, flex:1, fontSize:12 }} placeholder="e.g. sakshi@theworks.in, client.com"
             value={domains} onChange={e => setDomains(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveDomains() } }}
             aria-describedby="ft-auto-domains-hint" />
           <button type="button" style={btn} onClick={saveDomains}>Save</button>

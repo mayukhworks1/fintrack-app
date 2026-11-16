@@ -4,7 +4,7 @@
 import { useId, useState } from 'react'
 import { Check, Copy, Eye, EyeOff, Lock, Wand2 } from 'lucide-react'
 import { Toggle } from '../../pages/admin/ui'
-import { generateSharePassword, isValidDomain, parseDomains } from '../../utils/viewUnlock'
+import { emailError, generateSharePassword, isValidDomain, parseDomains } from '../../utils/viewUnlock'
 
 export const PASSWORD_MIN = 8
 
@@ -17,8 +17,8 @@ export function passwordProblem(enabled, password, { required = true } = {}) {
 }
 
 export function domainsProblem(text) {
-  const bad = parseDomains(text).filter(d => !isValidDomain(d))
-  return bad.length ? `${bad[0]} is not a valid domain.` : ''
+  const bad = parseDomains(text).filter(d => (d.includes('@') ? emailError(d) : !isValidDomain(d)))
+  return bad.length ? `${bad[0]} is not a valid ${bad[0].includes('@') ? 'email address' : 'domain'}.` : ''
 }
 
 // The badge Links shows on a password-protected link.
@@ -127,7 +127,7 @@ export default function SharePasswordFields({
           {showDomains && (
             <div>
               <label htmlFor={`${id}-dom`} className="block text-[11px] font-semibold mb-1" style={{ color: 'var(--text-2)' }}>
-                Auto-approve requests from these email domains <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional)</span>
+                Auto-approve requests from these emails or domains <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional)</span>
               </label>
               <input id={`${id}-dom`} type="text" value={domains} onChange={e => onChange({ domains: e.target.value })}
                 className="input-field w-full text-sm" placeholder="e.g. theworks.in" autoComplete="off" spellCheck={false}
