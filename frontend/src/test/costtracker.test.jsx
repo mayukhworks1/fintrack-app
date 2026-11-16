@@ -27,7 +27,7 @@ function boot(db) {
 }
 
 // A small in-memory db with the SDK's shape, to see what the template writes.
-function fakeDb({ owner, projects = [] } = {}) {
+function fakeDb({ owner, canAdd = true, projects = [] } = {}) {
   const writes = []
   const subs = {}
   const store = { projects: projects.map((d, i) => ({ id: `p${i}`, data: d })), invoices: [], costs: [] }
@@ -46,7 +46,7 @@ function fakeDb({ owner, projects = [] } = {}) {
       set(d) { writes.push(['settings', null, d]); return Promise.resolve(d) },
       update() { return Promise.resolve({}) },
     }),
-    me: () => Promise.resolve({ id: 'u', isOwner: owner, canAdd: true }),
+    me: () => Promise.resolve({ id: 'u', isOwner: owner, canAdd }),
     onStatus(cb) { cb('synced') },
   }
 }
@@ -213,11 +213,20 @@ describe('Cost tracker: first run', () => {
     expect(document.body.textContent).not.toMatch(/NaN|undefined|Infinity/)
   })
 
-  it('a visitor who is not the owner never seeds', async () => {
-    const db = fakeDb({ owner: false })
+  it('a visitor who may not add data never seeds', async () => {
+    const db = fakeDb({ owner: false, canAdd: false })
     boot(db)
     await settle()
     expect(db.writes).toEqual([])
+  })
+
+  it('a visitor who may add data seeds an empty tracker, by fixed keys', async () => {
+    const db = fakeDb({ owner: false, canAdd: true })
+    boot(db)
+    await settle()
+    const projects = db.writes.filter(([c]) => c === 'projects')
+    expect(projects.length).toBe(7)
+    expect(projects.every(([, key]) => typeof key === 'string' && key)).toBe(true)
   })
 
   it('existing data is never overwritten by the seed', async () => {
