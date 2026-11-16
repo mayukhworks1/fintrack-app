@@ -60,6 +60,19 @@ export function SyncLogTab() {
     }
   }, [load])
 
+  const clearCache = useCallback(async () => {
+    setTrig(true); setTrigMsg(null)
+    try {
+      const r = await api.admin.clearCache()
+      setTrigMsg({ ok: true, text: `Cache cleared (${(r?.cleared_local || 0) + (r?.cleared_shared || 0)} saved copies) — every page now loads fresh data` })
+      setTimeout(() => { load(); setTrigMsg(null) }, 4000)
+    } catch (e) {
+      setTrigMsg({ ok: false, text: e.message || 'Could not clear the cache' })
+    } finally {
+      setTrig(false)
+    }
+  }, [load])
+
   const triggerAgingRefresh = useCallback(async () => {
     setAgingRefreshing(true); setTrigMsg(null)
     try {
@@ -169,6 +182,17 @@ export function SyncLogTab() {
             opacity: triggering ? 0.6 : 1,
           }}>
           <RefreshCw size={11} /> Apply Teable Deletions Now
+        </button>
+        <button onClick={clearCache} disabled={triggering}
+          title="Drop saved copies of lists and totals so every page loads fresh. Nobody is signed out."
+          className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          style={{
+            background: triggering ? 'var(--bg-input)' : 'color-mix(in srgb, var(--fin-warning) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--fin-warning) 25%, transparent)',
+            color: triggering ? 'var(--text-3)' : 'var(--fin-warning)',
+            opacity: triggering ? 0.6 : 1,
+          }}>
+          <RefreshCw size={11} /> Clear Cache
         </button>
         <button onClick={triggerAgingRefresh} disabled={agingRefreshing}
           className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"

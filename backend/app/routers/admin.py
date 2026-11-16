@@ -1852,6 +1852,43 @@ async def admin_trigger_sync(
             "message": "Full sync triggered — check Sync Log in a few seconds"}
 
 
+# Saved copies of data the app reads (lists, totals, insights, reports, the
+# chat's portfolio context, public database rows). Sessions, rate limits,
+# preview tokens and other security state live under other keys and are left
+# alone, so clearing never signs anyone out or lifts a limit.
+DATA_CACHE_PREFIXES = (
+    "project:", "projects:", "invoice:", "webinv:", "webproj:", "webres:",
+    "status:", "report:", "chat:context", "pubdb:",
+)
+
+
+@router.post("/cache/clear")
+async def admin_clear_cache(
+    request: Request,
+    _: str = Depends(require_admin),
+    _perm: str = Depends(require_permission("system.sync.trigger")),
+):
+    """
+    Drop every saved copy of data so the next read comes fresh from the
+    database (and the database from Teable on the next sync). Returns how
+    many entries were cleared in this process and in Valkey.
+    """
+    from ..utils.cache import cache
+    from ..db import valkey as vk
+
+    local = 0
+    for prefix in DATA_CACHE_PREFIXES:
+        local += cache.bust(prefix)
+    shared = 0
+    if vk.get_client():
+        for prefix in DATA_CACHE_PREFIXES:
+            shared += await vk.cache_bust(prefix)
+    ai_gateway.invalidate()
+    logger.info("Admin cleared data caches: %d local, %d shared", local, shared)
+    return {"ok": True, "cleared_local": local, "cleared_shared": shared,
+            "prefixes": list(DATA_CACHE_PREFIXES)}
+
+
 @router.post("/sync/aging-refresh")
 async def admin_trigger_aging_refresh(
     _: str = Depends(require_admin),
