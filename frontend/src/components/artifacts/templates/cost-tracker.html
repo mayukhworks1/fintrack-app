@@ -1201,13 +1201,15 @@ button.need:hover{background:var(--warning-soft)}
   settingsDoc.subscribe(function (d) { S.settings = d || {}; S.loaded.s = 1; schedule(); });
 
   // Seed the seven projects of the status sheet once: only when the shared data
-  // is empty, and only by the artifact's owner.
+  // is empty, by the owner or anyone the owner lets add data. Every record is
+  // written by its fixed key (upsert), so two first visits at once cannot
+  // create duplicates.
   function maybeSeed() {
     if (S.seeding || !(S.loaded.p && S.loaded.i && S.loaded.c && S.loaded.s)) return;
     if (S.projects.length || S.invoices.length || S.costs.length || S.settings.seeded) return;
     S.seeding = true;
     Promise.resolve(db.me()).then(function (me) {
-      if (!me || !me.isOwner) return;
+      if (!me || !(me.isOwner || me.canAdd)) return;
       return settingsDoc.set(Object.assign({}, DEFAULTS, { seeded: true })).then(function () {
         var jobs = [];
         C.SEED.projects.forEach(function (p) { jobs.push(cols.projects.upsert(p.key, p)); });
@@ -1429,7 +1431,7 @@ button.need:hover{background:var(--warning-soft)}
   function niceMax(v) { if (v <= 0) return 1000; var p = Math.pow(10, Math.floor(Math.log10(v))); var n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
   function chartRvc(host, rows, t) {
     var w = Math.max(300, host.clientWidth || 640), h = 230, l = 52, r = 8, top = 10, b = 26;
-    var max = niceMax(Math.max.apply(null, rows.map(function (x) { return Math.max(x.revenue, x.cost); }).concat([1])));
+    var max = niceMax(Math.max.apply(null, rows.map(function (x) { return Math.max(x.revenue, x.cost); }).concat([0])));
     var iw = w - l - r, ih = h - top - b, step = iw / rows.length, bw = Math.min(26, step * 0.56);
     var y = function (v) { return top + ih - (v / max) * ih; };
     var s = '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Revenue and cost by month, ' + esc(C.fyLabel(C.fyStart(t))) + '"><defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="var(--rev)" opacity=".18"/><line x1="0" y1="0" x2="0" y2="5" stroke="var(--rev)" stroke-width="2"/></pattern></defs>';
@@ -1629,7 +1631,7 @@ button.need:hover{background:var(--warning-soft)}
   function chartForecast(host, rows) {
     var w = Math.max(300, host.clientWidth || 640), h = 220, l = 56, r = 8, top = 10, b = 26;
     var vals = []; rows.forEach(function (x) { vals.push(x.inflow, x.outflow); if (x.balance != null) vals.push(Math.abs(x.balance)); });
-    var max = niceMax(Math.max.apply(null, vals.concat([1])));
+    var max = niceMax(Math.max.apply(null, vals.concat([0])));
     var hasNeg = rows.some(function (x) { return x.balance != null && x.balance < 0; });
     var min = hasNeg ? -max : 0;
     var iw = w - l - r, ih = h - top - b, step = iw / rows.length, bw = Math.min(12, step * 0.3);
