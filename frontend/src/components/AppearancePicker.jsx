@@ -131,7 +131,7 @@ export default function AppearancePicker() {
                 role="radio"
                 aria-checked={on}
                 tabIndex={on ? 0 : -1}
-                onClick={() => setMode(id)}
+                onClick={(e) => setMode(id, e)}
                 data-on={on || undefined}
               >
                 <Icon size={13} aria-hidden="true" /> {label}

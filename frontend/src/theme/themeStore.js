@@ -110,3 +110,45 @@ export function bootstrapTheme() {
   applyTheme(prefs)
   return prefs
 }
+
+
+const REVEAL_MS = 480
+
+/** Where a switch should grow from: the control's centre, else the pointer. */
+function originOf(e) {
+  const el = e?.currentTarget
+  if (el && typeof el.getBoundingClientRect === 'function') {
+    const r = el.getBoundingClientRect()
+    if (r.width || r.height) return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }
+  if (e && Number.isFinite(e.clientX) && (e.clientX || e.clientY)) return { x: e.clientX, y: e.clientY }
+  return null
+}
+
+/**
+ * Switch theme with a transition. Where the browser has view transitions the
+ * new look is revealed by a circle growing from the control that was used
+ * (or cross-fades when there is no origin); elsewhere the colours cross-fade.
+ * Reduced motion cuts straight to the new look.
+ */
+export function switchTheme(prefs, event) {
+  if (typeof document === 'undefined') return
+  if (prefersReducedMotion()) { applyTheme(prefs); return }
+  const start = document.startViewTransition?.bind(document)
+  if (!start) { applyTheme(prefs, { animate: true }); return }
+  const origin = originOf(event)
+  const html = document.documentElement
+  html.classList.toggle('theme-reveal', !!origin)
+  let t
+  try { t = start(() => { applyTheme(prefs) }) } catch { applyTheme(prefs, { animate: true }); return }
+  const done = () => html.classList.remove('theme-reveal')
+  t.finished?.then(done, done)
+  if (!origin) return
+  t.ready?.then(() => {
+    const r = Math.hypot(Math.max(origin.x, innerWidth - origin.x), Math.max(origin.y, innerHeight - origin.y))
+    html.animate(
+      { clipPath: [`circle(0px at ${origin.x}px ${origin.y}px)`, `circle(${r}px at ${origin.x}px ${origin.y}px)`] },
+      { duration: REVEAL_MS, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', pseudoElement: '::view-transition-new(root)' },
+    )
+  }).catch(() => {})
+}

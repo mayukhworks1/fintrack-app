@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { applyTheme, darkQuery, readPrefs, resolveDark, savePrefs, normalizePrefs } from '../theme/themeStore'
+import { applyTheme, darkQuery, readPrefs, resolveDark, savePrefs, normalizePrefs, switchTheme } from '../theme/themeStore'
 
 const ThemeCtx = createContext(null)
 
@@ -33,29 +33,32 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     // The first pass only re-asserts what main.jsx already applied; every
-    // later change is a switch, gets the cross-fade, and is saved. Comparing
-    // against the last applied value keeps StrictMode's double effect run
-    // from counting as a switch.
+    // later change is a switch and is saved. A switch made through change()
+    // below has already been painted by its transition, so it is not faded
+    // again here. Comparing against the last applied value keeps StrictMode's
+    // double effect run from counting as a switch.
     const key = `${prefs.palette}/${prefs.mode}/${dark}`
     if (applied.current === key) return
     const isSwitch = applied.current !== null
     applied.current = key
-    applyTheme(prefs, { animate: isSwitch })
+    applyTheme(prefs, { animate: false })
     if (isSwitch) savePrefs(prefs)
   }, [prefs, dark])
 
-  const setPalette = useCallback((palette) => {
-    setPrefs(p => normalizePrefs({ ...p, palette }))
+  // Paint the new look at once inside a view transition (a circle growing
+  // from the control that was used, or a cross-fade), then let React catch
+  // up with the same choice.
+  const change = useCallback((next, origin) => {
+    const clean = normalizePrefs(next)
+    switchTheme(clean, origin)
+    setPrefs(clean)
   }, [])
 
-  const setMode = useCallback((mode) => {
-    setPrefs(p => normalizePrefs({ ...p, mode }))
-  }, [])
+  const setPalette = useCallback((palette, e) => change({ ...prefs, palette }, e), [prefs, change])
+  const setMode = useCallback((mode, e) => change({ ...prefs, mode }, e), [prefs, change])
 
   /** The sun / moon buttons: flip to the opposite of what is showing now. */
-  const toggle = useCallback(() => {
-    setPrefs(p => ({ ...p, mode: dark ? 'light' : 'dark' }))
-  }, [dark])
+  const toggle = useCallback((e) => change({ ...prefs, mode: dark ? 'light' : 'dark' }, e), [prefs, dark, change])
 
   const value = useMemo(
     () => ({ dark, palette: prefs.palette, mode: prefs.mode, setPalette, setMode, toggle }),

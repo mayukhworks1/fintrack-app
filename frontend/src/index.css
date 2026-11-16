@@ -5157,3 +5157,15 @@ h1 { letter-spacing: -0.03em; }
 .appearance-segment > button:hover { color: var(--text-1); }
 .appearance-segment > button[data-on] { background: var(--card-bg); color: var(--text-1); box-shadow: var(--shadow-sm); }
 .appearance-segment > button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 1px; }
+
+
+/* ── Theme switch through a view transition (themeStore.switchTheme) ──
+   With an origin the new look is revealed by a growing circle animated from
+   script, so the default cross-fade is switched off; without one, the
+   browser's cross-fade runs, a little slower than its default. */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 320ms; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+html.theme-reveal::view-transition-old(root),
+html.theme-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.theme-reveal::view-transition-old(root) { z-index: 1; }
+html.theme-reveal::view-transition-new(root) { z-index: 2; }
