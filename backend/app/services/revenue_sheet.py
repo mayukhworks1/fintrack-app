@@ -17,13 +17,13 @@ from .invoice_query import _amount as _inv_amount
 from .project_query import _amount as _proj_amount
 
 HEADER = ["Client", "Project", "Invoices", "Billed (excl. GST)", "Received", "Outstanding",
-          "Costs", "Profit", "Margin", "Last invoice", "Project status", "Latest update"]
+          "Costs", "Profit", "Margin", "Last invoice", "Project status", "Latest update", "Detailed status"]
 
 # Column formats for the sheet editor (metadata.sheet), as the templates use.
 _INR = {"type": "inr", "decimals": 0}
 SHEET = {
     "v": 1, "header": True, "freezeRows": 1,
-    "colWidths": {"0": 170, "1": 230, "10": 120, "11": 420},
+    "colWidths": {"0": 170, "1": 230, "10": 120, "11": 420, "12": 520},
     "colFormats": {"2": {"type": "number", "decimals": 0}, "3": _INR, "4": _INR, "5": _INR, "6": _INR,
                    "7": _INR, "8": {"type": "percent", "decimals": 1}, "9": {"type": "date"}},
     "colAlign": {"2": "center", "10": "center"},
@@ -114,12 +114,12 @@ def to_csv(rows: list[dict]) -> str:
         n = i + 2
         w.writerow([r["client"], r["project"], r["invoices"], _n(r["billed"]), _n(r["received"]),
                     _n(r["outstanding"]), _n(r["costs"]), f"=D{n}-G{n}", f"=IF(D{n}=0,0,H{n}/D{n})",
-                    r["last"].date().isoformat() if r["last"] else "", r["status"], r["update"]])
+                    r["last"].date().isoformat() if r["last"] else "", r["status"], r["update"], r["detail"]])
     last = len(rows) + 1
     t = last + 1
     w.writerow(["Total", "", f"=SUM(C2:C{last})", f"=SUM(D2:D{last})", f"=SUM(E2:E{last})",
                 f"=SUM(F2:F{last})", f"=SUM(G2:G{last})", f"=SUM(H2:H{last})",
-                f"=IF(D{t}=0,0,H{t}/D{t})", "", "", ""])
+                f"=IF(D{t}=0,0,H{t}/D{t})", "", "", "", ""])
     return buf.getvalue()
 
 

@@ -34,4 +34,4 @@ def test_csv_has_formulas_and_a_totals_row():
     lines = list(csv.reader(io.StringIO(to_csv(rows))))
     assert lines[0][:4] == ["Client", "Project", "Invoices", "Billed (excl. GST)"]
     assert lines[1][7] == "=D2-G2" and lines[1][8] == "=IF(D2=0,0,H2/D2)"
-    assert lines[2][0] == "Total" and lines[2][3] == "=SUM(D2:D2)"
+    assert lines[2][0] == "Total" and lines[2][3] == "=SUM(D2:D2)" and len(lines[2]) == len(lines[0])
