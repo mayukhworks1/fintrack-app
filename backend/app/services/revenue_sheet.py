@@ -54,7 +54,7 @@ def build_rows(invoices: list[dict], projects: list[dict], statuses: list[dict])
         if r is None:
             r = rows[k] = {"client": client or "", "project": project, "invoices": 0, "billed": 0.0,
                            "received": 0.0, "outstanding": 0.0, "costs": None, "last": None,
-                           "status": "", "update": ""}
+                           "status": "", "update": "", "detail": ""}
         if client and not r["client"]:
             r["client"] = client
         return r
@@ -91,6 +91,7 @@ def build_rows(invoices: list[dict], projects: list[dict], statuses: list[dict])
         if r is None:
             r = row_for(name, cell_text(f.get("Client")))
         r["update"] = cell_text(f.get("Short Status")) or r["update"]
+        r["detail"] = cell_text(f.get("Current Status (Detailed)")) or r["detail"]
         r["status"] = r["status"] or (cell_text(f.get("Status")) or "")
 
     out = list(rows.values())
@@ -122,8 +123,8 @@ def to_csv(rows: list[dict]) -> str:
     return buf.getvalue()
 
 
-async def build_sheet(pool) -> dict:
-    """{title, content, sheet, projects} from the live mirrors."""
+async def build_sheet_rows(pool) -> list[dict]:
+    """The merged project rows from the live mirrors."""
     async with pool.acquire() as conn:
         inv = await conn.fetch("SELECT fields FROM invoices_mirror WHERE deleted_at IS NULL")
         proj = await conn.fetch("SELECT fields FROM projects_mirror WHERE deleted_at IS NULL")
@@ -140,6 +141,11 @@ async def build_sheet(pool) -> dict:
             out.append(json.loads(f) if isinstance(f, str) else (f or {}))
         return out
 
-    rows = build_rows(fields(inv), fields(proj), fields(st))
+    return build_rows(fields(inv), fields(proj), fields(st))
+
+
+async def build_sheet(pool) -> dict:
+    """{title, content, sheet, projects} from the live mirrors."""
+    rows = await build_sheet_rows(pool)
     today = datetime.now().strftime("%d %b %Y")
     return {"title": f"Project revenue · {today}", "content": to_csv(rows), "sheet": SHEET, "projects": len(rows)}

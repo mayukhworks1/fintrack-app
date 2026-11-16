@@ -940,6 +940,7 @@ export const api = {
 
   // Databases: typed rows over the page tree (routers/databases.py).
   databases: {
+    fromWorkspaceProjects: () => pageWrite(request('/api/databases/from-workspace/projects', { method: 'POST' })),
     templates:     ()          => request('/api/databases/templates'),
     people:        ()          => request('/api/databases/people'),
     create:        (data)      => request('/api/databases', { method: 'POST', body: JSON.stringify(data) }),

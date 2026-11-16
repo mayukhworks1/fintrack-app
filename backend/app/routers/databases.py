@@ -50,7 +50,7 @@ from ..db.postgres import get_pool
 from ..services import collab
 from ..services import databases as D
 from ..services import page_tree as T
-from .deps import require_auth
+from .deps import require_auth, require_permission
 from .pages import PageId, _can_see_all, _owns_page, _page_uuid, _random_suffix, _slugify
 
 
@@ -432,6 +432,94 @@ async def create_database(body: CreateDatabaseBody, request: Request, role: str 
                 await _insert_row(conn, str(page["id"]), rtitle, D.clean_props(schema, props), user_id,
                                   schema["row_type"], position=float((i + 1) * 1024))
     return _db_dict(page, schema)
+
+
+_STATUS_COLORS = {"in progress": "blue", "completed": "green", "done": "green", "live": "green",
+                  "on hold": "yellow", "paused": "yellow", "pending": "orange", "blocked": "red",
+                  "cancelled": "red", "not started": "gray"}
+
+
+@router.post("/api/databases/from-workspace/projects")
+async def create_projects_database(request: Request, role: str = Depends(require_auth),
+                                   _perm: str = Depends(require_permission("module.invoices.view"))):
+    """A database of every project, filled from the workspace's own data: its
+    status and latest update from the status board (the full write-up as the
+    row's page), and what was billed, received, is outstanding and cost, from
+    the invoices and projects mirrors."""
+    from ..services.revenue_sheet import build_sheet_rows
+    user_id, _auth_role = _who(request, role)
+    pool = _pool()
+    rows = await build_sheet_rows(pool)
+
+    def options(values, colors=None):
+        seen, out = set(), []
+        for v in values:
+            if v and v.lower() not in seen:
+                seen.add(v.lower())
+                color = (colors or {}).get(v.lower(), "gray") if colors else D.COLORS[len(out) % len(D.COLORS)]
+                out.append({"id": f"o{len(out) + 1}", "name": v[:100], "color": color})
+        return out[:D.MAX_OPTIONS]
+
+    clients = options(sorted({r["client"] for r in rows if r["client"]}))
+    statuses = options([r["status"] for r in rows], _STATUS_COLORS)
+    money = lambda pid, name: {"id": pid, "name": name, "type": "number", "format": "inr"}  # noqa: E731
+    schema = D.normalize_schema({
+        "properties": [
+            {"id": "title", "name": "Project", "type": "title", "width": 240},
+            {"id": "client", "name": "Client", "type": "select", "options": clients, "width": 180},
+            {"id": "status", "name": "Status", "type": "select", "options": statuses, "width": 130},
+            {"id": "update", "name": "Latest update", "type": "text", "width": 420},
+            money("billed", "Billed (excl. GST)"), money("received", "Received"),
+            money("outstanding", "Outstanding"), money("costs", "Costs"), money("profit", "Profit"),
+            {"id": "margin", "name": "Margin", "type": "number", "format": "percent"},
+            {"id": "invoices", "name": "Invoices", "type": "number"},
+            {"id": "last", "name": "Last invoice", "type": "date"},
+        ],
+        "views": [
+            {"id": "v_table", "name": "All projects", "type": "table",
+             "footer": {k: "sum" for k in ("billed", "received", "outstanding", "costs", "profit", "invoices")}},
+            {"id": "v_board", "name": "By status", "type": "board", "group_by": "status",
+             "card_props": ["client", "update", "outstanding", "costs"]},
+        ],
+        "default_view": "v_table",
+        "row_type": "markdown",
+    })
+    by_name = lambda opts: {o["name"].lower(): o["id"] for o in opts}  # noqa: E731
+    cid, sid = by_name(clients), by_name(statuses)
+    title = f"Projects · revenue, status & costs · {datetime.now().strftime('%d %b %Y')}"
+    async with pool.acquire() as conn:
+        await _ready(conn)
+        async with conn.transaction():
+            slug = await _unique_slug(conn, title)
+            page = await conn.fetchrow(
+                "INSERT INTO published_pages "
+                "  (slug, title, content_type, content, metadata, created_by, updated_by, icon) "
+                "VALUES ($1, $2, $3, '', $4::jsonb, $5, $5, $6) "
+                "RETURNING id, slug, title, icon, cover, content_type, is_published, metadata, "
+                "          created_by, deleted_at, parent_id",
+                slug, title, D.CONTENT_TYPE, json.dumps({"database": schema}), user_id, "📊",
+            )
+            for i, r in enumerate(rows):
+                profit = (r["billed"] or 0) - (r["costs"] or 0)
+                props = {
+                    "client": cid.get((r["client"] or "").lower()),
+                    "status": sid.get((r["status"] or "").lower()),
+                    "update": r["update"] or None,
+                    "billed": r["billed"], "received": r["received"], "outstanding": r["outstanding"],
+                    "costs": r["costs"], "profit": profit if (r["billed"] or r["costs"]) else None,
+                    "margin": round(profit / r["billed"] * 100, 1) if r["billed"] else None,
+                    "invoices": r["invoices"],
+                    "last": r["last"].date().isoformat() if r["last"] else None,
+                }
+                row = await _insert_row(conn, str(page["id"]), r["project"], D.clean_props(schema, props),
+                                        user_id, "markdown", position=float((i + 1) * 1024))
+                body = "\n\n".join(x for x in (
+                    f"**Client:** {r['client']}" if r["client"] else "",
+                    f"**Status:** {r['status']}" if r["status"] else "",
+                    "## Current status", r["detail"] or r["update"] or "No status update yet.",
+                ) if x)
+                await conn.execute("UPDATE published_pages SET content = $1 WHERE id = $2", body, row["id"])
+    return {**_db_dict(page, schema), "projects": len(rows)}
 
 
 @router.get("/api/databases/row-context/{page_id}")

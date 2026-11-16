@@ -3381,23 +3381,17 @@ export default function PagesManager() {
   const [cloning, setCloning] = useState(null)
   const [buildingRevenue, setBuildingRevenue] = useState(false)
 
-  // A spreadsheet page filled from the workspace's own invoices, projects and
-  // status board, opened straight away.
+  // A database page of every project, filled from the workspace's own
+  // invoices, projects and status board, opened straight away.
   const handleRevenueSheet = useStableCallback(async () => {
     if (buildingRevenue) return
     setBuildingRevenue(true)
     try {
-      const sheet = await api.insights.revenueSheet()
-      const created = await api.pages.create({
-        title: sheet.title, content_type: 'csv', content: sheet.content,
-        slug: slugify(`project-revenue-${Date.now().toString(36)}`), metadata: { sheet: sheet.sheet },
-        client_request_id: newRequestId(),
-      })
+      const created = await api.databases.fromWorkspaceProjects()
       if (created?.detail||created?.error) throw new Error(created.detail||created.error)
-      setPages(prev=>[listRow(created), ...prev])
       refreshList()
       openPage(created)
-      showToast(`Revenue sheet ready: ${sheet.projects} projects from your data`)
+      showToast(`Projects database ready: ${created.projects} projects with status, revenue and costs`)
     } catch (e) { showToast(friendlyError(e), false) }
     finally { setBuildingRevenue(false) }
   })
@@ -3627,8 +3621,8 @@ export default function PagesManager() {
             </button>
           )}
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={handleRevenueSheet}
-            disabled={buildingRevenue} title="A spreadsheet of every project's billed, received, outstanding, costs and profit, filled from your invoices">
-            <BarChart2 size={15} strokeWidth={2} /> {buildingRevenue ? 'Building…' : 'Revenue sheet'}
+            disabled={buildingRevenue} title="A database of every project with its status, latest update, billed, received, outstanding, costs and profit, filled from your data">
+            <BarChart2 size={15} strokeWidth={2} /> {buildingRevenue ? 'Building…' : 'Projects & revenue'}
           </button>
           <button style={{ ...btnSecondary, padding:'9px 14px', borderRadius:10, fontSize:13, display:'flex', alignItems:'center', gap:6 }} onClick={()=>newPage('artifact')}>
             <Puzzle size={15} strokeWidth={2} /> New artifact

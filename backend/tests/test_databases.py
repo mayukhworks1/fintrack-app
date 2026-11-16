@@ -511,3 +511,32 @@ def test_database_routes_take_their_id_from_the_path():
         assert "db_id" in [p.name for p in flat.path_params], route.path
         checked += 1
     assert checked >= 9
+
+
+class TestProjectsDatabaseFromWorkspace:
+    def test_built_from_the_mirrors_with_status_and_costs(self, db):
+        from app.db.sync import _extract_invoice, _extract_project, upsert_record
+
+        async def seed(pool):
+            await upsert_record(pool, "invoices", "invoices_mirror", "recI1", {
+                "Invoice Number": "WM/1", "Project": "PMS", "Client Name": "Birla Open Minds",
+                "Amount Raised": 345600, "Amount Received": 0, "Outstanding Amount": 345600,
+                "Payment Status": "Pending", "Raised Date": "2026-09-15T00:00:00Z"}, _extract_invoice)
+            await upsert_record(pool, "projects", "projects_mirror", "recP1", {
+                "Project Name": "PMS", "Client": "Birla Open Minds", "Input cost so far": 100000,
+                "Total Overhead Cost": 20000, "Project Status": "In progress"}, _extract_project)
+            await pool.execute("CREATE TABLE IF NOT EXISTS status_mirror (teable_id text primary key, fields jsonb, "
+                               "deleted_at timestamptz, synced_at timestamptz default now())")
+            await pool.execute("INSERT INTO status_mirror (teable_id, fields) VALUES ('recS1', $1::jsonb) "
+                               "ON CONFLICT (teable_id) DO UPDATE SET fields = EXCLUDED.fields",
+                               json.dumps({"Project": "PMS", "Short Status": "Final invoice overdue",
+                                           "Current Status (Detailed)": "Development complete; invoice 62 days overdue."}))
+        db.pg.run(seed)
+        out = db.call(lambda: R.create_projects_database(req(db.alice), "editor", "x"))
+        assert out["projects"] == 1 and db.page(out["id"])["content_type"] == "database"
+        rows = db.children(out["id"])
+        props = json.loads(rows[0]["metadata"])["props"]
+        assert rows[0]["title"] == "PMS"
+        assert props["billed"] == 345600 and props["outstanding"] == 345600 and props["costs"] == 120000
+        assert props["profit"] == 225600 and props["update"] == "Final invoice overdue"
+        assert "62 days overdue" in rows[0]["content"]
