@@ -305,7 +305,7 @@ describe('iPhone: document and heights', () => {
 
   it('works from the home screen', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes" />')
-    expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black" />')
+    expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />')
     expect(html).toMatch(/<link rel="apple-touch-icon" sizes="180x180" href="[^"]+\.png(\?v=\d+)?"/)
   })
 

@@ -2,7 +2,7 @@
   "name": "fintrack",
   "private": true,
   "scripts": {
-    "build": "npm --prefix frontend ci && npm --prefix frontend run build"
+    "build": "npm --prefix frontend ci --prefer-offline --no-audit --no-fund && npm --prefix frontend run build"
   },
   "description": "FinTrack web app build for Cloudflare"
 }

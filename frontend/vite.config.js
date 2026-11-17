@@ -44,6 +44,8 @@ export default defineConfig(({ mode }) => {
     },
   },
   build: {
+    // Skips gzipping every chunk just to print sizes: a few seconds per build.
+    reportCompressedSize: false,
     // Emits dist/.vite/manifest.json: for each chunk, which chunks it imports
     // statically vs dynamically. That is the only trustworthy answer to "what
     // actually downloads on first paint" — grepping source for import lines

@@ -20,13 +20,12 @@
     <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
 
-    <!-- Added to the home screen on an iPhone: full screen below an opaque
-         status bar. iOS 26 sizes a home-screen app as if the status bar were
-         opaque even with black-translucent, which left an unpainted band under
-         the tab bar; "black" keeps the page and its height in agreement. -->
+    <!-- Added to the home screen on an iPhone: full screen, with the page
+         drawn under a translucent status bar. Every shell pads its top by
+         env(safe-area-inset-top), so nothing sits under the Dynamic Island. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FinTrack" />
 
     <!-- SEO / social -->
