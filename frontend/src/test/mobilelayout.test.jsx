@@ -277,11 +277,19 @@ describe('iPhone: keyboard', () => {
     const { unmount } = render(<Probe />)
     expect(document.documentElement).not.toHaveClass('kb-open')
     vv.height = 600
+    // A short viewport with nothing focused is not a keyboard (iOS 26
+    // home-screen apps report one): the tab bar stays.
+    act(() => listeners.resize())
+    expect(document.documentElement).not.toHaveClass('kb-open')
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    field.focus()
     act(() => listeners.resize())
     expect(document.documentElement).toHaveClass('kb-open')
     expect(document.documentElement.style.getPropertyValue('--kb-inset')).toBe('356px')
     unmount()
     expect(document.documentElement).not.toHaveClass('kb-open')
+    field.remove()
     delete window.visualViewport
   })
 })
@@ -298,7 +306,7 @@ describe('iPhone: document and heights', () => {
   it('works from the home screen', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes" />')
     expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />')
-    expect(html).toMatch(/<link rel="apple-touch-icon" sizes="180x180" href="[^"]+\.png"/)
+    expect(html).toMatch(/<link rel="apple-touch-icon" sizes="180x180" href="[^"]+\.png(\?v=\d+)?"/)
   })
 
   it('no plain 100vh is left in the phone layouts: each one is followed by dvh', () => {

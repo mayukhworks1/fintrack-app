@@ -40,6 +40,16 @@ export function keyboardInset(win = window) {
   return Math.max(0, Math.round(win.innerHeight - vv.height - vv.offsetTop))
 }
 
+function isEditing() {
+  const el = document.activeElement
+  if (!el || el === document.body) return false
+  if (el.isContentEditable) return true
+  const tag = el.tagName
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true
+  if (tag !== 'INPUT') return false
+  return !/^(button|checkbox|radio|range|color|file|submit|reset|image|hidden)$/i.test(el.type || '')
+}
+
 export function useKeyboardWatch(enabled = true) {
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null
@@ -48,14 +58,21 @@ export function useKeyboardWatch(enabled = true) {
     const update = () => {
       const inset = keyboardInset()
       root.style.setProperty('--kb-inset', `${inset}px`)
-      root.classList.toggle('kb-open', inset > KEYBOARD_MIN_PX)
+      // Only a focused field can raise the keyboard. Home-screen apps on
+      // iOS 26 can report a short visual viewport with no keyboard at all,
+      // which would otherwise hide the tab bar for the whole session.
+      root.classList.toggle('kb-open', inset > KEYBOARD_MIN_PX && isEditing())
     }
     update()
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
+    document.addEventListener('focusin', update)
+    document.addEventListener('focusout', update)
     return () => {
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
+      document.removeEventListener('focusin', update)
+      document.removeEventListener('focusout', update)
       root.classList.remove('kb-open')
       root.style.removeProperty('--kb-inset')
     }

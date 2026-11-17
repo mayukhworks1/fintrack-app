@@ -19,6 +19,8 @@
     /* stylelint-disable-next-line value-no-vendor-prefix */
     height: -webkit-fill-available;
     height: 100dvh;
+    /* The painted height, measured in theme/bootstrap.js. */
+    height: var(--app-vh, 100dvh);
   }
   /* The tab bar is in the flow, not fixed over the content: no padding to
      guess, nothing hidden under it. */
@@ -67,6 +69,13 @@
     flex-shrink: 0;
   }
   .m-titlebar-slot { display: contents; }
+  .m-titlebar-actions .ft-bell {
+    width: 44px;
+    height: 44px;
+    color: var(--text-1);
+    border-color: var(--card-border);
+    box-shadow: var(--shadow-sm);
+  }
   .m-titlebar-actions .btn-icon {
     width: 44px;
     height: 44px;
@@ -1015,6 +1024,10 @@ html {
    public pages and sign-in (which have no app header) clear the status bar
    themselves. */
 @media (display-mode: standalone) and (max-width: 640px) {
+  /* Anything iOS leaves below the app (the home-indicator strip) takes the
+     tab bar's colour instead of showing as a black band. */
+  html:has(.app-layout-shell.is-phone),
+  html:has(.app-layout-shell.is-phone) body { background: var(--sidebar-bg); }
   body:not(:has(.app-layout-shell)):not(:has(.web-invoices-shell)) {
     padding-top: env(safe-area-inset-top);
   }
