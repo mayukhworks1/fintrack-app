@@ -5169,3 +5169,52 @@ html.theme-reveal::view-transition-old(root),
 html.theme-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 html.theme-reveal::view-transition-old(root) { z-index: 1; }
 html.theme-reveal::view-transition-new(root) { z-index: 2; }
+
+/* ── Notification bell (top bars) and panel ───────────────────────────── */
+.ft-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 999px; cursor: pointer;
+  color: var(--text-2); background: var(--card-bg); border: 1px solid var(--border);
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.ft-bell:hover { color: var(--text-1); border-color: var(--text-3); }
+.ft-bell:active { transform: scale(.94); }
+.ft-bell.is-open { color: var(--accent); border-color: var(--accent); }
+.ft-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ft-bell.has-unread svg { transform-origin: 50% 0; animation: ft-bell-ring 1.2s ease 1; }
+@keyframes ft-bell-ring {
+  0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 75% { transform: rotate(2deg); }
+}
+@media (prefers-reduced-motion: reduce) { .ft-bell.has-unread svg { animation: none; } }
+
+.ft-notif-head {
+  display: flex; align-items: center; gap: 4px; padding: 12px 10px 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ft-notif-head h2 {
+  margin: 0; flex: 1; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px;
+}
+.ft-notif-count {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent-dim, rgba(0,113,227,0.1)); color: var(--accent);
+}
+.ft-notif-action {
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 8px;
+  border: none; background: none; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--accent);
+}
+.ft-notif-action:hover:not(:disabled) { background: var(--accent-dim, rgba(0,113,227,0.08)); }
+.ft-notif-action:disabled { color: var(--text-3); cursor: default; }
+.ft-notif-action.is-danger { color: var(--fin-negative, #d70015); background: rgba(229,72,77,0.1); }
+.ft-notif-item { position: relative; }
+.ft-notif-remove {
+  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center; border: none; cursor: pointer;
+  background: transparent; color: var(--text-3); opacity: .55; transition: opacity .15s, background .15s, color .15s;
+}
+.ft-notif-item:hover .ft-notif-remove, .ft-notif-remove:focus-visible { opacity: 1; }
+.ft-notif-remove:hover { background: rgba(229,72,77,0.12); color: var(--fin-negative, #d70015); opacity: 1; }
+@media (hover: none) { .ft-notif-remove { opacity: .8; } }
+
+/* Desktop top bar: holds the bell at the top right of the content area. */
+.app-desktop-topbar { height: 56px; padding: 10px 24px 0; background: var(--bg-base); }

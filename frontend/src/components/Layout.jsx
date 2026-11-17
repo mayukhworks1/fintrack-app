@@ -221,7 +221,6 @@ function SidebarContent({ onClose, collapsed, onToggleCollapse }) {
 
       {/* Bottom controls */}
       <div className={`runey-sidebar-footer ${collapsed ? 'is-collapsed' : ''}`}>
-        <NotificationBell variant="sidebar" collapsed={collapsed} />
         {/* Theme toggle */}
         <button
           onClick={toggle}
@@ -454,6 +453,13 @@ export default function Layout({ children, style }) {
           </button>
           </div>
         </header>
+        )}
+
+        {/* ── Desktop top bar: notifications at the top right ── */}
+        {!isPhone && (
+          <div className="app-desktop-topbar hidden lg:flex items-center justify-end gap-2 flex-shrink-0">
+            <NotificationBell variant="icon" />
+          </div>
         )}
 
         <main

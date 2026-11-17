@@ -1,12 +1,13 @@
 // The notification bell: unread badge, a dropdown of recent mentions and
-// replies, mark one / all read. Opening one takes you to the page with its
+// replies, mark one / all read, delete one / clear all. Opening one takes you to the page with its
 // comments panel open on the thread.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { Bell, CheckCheck } from 'lucide-react'
+import { Bell, CheckCheck, Trash2, X } from 'lucide-react'
 import {
-  loadNotifications, markAllNotificationsRead, markNotificationRead, useNotifications,
+  clearAllNotifications, deleteNotification, loadNotifications, markAllNotificationsRead,
+  markNotificationRead, useNotifications,
 } from './notificationStore'
 import { Avatar } from '../comments/CommentBits'
 import { fullIst, openCommentsPanel, relativeIst } from '../comments/commentsModel'
@@ -35,6 +36,17 @@ function Dropdown({ anchorRect, variant, onClose }) {
   const s = useNotifications()
   const navigate = useNavigate()
   const ref = useRef(null)
+  const [confirmClear, setConfirmClear] = useState(false)
+  useEffect(() => {
+    if (!confirmClear) return undefined
+    const t = setTimeout(() => setConfirmClear(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirmClear])
+  const clearAll = () => {
+    if (!confirmClear) { setConfirmClear(true); return }
+    setConfirmClear(false)
+    clearAllNotifications()
+  }
 
   useEffect(() => { loadNotifications() }, [])
   useEffect(() => {
@@ -63,11 +75,14 @@ function Dropdown({ anchorRect, variant, onClose }) {
       display: 'flex', flexDirection: 'column', background: 'var(--card-bg)', color: 'var(--text-1)',
       border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 18px 48px rgba(0,0,0,0.22)', overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 700, flex: 1 }}>Notifications</h2>
-        <button type="button" onClick={markAllNotificationsRead} disabled={!s.count}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', cursor: s.count ? 'pointer' : 'default', fontSize: 12, fontWeight: 600, color: s.count ? 'var(--accent)' : 'var(--text-3)' }}>
+      <div className="ft-notif-head">
+        <h2>Notifications{s.count > 0 && <span className="ft-notif-count">{s.count}</span>}</h2>
+        <button type="button" className="ft-notif-action" onClick={markAllNotificationsRead} disabled={!s.count}>
           <CheckCheck size={13} aria-hidden="true" /> Mark all read
+        </button>
+        <button type="button" className={`ft-notif-action${confirmClear ? ' is-danger' : ''}`} onClick={clearAll}
+          disabled={!s.items.length} aria-label={confirmClear ? 'Confirm clear all notifications' : 'Clear all notifications'}>
+          <Trash2 size={13} aria-hidden="true" /> {confirmClear ? 'Confirm' : 'Clear all'}
         </button>
       </div>
       <div style={{ overflowY: 'auto' }}>
@@ -80,10 +95,10 @@ function Dropdown({ anchorRect, variant, onClose }) {
         )}
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {s.items.map(n => (
-            <li key={n.id}>
+            <li key={n.id} className="ft-notif-item">
               <button type="button" onClick={() => open(n)} data-unread={!n.read}
                 style={{
-                  display: 'flex', gap: 10, width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none',
+                  display: 'flex', gap: 10, width: '100%', textAlign: 'left', padding: '10px 40px 10px 14px', border: 'none',
                   borderBottom: '1px solid var(--border)', cursor: 'pointer', color: 'inherit',
                   background: n.read ? 'transparent' : 'var(--accent-dim, rgba(0,113,227,0.06))',
                 }}>
@@ -104,6 +119,10 @@ function Dropdown({ anchorRect, variant, onClose }) {
                   </time>
                 </span>
                 {!n.read && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--accent)', marginTop: 6, flexShrink: 0 }} />}
+              </button>
+              <button type="button" className="ft-notif-remove" onClick={() => deleteNotification(n.id)}
+                aria-label="Remove notification" title="Remove">
+                <X size={14} aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -130,7 +149,8 @@ export default function NotificationBell({ variant = 'sidebar', collapsed = fals
   const badge = count > 0 && (
     <span data-testid="notification-badge" aria-hidden="true" style={{
       position: variant === 'sidebar' && !collapsed ? 'static' : 'absolute',
-      top: -4, right: -6, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, fontSize: 10, fontWeight: 700,
+      top: variant === 'icon' ? -5 : -4, right: variant === 'icon' ? -5 : -6, minWidth: 16, height: 16,
+      boxShadow: variant === 'icon' ? '0 0 0 2px var(--bg-base)' : 'none', padding: '0 4px', borderRadius: 8, fontSize: 10, fontWeight: 700,
       lineHeight: '16px', textAlign: 'center', background: 'var(--fin-negative, #e5484d)', color: '#fff',
       marginLeft: variant === 'sidebar' && !collapsed ? 'auto' : 0,
     }}>{count > 99 ? '99+' : count}</span>
@@ -152,9 +172,9 @@ export default function NotificationBell({ variant = 'sidebar', collapsed = fals
         </button>
       ) : (
         <button ref={btn} type="button" data-notification-bell onClick={() => setOpen(o => !o)}
-          className="btn-icon" aria-label={label} aria-expanded={open} aria-haspopup="dialog"
-          style={{ padding: '0.375rem', position: 'relative' }}>
-          <Bell size={16} aria-hidden="true" />
+          className={`ft-bell${open ? ' is-open' : ''}${count > 0 ? ' has-unread' : ''}`}
+          aria-label={label} aria-expanded={open} aria-haspopup="dialog" title="Notifications">
+          <Bell size={17} strokeWidth={1.9} aria-hidden="true" />
           {badge}
         </button>
       )}

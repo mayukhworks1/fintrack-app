@@ -14,6 +14,8 @@ Comments on pages, @mentions and the notifications they raise.
   GET    /api/notifications/unread-count
   POST   /api/notifications/{id}/read
   POST   /api/notifications/read-all
+  DELETE /api/notifications/{id}                        remove one of the caller's notifications
+  DELETE /api/notifications                             clear all of the caller's notifications
 
 Who may comment follows who may open the page in the app (routers/pages.py):
 its creator and the superadmin. Public viewers have no route here at all.
@@ -122,6 +124,8 @@ MARK_READ_SQL = (
     "UPDATE notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2 AND read_at IS NULL"
 )
 MARK_ALL_READ_SQL = "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL"
+DELETE_NOTIFICATION_SQL = "DELETE FROM notifications WHERE id = $1 AND user_id = $2"
+CLEAR_NOTIFICATIONS_SQL = "DELETE FROM notifications WHERE user_id = $1"
 MARK_PAGE_READ_SQL = (
     "UPDATE notifications SET read_at = NOW() WHERE user_id = $1 AND page_id = $2 AND read_at IS NULL"
 )
@@ -529,5 +533,30 @@ async def mark_read(notification_id: str, request: Request, role: str = Depends(
     async with pool.acquire() as conn:
         await _require_ready(conn)
         await conn.execute(MARK_READ_SQL, nid, me)
+        count = await conn.fetchval(UNREAD_COUNT_SQL, me)
+    return {"ok": True, "unread": int(count or 0)}
+
+
+@router.delete("/api/notifications")
+async def clear_notifications(request: Request, role: str = Depends(require_auth)):
+    user_id, _ = _who(request, role)
+    me = _need_user(user_id)
+    pool = _pool()
+    async with pool.acquire() as conn:
+        await _require_ready(conn)
+        await conn.execute(CLEAR_NOTIFICATIONS_SQL, me)
+    return {"ok": True, "unread": 0}
+
+
+@router.delete("/api/notifications/{notification_id}")
+async def delete_notification(notification_id: str, request: Request,
+                              role: str = Depends(require_auth)):
+    user_id, _ = _who(request, role)
+    me = _need_user(user_id)
+    nid = _uuid_or_404(notification_id, "Notification")
+    pool = _pool()
+    async with pool.acquire() as conn:
+        await _require_ready(conn)
+        await conn.execute(DELETE_NOTIFICATION_SQL, nid, me)
         count = await conn.fetchval(UNREAD_COUNT_SQL, me)
     return {"ok": True, "unread": int(count or 0)}

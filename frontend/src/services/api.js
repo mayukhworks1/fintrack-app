@@ -1112,5 +1112,7 @@ export const api = {
     unreadCount: ()          => request('/api/notifications/unread-count', { fresh: true }, 0),
     markRead:    (id)        => request(`/api/notifications/${id}/read`, { method: 'POST' }),
     markAllRead: (pageId)    => request('/api/notifications/read-all', { method: 'POST', body: JSON.stringify(pageId ? { page_id: pageId } : {}) }),
+    remove:      (id)        => request(`/api/notifications/${id}`, { method: 'DELETE' }),
+    clearAll:    ()          => request('/api/notifications', { method: 'DELETE' }),
   },
 }

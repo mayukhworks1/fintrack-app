@@ -41,6 +41,8 @@ vi.mock('../services/api', () => {
         list: rec('nlist', () => ({ ready: true, items: db.notifications, unread: db.unread })),
         markRead: rec('markRead', () => { db.unread = Math.max(0, db.unread - 1); return { ok: true, unread: db.unread } }),
         markAllRead: rec('markAllRead', () => { db.unread = 0; return { ok: true, unread: 0 } }),
+        remove: rec('nremove', () => { db.unread = Math.max(0, db.unread - 1); return { ok: true, unread: db.unread } }),
+        clearAll: rec('nclear', () => { db.unread = 0; return { ok: true, unread: 0 } }),
       },
     },
     API_BASE_URL: '',
@@ -283,6 +285,29 @@ describe('NotificationBell', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /Mark all read/ }))
     await waitFor(() => expect(screen.queryByTestId('notification-badge')).toBeNull())
     expect(calls.some(c => c[0] === 'markAllRead')).toBe(true)
+  })
+
+  it('removes one notification and clears all after a confirm', async () => {
+    db.unread = 2
+    db.notifications = [
+      { id: 'n1', kind: 'mention', page_id: 'p1', page_title: 'First', actor: { name: 'A' }, read: false, created_at: ago(1) },
+      { id: 'n2', kind: 'reply', page_id: 'p2', page_title: 'Second', actor: { name: 'B' }, read: false, created_at: ago(2) },
+    ]
+    await mountBell()
+    await screen.findByTestId('notification-badge')
+    fireEvent.click(screen.getByRole('button', { name: /Notifications/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Notifications' })
+    await within(dialog).findByText('First')
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove notification' })[0])
+    await waitFor(() => expect(within(dialog).queryByText('First')).toBeNull())
+    expect(calls.some(c => c[0] === 'nremove' && c[1] === 'n1')).toBe(true)
+    expect(screen.getByTestId('notification-badge')).toHaveTextContent('1')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear all notifications' }))
+    expect(calls.some(c => c[0] === 'nclear')).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm clear all notifications' }))
+    await waitFor(() => expect(within(dialog).queryByText('Second')).toBeNull())
+    expect(calls.some(c => c[0] === 'nclear')).toBe(true)
+    expect(screen.queryByTestId('notification-badge')).toBeNull()
   })
 
   it('polls every 60s and pauses while the tab is hidden', async () => {

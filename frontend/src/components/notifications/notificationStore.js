@@ -63,6 +63,30 @@ export async function markAllNotificationsRead() {
   } catch { /* the next poll corrects the count */ }
 }
 
+export async function deleteNotification(id) {
+  const hit = state.items.find(n => n.id === id)
+  set({
+    items: state.items.filter(n => n.id !== id),
+    count: hit && !hit.read ? Math.max(0, state.count - 1) : state.count,
+  })
+  try {
+    const res = await api.notifications.remove(id)
+    if (res && typeof res.unread === 'number') set({ count: res.unread })
+  } catch {
+    loadNotifications()
+  }
+}
+
+export async function clearAllNotifications() {
+  const before = state
+  set({ items: [], count: 0 })
+  try {
+    await api.notifications.clearAll()
+  } catch (e) {
+    set({ items: before.items, count: before.count, error: e?.message || 'Could not clear notifications' })
+  }
+}
+
 function hidden() {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden'
 }

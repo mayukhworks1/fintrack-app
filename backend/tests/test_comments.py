@@ -146,6 +146,11 @@ class FakeDB:
             for n in self.notifications:
                 if n["id"] == a[0] and n["user_id"] == a[1] and n["read_at"] is None:
                     n["read_at"] = self.now()
+        elif sql is R.DELETE_NOTIFICATION_SQL:
+            self.notifications = [n for n in self.notifications
+                                  if not (str(n["id"]) == str(a[0]) and n["user_id"] == a[1])]
+        elif sql is R.CLEAR_NOTIFICATIONS_SQL:
+            self.notifications = [n for n in self.notifications if n["user_id"] != a[0]]
         elif sql is R.MARK_ALL_READ_SQL:
             for n in self.notifications:
                 if n["user_id"] == a[0] and n["read_at"] is None:
@@ -370,6 +375,22 @@ class TestMentions:
         assert run(R.unread_count(root, "superadmin")) == {"count": 1}
         assert run(R.mark_all_read(root, R.ReadAllBody(), "superadmin"))["unread"] == 0
         assert run(R.list_notifications(root, True, 30, "superadmin"))["items"] == []
+
+    def test_delete_one_and_clear_all(self, db):
+        page = db.add_page(owner=ALICE)
+        new_thread(page, f"one @[R]({ROOT})")
+        new_thread(page, f"two @[R]({ROOT})")
+        new_thread(page, f"three @[R]({ROOT})")
+        root = req(ROOT, "superadmin")
+        items = run(R.list_notifications(root, False, 30, "superadmin"))["items"]
+        # Someone else can't remove Root's notification.
+        run(R.delete_notification(items[0]["id"], req(), "user"))
+        assert len(db.notifications) == 3
+        assert run(R.delete_notification(items[0]["id"], root, "superadmin"))["unread"] == 2
+        assert [n["id"] for n in run(R.list_notifications(root, False, 30, "superadmin"))["items"]] == \
+            [i["id"] for i in items[1:]]
+        assert run(R.clear_notifications(root, "superadmin"))["unread"] == 0
+        assert run(R.list_notifications(root, False, 30, "superadmin"))["items"] == []
 
     def test_deleting_a_comment_drops_its_notifications(self, db):
         page = db.add_page(owner=ALICE)
