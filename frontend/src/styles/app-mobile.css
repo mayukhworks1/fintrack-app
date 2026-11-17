@@ -24,8 +24,10 @@
        unpainted strip; fixed inset 0 is the box iOS actually draws (the
        document preview, which is fixed, always showed its bottom buttons). */
     position: fixed;
-    inset: 0;
-    height: auto;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--app-vh, 100dvh);
   }
   /* The tab bar is in the flow, not fixed over the content: no padding to
      guess, nothing hidden under it. */

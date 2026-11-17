@@ -36,7 +36,8 @@ function read() {
     `html: ${document.documentElement.className.replace(/\s+/g, ' ').slice(0, 60)}`,
     `shell ${r(shell)}`,
     `tabbar ${r(bar)}`,
-    `ua ${navigator.userAgent.replace(/.*OS (\S+).*/, 'iOS $1')}`,
+    `app-vh ${getComputedStyle(document.documentElement).getPropertyValue('--app-vh')} clip ${document.documentElement.classList.contains('ios-clip')}`,
+    `ua ${(navigator.userAgent.match(/OS (\d+[_\d]*)/) || [, '?'])[1]}`,
   ]
 }
 
@@ -50,7 +51,18 @@ export default function ViewportProbe() {
     return () => { clearTimeout(t); window.removeEventListener('resize', on) }
   }, [])
   if (hidden || !lines.length) return null
+  // Coloured markers every 20pt up from the reported bottom: the lowest one
+  // still visible on screen shows where iOS stops drawing.
+  const marks = Array.from({ length: 8 }, (_, i) => i)
+  const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7', '#ec4899']
   return (
+    <>
+    {marks.map(i => (
+      <div key={i} aria-hidden="true" style={{
+        position: 'fixed', left: 0, width: 70, height: 20, bottom: i * 20, zIndex: 9999,
+        background: colors[i], color: '#000', font: '10px/20px ui-monospace, Menlo, monospace', paddingLeft: 4,
+      }}>{`-${i * 20} (${window.innerHeight - i * 20 - 20})`}</div>
+    ))}
     <button type="button" onClick={() => setHidden(true)} aria-label="Hide screen info"
       style={{
         position: 'fixed', left: 8, right: 8, top: 'calc(env(safe-area-inset-top) + 96px)', zIndex: 9999,
@@ -60,5 +72,6 @@ export default function ViewportProbe() {
       }}>
       {'Screen info (tap to hide)\n' + lines.join('\n')}
     </button>
+    </>
   )
 }
