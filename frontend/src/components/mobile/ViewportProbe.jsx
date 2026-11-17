@@ -30,7 +30,7 @@ function read() {
   return [
     `screen ${screen.width}x${screen.height}  inner ${innerWidth}x${innerHeight}  outer ${outerHeight}`,
     `vv h${vv ? Math.round(vv.height) : '-'} top${vv ? Math.round(vv.offsetTop) : '-'}  docH ${document.documentElement.clientHeight}`,
-    `100vh ${Math.round(vh)}  100dvh ${Math.round(dvh)}  fixed0 ${Math.round(fixedH)}`,
+    `vh ${Math.round(vh)}  dvh ${Math.round(dvh)}  fixed0 ${Math.round(fixedH)}`,
     `safe top ${ps.paddingTop} bottom ${ps.paddingBottom}`,
     `standalone ${matchMedia('(display-mode: standalone)').matches} navStandalone ${navigator.standalone}`,
     `html: ${document.documentElement.className.replace(/\s+/g, ' ').slice(0, 60)}`,
