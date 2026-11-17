@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowDown, ArrowUp, BarChart3, Download, GripVertical, LayoutDashboard, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../services/api'
 import { useDialog } from '../hooks/useDialog'
@@ -9,21 +10,22 @@ const NO_SOURCE_ROWS = {}
 
 function ModalShell({ title, subtitle, onClose, children }) {
   const dialog = useDialog({ label: title, onClose })
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
-      <div {...dialog.panelProps} className="w-full max-w-5xl rounded-[28px] card max-h-[88vh] overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-stretch sm:items-center justify-center bg-black/40 sm:p-4">
+      <div {...dialog.panelProps} className="ft-sheet-full w-full max-w-5xl sm:rounded-[28px] card sm:max-h-[88vh] overflow-hidden flex flex-col">
         <div className="flex items-start justify-between gap-4 px-5 py-4" style={{ borderBottom: '1px solid var(--card-border)' }}>
           <div>
             <h2 className="text-lg font-bold" style={{ color: 'var(--text-1)' }}>{title}</h2>
             {subtitle && <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>{subtitle}</p>}
           </div>
-          <button aria-label="Close" onClick={onClose} className="btn-ghost"><X size={14} /></button>
+          <button aria-label="Close" onClick={onClose} className="btn-ghost" style={{ minWidth: 40, minHeight: 40 }}><X size={18} /></button>
         </div>
-        <div className="p-5 overflow-auto max-h-[calc(88vh-72px)]">
+        <div className="p-4 sm:p-5 overflow-auto flex-1 min-h-0 sm:max-h-[calc(88vh-72px)]">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -539,7 +541,7 @@ export default function InsightWorkbench({
 
       {showDashboards && (
         <ModalShell
-          title={`${pageLabel} dashboards`}
+          title={pageLabel === 'Dashboard' ? 'Custom dashboards' : `${pageLabel} dashboards`}
           subtitle="Save widget selections as reusable custom dashboard presets."
           onClose={() => setShowDashboards(false)}
         >

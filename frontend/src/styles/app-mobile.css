@@ -25,6 +25,10 @@
   /* The tab bar is in the flow, not fixed over the content: no padding to
      guess, nothing hidden under it. */
   .app-layout-shell.is-phone #main-content { padding-bottom: 0; }
+  /* The scroller itself does not animate on a phone (.m-route does): a
+     filled opacity animation would make it a stacking layer, and every
+     pop-up inside a page would then sit under the title bar and tab bar. */
+  .app-layout-shell.is-phone #main-content { animation: none; }
 
   /* ── Large-title header ── */
   .m-titlebar {
@@ -90,7 +94,9 @@
   .m-back-btn:active { background: var(--row-hover); scale: 0.92; }
 
   /* Screens slide up and fade in as they change. */
-  .m-route { height: 100%; animation: m-route-in 260ms var(--ease-out, cubic-bezier(.2,.8,.2,1)) both; }
+  /* No fill mode: once the entrance ends the element carries no transform,
+     so fixed pop-ups inside a page still cover the whole screen. */
+  .m-route { height: 100%; animation: m-route-in 260ms var(--ease-out, cubic-bezier(.2,.8,.2,1)); }
 
   /* The active tab's icon gives a small pop. */
   .m-tab.is-active svg { animation: m-tab-pop 320ms cubic-bezier(.34,1.56,.64,1) both; }
@@ -1096,4 +1102,16 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   .m-route, .m-tab.is-active svg, .m-tab.is-active::before { animation: none; }
+}
+
+/* Big pop-up panels become full-screen sheets on a phone, clear of the
+   status bar and home indicator. */
+@media (max-width: 639px) {
+  .ft-sheet-full {
+    height: 100%;
+    border-radius: 0 !important;
+    border: 0 !important;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
