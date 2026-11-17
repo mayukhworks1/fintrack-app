@@ -337,6 +337,9 @@ export default function Layout({ children, style }) {
   // Phones (≤640px) get the large-title header and the tab bar; tablets keep
   // the compact top bar and their bottom nav exactly as they were.
   const isPhone = usePhone()
+  // Each phone screen animates in when it changes. Pages keeps one key so its
+  // own sub-screens don't remount the whole manager.
+  const routeKey = location.pathname.startsWith('/pages') ? '/pages' : location.pathname
   // The tab bar steps aside while the on-screen keyboard is up.
   useKeyboardWatch(isPhone)
   const drawerRef = useRef(null)
@@ -470,7 +473,9 @@ export default function Layout({ children, style }) {
           tabIndex={-1}
         >
           <HeaderSlotContext.Provider value={isPhone ? headerSlot : null}>
-            {children}
+            {isPhone
+              ? <div key={routeKey} className="m-route">{children}</div>
+              : children}
           </HeaderSlotContext.Provider>
         </main>
 
@@ -575,15 +580,70 @@ export function phoneTitleFor(pathname) {
   return { path: pathname, title, context: 'FinTrack', large: false }
 }
 
+/** Where "back" goes from a nested phone screen, or null on a top-level one. */
+export function phoneBackTarget(pathname, search = '') {
+  const parts = pathname.split('/').filter(Boolean)
+  if (parts.length > 1) return '/' + parts[0]
+  const q = new URLSearchParams(search)
+  if (parts[0] === 'pages' && q.get('page')) return '/pages'
+  return null
+}
+
+function usePhoneBack() {
+  const { pathname, search } = useLocation()
+  const navigate = useNavigate()
+  const target = phoneBackTarget(pathname, search)
+  const goBack = useCallback(() => {
+    if (!target) return
+    // In-app history first (keeps scroll and filters); the parent screen otherwise.
+    if ((window.history.state?.idx ?? 0) > 0) navigate(-1)
+    else navigate(target, { replace: true })
+  }, [navigate, target])
+  return { canGoBack: Boolean(target), goBack }
+}
+
+/** Swipe in from the left edge to go back: home-screen apps have no browser back gesture. */
+function useEdgeSwipeBack(enabled, canGoBack, goBack) {
+  useEffect(() => {
+    if (!enabled || !canGoBack) return undefined
+    let start = null
+    const onStart = (e) => {
+      const t = e.touches[0]
+      start = t && t.clientX <= 24 ? { x: t.clientX, y: t.clientY } : null
+    }
+    const onEnd = (e) => {
+      if (!start) return
+      const t = e.changedTouches[0]
+      const dx = t.clientX - start.x
+      const dy = Math.abs(t.clientY - start.y)
+      start = null
+      if (dx > 70 && dy < 60) goBack()
+    }
+    document.addEventListener('touchstart', onStart, { passive: true })
+    document.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onStart)
+      document.removeEventListener('touchend', onEnd)
+    }
+  }, [enabled, canGoBack, goBack])
+}
+
 function PhoneTitleBar({ onSlot }) {
   const { pathname } = useLocation()
+  const { canGoBack, goBack } = usePhoneBack()
+  useEdgeSwipeBack(true, canGoBack, goBack)
   const t = phoneTitleFor(pathname)
   const context = t.context === 'today'
     ? new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
     : t.context
   const Title = t.large ? 'h1' : 'p'
   return (
-    <header className={`app-bar m-titlebar${t.large ? '' : ' is-compact'}`}>
+    <header className={`app-bar m-titlebar${t.large ? '' : ' is-compact'}${canGoBack ? ' has-back' : ''}`}>
+      {canGoBack && (
+        <button type="button" className="m-back-btn" onClick={goBack} aria-label="Back">
+          <ChevronLeft size={24} strokeWidth={2.2} aria-hidden="true" />
+        </button>
+      )}
       <div className="m-titlebar-text">
         <p className="m-titlebar-context">{context}</p>
         <Title className="m-titlebar-title">{t.title}</Title>

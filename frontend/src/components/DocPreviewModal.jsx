@@ -75,6 +75,14 @@ function PreviewBody({ doc }) {
     setRotate(0)
   }, [doc?.url])
 
+  // The viewer gives no error event across origins: if it hasn't loaded in
+  // a while, offer opening the file directly instead of a blank frame.
+  useEffect(() => {
+    if (iframeLoaded || iframeError || !doc || isImage(doc) || !isGdocsViewable(doc)) return undefined
+    const t = setTimeout(() => setIframeError(true), 15000)
+    return () => clearTimeout(t)
+  }, [doc, iframeLoaded, iframeError])
+
   if (!doc) return null
   const url = doc.url || doc.presignedUrl || ''
 
@@ -128,18 +136,21 @@ function PreviewBody({ doc }) {
           style={{ background: 'var(--bg-base)' }}>
           <FileText size={52} style={{ color: 'var(--text-3)', opacity: 0.25 }} />
           <div>
-            <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Preview unavailable</p>
+            <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-2)' }}>Preview is taking too long</p>
             <p className="text-xs max-w-xs mx-auto" style={{ color: 'var(--text-3)' }}>
-              Could not load this file in the viewer. Open it directly below.
+              Open the file directly to view it in your phone's viewer.
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-center">
-            <a href={url} download={doc.name} className="btn-primary" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
-              <Download size={13} />Download
+            <a href={url} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ fontSize: '0.8rem', padding: '0.6rem 1rem' }}>
+              <ExternalLink size={14} />Open file
             </a>
-            <a href={url} target="_blank" rel="noopener noreferrer" className="btn-ghost" style={{ fontSize: '0.75rem', padding: '0.45rem 0.9rem' }}>
-              <ExternalLink size={13} />Open in new tab
+            <a href={url} download={doc.name} className="btn-ghost" style={{ fontSize: '0.8rem', padding: '0.6rem 1rem' }}>
+              <Download size={14} />Download
             </a>
+            <button type="button" onClick={() => { setIframeError(false); setIframeLoaded(false) }} className="btn-ghost" style={{ fontSize: '0.8rem', padding: '0.6rem 1rem' }}>
+              Try again
+            </button>
           </div>
         </div>
       )
@@ -268,7 +279,7 @@ export function DocPreviewModal({ state, onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-stretch overlay-safe" role="dialog" aria-modal="true" aria-label={`Preview: ${doc?.name}`}>
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.88)', WebkitBackdropFilter: 'blur(10px)', backdropFilter: 'blur(10px)' }} onClick={onClose} />
-      <div className="relative flex flex-col w-full m-3 sm:m-6 rounded-2xl overflow-hidden shadow-2xl"
+      <div className="doc-preview-panel relative flex flex-col w-full sm:m-6 sm:rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: 'var(--card-bg)', border: '1px solid var(--card-border)', zIndex: 1 }}>
 
         {/* ── Header ── */}
@@ -314,9 +325,7 @@ export function DocPreviewModal({ state, onClose }) {
               onClick={e => e.stopPropagation()} title="Open in new tab">
               <ExternalLink size={12} /><span>Open</span>
             </a>
-            <a href={url} download={doc?.name} className="sm:hidden btn-icon" title="Download"><Download size={14} /></a>
-            <a href={url} target="_blank" rel="noopener noreferrer" className="sm:hidden btn-icon" title="Open in tab"><ExternalLink size={14} /></a>
-            <button onClick={onClose} className="btn-icon ml-1" aria-label="Close preview"><X size={14} /></button>
+            <button onClick={onClose} className="btn-icon ml-1 doc-preview-close" aria-label="Close preview"><X size={18} /></button>
           </div>
         </div>
 
@@ -325,6 +334,12 @@ export function DocPreviewModal({ state, onClose }) {
 
         {/* ── Thumbnail strip (multi-file) ── */}
         {multi && <ThumbnailStrip docs={docs} idx={idx} onSelect={setIdx} />}
+
+        {/* ── Phone actions: big, thumb-reachable ── */}
+        <div className="doc-preview-actions sm:hidden">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="btn-primary"><ExternalLink size={16} />Open</a>
+          <a href={url} download={doc?.name} className="btn-ghost"><Download size={16} />Download</a>
+        </div>
       </div>
     </div>,
     document.body

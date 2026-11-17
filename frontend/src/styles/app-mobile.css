@@ -69,6 +69,45 @@
     flex-shrink: 0;
   }
   .m-titlebar-slot { display: contents; }
+
+  /* Back to the parent screen (nested screens only). */
+  .m-titlebar.has-back { padding-left: max(6px, env(safe-area-inset-left)); gap: 4px; }
+  .m-back-btn {
+    align-self: flex-end;
+    width: 40px;
+    height: 40px;
+    margin-bottom: -2px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--accent);
+    transition: background var(--dur-fast), scale var(--motion-press) var(--ease-press);
+  }
+  .m-back-btn:active { background: var(--row-hover); scale: 0.92; }
+
+  /* Screens slide up and fade in as they change. */
+  .m-route { height: 100%; animation: m-route-in 260ms var(--ease-out, cubic-bezier(.2,.8,.2,1)) both; }
+
+  /* The active tab's icon gives a small pop. */
+  .m-tab.is-active svg { animation: m-tab-pop 320ms cubic-bezier(.34,1.56,.64,1) both; }
+  .m-tab.is-active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 28px;
+    height: 3px;
+    margin-left: -14px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent);
+    animation: m-tab-bar-in 240ms var(--ease-out, ease) both;
+  }
+  .m-tab { position: relative; }
+
   .m-titlebar-actions .ft-bell {
     width: 44px;
     height: 44px;
@@ -1031,4 +1070,30 @@ html {
   body:not(:has(.app-layout-shell)):not(:has(.web-invoices-shell)) {
     padding-top: env(safe-area-inset-top);
   }
+}
+
+/* Document preview on a phone: full screen, clear of the notch and the
+   home indicator, with big Open / Download buttons at the bottom. */
+@media (max-width: 639px) {
+  .doc-preview-panel { margin: 0; border-radius: 0; border: 0 !important; }
+  .doc-preview-panel > :first-child { padding-top: max(12px, env(safe-area-inset-top)); }
+  .doc-preview-close { width: 40px; height: 40px; }
+  .doc-preview-actions {
+    display: flex;
+    gap: 10px;
+    padding: 10px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    border-top: 1px solid var(--card-border);
+    background: var(--sidebar-bg);
+  }
+  .doc-preview-actions a {
+    flex: 1;
+    justify-content: center;
+    min-height: 46px;
+    font-size: 15px;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-route, .m-tab.is-active svg, .m-tab.is-active::before { animation: none; }
 }

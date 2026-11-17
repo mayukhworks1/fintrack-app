@@ -5218,3 +5218,14 @@ html.theme-reveal::view-transition-new(root) { z-index: 2; }
 
 /* Desktop top bar: holds the bell at the top right of the content area. */
 .app-desktop-topbar { height: 56px; padding: 10px 24px 0; background: var(--bg-base); }
+
+/* Phone screen motion (used by styles/app-mobile.css). */
+@keyframes m-route-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes m-tab-pop {
+  0% { transform: scale(.82); }
+  100% { transform: scale(1); }
+}
+@keyframes m-tab-bar-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }

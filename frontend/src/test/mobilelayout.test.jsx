@@ -329,3 +329,15 @@ describe('iPhone: document and heights', () => {
     expect(selectors).toEqual(['html', '.app-topbar', '.app-bottom-bar'])
   })
 })
+
+describe('iPhone: back navigation', () => {
+  it('nested screens go back to their parent; top-level tabs have no back', async () => {
+    const { phoneBackTarget } = await import('../components/Layout')
+    expect(phoneBackTarget('/')).toBeNull()
+    expect(phoneBackTarget('/projects')).toBeNull()
+    expect(phoneBackTarget('/projects/abc')).toBe('/projects')
+    expect(phoneBackTarget('/pages/new')).toBe('/pages')
+    expect(phoneBackTarget('/pages', '?page=p1')).toBe('/pages')
+    expect(phoneBackTarget('/pages', '')).toBeNull()
+  })
+})
