@@ -91,3 +91,5 @@ brag-output/composition/v3-sheet.png
 brag-output/film-v3.*
 brag-output/film-v4.*
 brag-output/film-v5.*
+.wrangler/
+/package-lock.json
