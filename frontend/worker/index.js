@@ -1,5 +1,7 @@
-// Public page links: link-preview bots get the server-rendered share card,
-// /p/<slug>/preview.png comes from the API, everyone else gets the app.
+// Edge entry for the static app. Only /p/* reaches this code (see
+// wrangler.jsonc run_worker_first); everything else is served from assets.
+// Link-preview bots get the server-rendered share card, /p/<slug>/preview.png
+// comes from the API, and people get the app.
 const API = 'https://mayukhj24-fintrack-api.hf.space'
 const BOTS = /(facebookexternalhit|Facebot|WhatsApp\/|LinkedInBot|Slackbot|Slack-ImgProxy|Twitterbot|TelegramBot|Discordbot|SkypeUriPreview|MicrosoftPreview|Pinterestbot|redditbot|Applebot|Googlebot|bingbot|Embedly|Iframely|vkShare|Google-PageRenderer)/
 
@@ -12,16 +14,19 @@ function proxy(url, request) {
   })
 }
 
-export async function onRequest(context) {
-  const { request, params, next } = context
-  const parts = Array.isArray(params.path) ? params.path : []
-  const slug = parts[0] ? encodeURIComponent(parts[0]) : ''
-
-  if (slug && parts.length === 2 && parts[1] === 'preview.png') {
-    return proxy(`${API}/api/public/pages/${slug}/og.png`, request)
-  }
-  if (slug && parts.length === 1 && BOTS.test(request.headers.get('user-agent') || '')) {
-    return proxy(`${API}/api/public/pages/${slug}/share`, request)
-  }
-  return next()
+export default {
+  async fetch(request, env) {
+    const { pathname } = new URL(request.url)
+    const parts = pathname.split('/').filter(Boolean)
+    if (parts[0] === 'p' && parts[1]) {
+      const slug = encodeURIComponent(decodeURIComponent(parts[1]))
+      if (parts.length === 3 && parts[2] === 'preview.png') {
+        return proxy(`${API}/api/public/pages/${slug}/og.png`, request)
+      }
+      if (parts.length === 2 && BOTS.test(request.headers.get('user-agent') || '')) {
+        return proxy(`${API}/api/public/pages/${slug}/share`, request)
+      }
+    }
+    return env.ASSETS.fetch(request)
+  },
 }
