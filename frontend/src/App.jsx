@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useCallback, useMemo } from 'react'
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Loader2, ShieldCheck } from 'lucide-react'
-import { Analytics as VercelAnalytics } from '@vercel/analytics/react'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'          // eager — auth gate
@@ -289,7 +288,6 @@ export default function App() {
             <Route path="/view/:token" element={<SharedView />} />
           </Routes>
         </Suspense>
-        <VercelAnalytics />
       </ErrorBoundary>
     )
   }
@@ -302,7 +300,6 @@ export default function App() {
             <Route path="/p/:slug" element={<PageViewer />} />
           </Routes>
         </Suspense>
-        <VercelAnalytics />
       </ErrorBoundary>
     )
   }
@@ -334,7 +331,6 @@ export default function App() {
               <PublicPage />
             </PublicLayout>
           </Suspense>
-          <VercelAnalytics />
         </ErrorBoundary>
       )
     }
@@ -348,7 +344,6 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
           <AdminDashboard />
         </Suspense>
-        <VercelAnalytics />
       </ErrorBoundary>
     )
   }
@@ -367,7 +362,6 @@ export default function App() {
             </Routes>
           </Suspense>
         </div>
-        <VercelAnalytics />
       </ErrorBoundary>
     )
   }
@@ -399,7 +393,6 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
       </Layout>
-      <VercelAnalytics />
     </>
   )
 }

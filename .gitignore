@@ -24,8 +24,6 @@ npm-debug.log*
 .env.*
 !.env.example
 
-# Vercel CLI project link
-.vercel/
 
 # Database dumps (docs/BACKUPS.md): a full copy holds login accounts.
 fintrack-*.sql

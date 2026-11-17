@@ -29,7 +29,6 @@ vi.mock('../hooks/usePageMeta', () => ({ usePageMeta: vi.fn() }))
 // dashboard renders once chosen. Mounting the real one drags in its whole
 // data surface and tests something else.
 vi.mock('../pages/Dashboard', () => ({ default: () => <div>dashboard stub</div> }))
-vi.mock('@vercel/analytics/react', () => ({ Analytics: () => null }))
 vi.mock('../services/api', () => ({
   api: {
     auth: {

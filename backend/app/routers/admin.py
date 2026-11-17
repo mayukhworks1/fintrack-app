@@ -118,7 +118,7 @@ def _git_commit_sha() -> str | None:
 
 def _compute_git_commit_sha() -> str | None:
     """Best-effort deployment commit detection without making health depend on git."""
-    for key in ("GIT_COMMIT_SHA", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"):
+    for key in ("GIT_COMMIT_SHA", "COMMIT_SHA"):
         value = (os.getenv(key) or "").strip()
         if value:
             return value[:12]

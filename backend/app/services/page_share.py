@@ -4,7 +4,7 @@ Link previews for published pages.
 WhatsApp, LinkedIn, Slack and the rest read a link's <meta property="og:*">
 tags without running JavaScript, so the SPA's /p/:slug shell only ever showed
 them the generic FinTrack card. The frontend host routes those crawlers here
-instead (see frontend/vercel.json); people still get the SPA.
+instead (see frontend/worker/index.js); people still get the SPA.
 
 Two outputs: a tiny HTML document carrying the tags, and a 1200x630 card image
 drawn from the page's own title and description.

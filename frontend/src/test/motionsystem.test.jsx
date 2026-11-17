@@ -37,7 +37,6 @@ vi.mock('../context/ThemeContext', () => ({
 }))
 vi.mock('../hooks/usePageMeta', () => ({ usePageMeta: vi.fn() }))
 vi.mock('../pages/Dashboard', () => ({ default: () => <div>dashboard stub</div> }))
-vi.mock('@vercel/analytics/react', () => ({ Analytics: () => null }))
 vi.mock('../services/api', () => ({
   api: {
     auth: {

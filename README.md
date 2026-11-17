@@ -1,6 +1,6 @@
 # FinTrack — AI-Powered Project Finance Manager
 
-Full-stack app for agency project billing, invoice tracking, and portfolio health monitoring. Built with React + FastAPI, deployed on Vercel + Hugging Face Spaces.
+Full-stack app for agency project billing, invoice tracking, and portfolio health monitoring. Built with React + FastAPI, deployed on Cloudflare + Hugging Face Spaces.
 
 ---
 
@@ -8,7 +8,7 @@ Full-stack app for agency project billing, invoice tracking, and portfolio healt
 
 | Layer | Tech | Hosting |
 |-------|------|---------|
-| Frontend | React 18 + Vite + Tailwind | Vercel |
+| Frontend | React 18 + Vite + Tailwind | Cloudflare Workers (static assets) |
 | Backend | FastAPI (Python 3.11) | Hugging Face Spaces (Docker) |
 | Primary DB | Teable REST API | app.teable.ai |
 | Mirror DB | Aiven PostgreSQL (asyncpg) | Aiven Cloud |
@@ -20,7 +20,7 @@ Full-stack app for agency project billing, invoice tracking, and portfolio healt
 ## Architecture
 
 ```
-Browser  ──→  Vercel (React/Vite)
+Browser  ──→  Cloudflare (React/Vite)
                   │  REST /api/*
                   ▼
            HF Space — FastAPI (Python 3.11)
@@ -342,7 +342,7 @@ AI keys are set in Admin → AI gateway once the app is running. `GROQ_API_KEY` 
 
 - `ci.yml` → frontend tests + build, backend import check + pytest, on every pull request and push to `main`
 - `deploy-backend.yml` → Hugging Face Spaces (Docker), after CI passes on `main`
-- Frontend → Vercel, deployed from GitHub by Vercel's Git integration (project Root Directory `frontend/`, config in `frontend/vercel.json`); it does not wait for CI
+- Frontend → Cloudflare Workers, built and deployed on every push to `main` by Cloudflare's Git integration (config in `wrangler.jsonc`, headers in `frontend/public/_headers`, link-preview routing in `frontend/worker/index.js`); it does not wait for CI
 - `keepalive.yml` → pings `/health/live` on a schedule so the Space does not sleep
 - `backup.yml` → nightly database backup to Google Drive (setup and restore: `docs/BACKUPS.md`)
 
