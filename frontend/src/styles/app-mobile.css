@@ -99,7 +99,7 @@
   .m-route { height: 100%; animation: m-route-in 260ms var(--ease-out, cubic-bezier(.2,.8,.2,1)); }
 
   /* The active tab's icon gives a small pop. */
-  .m-tab.is-active svg { animation: m-tab-pop 320ms cubic-bezier(.34,1.56,.64,1) both; }
+
   .m-tab.is-active::before {
     content: '';
     position: absolute;
@@ -110,7 +110,6 @@
     margin-left: -14px;
     border-radius: 0 0 3px 3px;
     background: var(--accent);
-    animation: m-tab-bar-in 240ms var(--ease-out, ease) both;
   }
   .m-tab { position: relative; }
 
@@ -157,14 +156,23 @@
   }
 
   /* ── Bottom tab bar ── */
+  /* Solid, not blurred: iOS home-screen apps can fail to draw the tabs
+     inside a backdrop-filtered bar at the bottom edge. */
+  .app-bar.m-tabbar {
+    background: var(--sidebar-bg) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
   .m-tabbar {
+    position: relative;
+    z-index: 40;
+    transform: translateZ(0);
     flex-shrink: 0;
     display: flex;
     align-items: stretch;
     justify-content: space-around;
     border-top: 1px solid var(--sidebar-border);
     padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    z-index: 30;
   }
   .m-tab {
     flex: 1 1 0;
@@ -1101,7 +1109,7 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .m-route, .m-tab.is-active svg, .m-tab.is-active::before { animation: none; }
+  .m-route { animation: none; }
 }
 
 /* Big pop-up panels become full-screen sheets on a phone, clear of the

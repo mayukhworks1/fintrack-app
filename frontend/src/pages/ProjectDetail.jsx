@@ -308,9 +308,10 @@ export default function ProjectDetail() {
           borderBottom: '1px solid var(--border)',
         }}>
         {/* Breadcrumb row */}
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center justify-end sm:justify-between gap-3 mb-4">
+          {/* On a phone the title bar's back arrow does this. */}
           <button onClick={() => navigate('/projects')}
-            className="flex items-center gap-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 transition-all"
+            className="hidden sm:flex items-center gap-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 transition-all"
             style={{ color: 'var(--text-3)', border: '1px solid var(--border)', background: 'var(--card-bg)' }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--text-1)'}
             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-3)'}>
