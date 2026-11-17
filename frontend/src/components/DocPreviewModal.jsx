@@ -12,7 +12,7 @@
  *   <DocPreviewModal state={previewDocs} onClose={() => setPreviewDocs(null)} />
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import {
   X, Download, ExternalLink, FileText, Image as ImageIcon,
@@ -20,6 +20,8 @@ import {
   File, FileSpreadsheet, Presentation,
 } from 'lucide-react'
 import { tint } from '../utils/color'
+
+const PdfViewer = lazy(() => import('./PdfViewer'))
 
 /* ── file-type detection ─────────────────────────────────────────────────── */
 
@@ -65,12 +67,14 @@ const gdocsUrl = (url) =>
 function PreviewBody({ doc }) {
   const [iframeError,  setIframeError]  = useState(false)
   const [iframeLoaded, setIframeLoaded] = useState(false)
+  const [pdfFallback,  setPdfFallback]  = useState(false)
   const [zoom,   setZoom]   = useState(1)
   const [rotate, setRotate] = useState(0)
 
   useEffect(() => {
     setIframeError(false)
     setIframeLoaded(false)
+    setPdfFallback(false)
     setZoom(1)
     setRotate(0)
   }, [doc?.url])
@@ -79,9 +83,10 @@ function PreviewBody({ doc }) {
   // a while, offer opening the file directly instead of a blank frame.
   useEffect(() => {
     if (iframeLoaded || iframeError || !doc || isImage(doc) || !isGdocsViewable(doc)) return undefined
+    if (isPdf(doc) && !pdfFallback) return undefined
     const t = setTimeout(() => setIframeError(true), 15000)
     return () => clearTimeout(t)
-  }, [doc, iframeLoaded, iframeError])
+  }, [doc, iframeLoaded, iframeError, pdfFallback])
 
   if (!doc) return null
   const url = doc.url || doc.presignedUrl || ''
@@ -128,7 +133,16 @@ function PreviewBody({ doc }) {
     )
   }
 
-  /* ── PDF / Office via Google Docs Viewer ── */
+  /* ── PDF: drawn in the app (falls back to the hosted viewer) ── */
+  if (isPdf(doc) && !iframeError && !pdfFallback) {
+    return (
+      <Suspense fallback={<div className="flex-1" style={{ background: 'var(--bg-base)' }} />}>
+        <PdfViewer url={url} onFail={() => setPdfFallback(true)} />
+      </Suspense>
+    )
+  }
+
+  /* ── Office (and PDF fallback) via Google Docs Viewer ── */
   if (isGdocsViewable(doc)) {
     if (iframeError) {
       return (
