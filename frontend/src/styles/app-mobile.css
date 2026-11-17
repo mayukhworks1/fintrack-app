@@ -19,8 +19,13 @@
     /* stylelint-disable-next-line value-no-vendor-prefix */
     height: -webkit-fill-available;
     height: 100dvh;
-    /* The painted height, measured in theme/bootstrap.js. */
-    height: var(--app-vh, 100dvh);
+    /* Pinned to the screen like a full-screen sheet. iOS 26 home-screen apps
+       misreport 100vh/100dvh/innerHeight, which left the tab bar in an
+       unpainted strip; fixed inset 0 is the box iOS actually draws (the
+       document preview, which is fixed, always showed its bottom buttons). */
+    position: fixed;
+    inset: 0;
+    height: auto;
   }
   /* The tab bar is in the flow, not fixed over the content: no padding to
      guess, nothing hidden under it. */
