@@ -10,7 +10,7 @@
    --border, quiet text is --text-3 and the one colour is --accent.
 ══════════════════════════════════════════════════════════════════ */
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
   /* ── Shell ── */
   /* 100vh reaches behind Safari's toolbar; the tab bar sits in the flow at
      the bottom of the column, so the column must be the visible height. */
@@ -667,7 +667,7 @@
 
 /* ── Visuals: mini charts, avatars, pills, sections, insight cards ──
    Same rules as above: phone only, palette tokens only. */
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
   /* The ring sweeps from empty on load (MobileUI.ProgressRing). */
   .m-ring-fill { transition: stroke-dashoffset 0.9s var(--ease-out); }
 
@@ -970,7 +970,7 @@
   }
 }
 
-@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+@media (max-width: 640px) and (prefers-reduced-motion: reduce), (pointer: coarse) and (max-height: 500px) and (orientation: landscape) and (prefers-reduced-motion: reduce) {
   .m-aging-fill, .m-bars-col { animation: none; }
   .m-ring-fill, .m-round-btn, .m-tab, .m-segment { transition: none; }
   .m-round-btn:active, .m-tab:active { scale: 1; }
@@ -1005,7 +1005,7 @@ html {
   padding-right: env(safe-area-inset-right);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
   /* Taps: no 300ms double-tap wait, no grey flash; :active gives feedback. */
   .app-layout-shell.is-phone,
   .web-invoices-shell {
@@ -1094,7 +1094,7 @@ html {
 /* Opened from the home screen: no browser chrome above the page, so the
    public pages and sign-in (which have no app header) clear the status bar
    themselves. */
-@media (display-mode: standalone) and (max-width: 640px) {
+@media (display-mode: standalone) and (max-width: 640px), (display-mode: standalone) and (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
   /* iOS 26/27 open a home-screen app with the viewport one status bar short
      (measured: innerHeight 894 on a 956pt screen), and things pinned to the
      bottom are then never drawn. A document at least as tall as the large
@@ -1145,4 +1145,12 @@ html {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* Phone turned sideways: the screen is short, so the title bar is compact. */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  .m-titlebar { padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 6px; }
+  .m-titlebar-context { display: none; }
+  .m-titlebar-title { font-size: 20px; line-height: 28px; }
+  .m-titlebar-actions .btn-icon, .m-titlebar-actions .ft-bell, .m-round-btn { width: 38px; height: 38px; min-width: 38px; }
 }

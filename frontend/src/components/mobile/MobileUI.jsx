@@ -18,7 +18,8 @@ import { prefersReducedMotion, useReducedMotion } from '../../hooks/useReducedMo
 import { RowSkeletons, StatusPill } from './Visuals'
 
 /** The phone breakpoint: the same 640px edge the rest of the app uses. */
-export const PHONE_QUERY = '(max-width: 640px)'
+// Phones: narrow screens, and phones turned sideways (short and touch-first).
+export const PHONE_QUERY = '(max-width: 640px), (pointer: coarse) and (max-height: 500px) and (orientation: landscape)'
 
 /** True on a phone-sized viewport. */
 export function usePhone() {

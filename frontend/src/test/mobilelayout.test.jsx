@@ -31,9 +31,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 // A viewport of `width` for every matchMedia query the components ask.
 function setWidth(width) {
   window.matchMedia = (query) => {
-    const max = /max-width:\s*(\d+)px/.exec(query)
-    const min = /min-width:\s*(\d+)px/.exec(query)
-    const matches = (!max || width <= +max[1]) && (!min || width >= +min[1]) && !/hover:\s*none|pointer:\s*coarse/.test(query)
+    // A comma list matches when any part does; touch-only parts never do here.
+    const matches = query.split(',').some((part) => {
+      const max = /max-width:\s*(\d+)px/.exec(part)
+      const min = /min-width:\s*(\d+)px/.exec(part)
+      return (!max || width <= +max[1]) && (!min || width >= +min[1]) && !/hover:\s*none|pointer:\s*coarse/.test(part)
+    })
     return { matches, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }
   }
 }

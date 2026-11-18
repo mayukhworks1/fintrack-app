@@ -10,7 +10,6 @@ import {
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { usePhone, useKeyboardWatch, HeaderSlotContext } from './mobile/MobileUI'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
@@ -339,10 +338,8 @@ export default function Layout({ children, style }) {
   // Phones (≤640px) get the large-title header and the tab bar; tablets keep
   // the compact top bar and their bottom nav exactly as they were.
   const isPhone = usePhone()
-  // A phone turned sideways is wider than the phone layout but still gets
-  // the floating tab bar (the tablet bottom nav is not drawn in iOS
-  // home-screen apps).
-  const landscapePhone = useMediaQuery('(pointer: coarse) and (max-height: 500px) and (orientation: landscape)')
+  // Phones turned sideways are covered by usePhone() (PHONE_QUERY).
+  const landscapePhone = false
   // Each phone screen animates in when it changes. Pages keeps one key so its
   // own sub-screens don't remount the whole manager.
   const routeKey = location.pathname.startsWith('/pages') ? '/pages' : location.pathname

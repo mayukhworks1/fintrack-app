@@ -31,7 +31,7 @@ function ModalShell({ title, subtitle, onClose, children }) {
 
 function SectionCard({ title, children, action }) {
   return (
-    <div className="rounded-2xl p-4" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
+    <div className="rounded-2xl p-4 min-w-0" style={{ background: 'var(--bg-layer)', border: '1px solid var(--card-border)' }}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{title}</p>
@@ -545,7 +545,7 @@ export default function InsightWorkbench({
           subtitle="Save widget selections as reusable custom dashboard presets."
           onClose={() => setShowDashboards(false)}
         >
-          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
             <SectionCard
               title="Saved presets"
               action={<button onClick={resetDashboardBuilder} className="btn-ghost text-xs"><Plus size={12} />New</button>}
@@ -887,7 +887,7 @@ export default function InsightWorkbench({
           subtitle="Build reusable report presets from the full dataset, preview the dataset, and export polished Excel or PDF reports."
           onClose={() => setShowExport(false)}
         >
-          <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
             <SectionCard
               title="Saved report presets"
               action={<button onClick={resetReportBuilder} className="btn-ghost text-xs"><Plus size={12} />New</button>}
