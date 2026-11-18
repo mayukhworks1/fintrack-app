@@ -683,39 +683,36 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   const tabs = PHONE_TABS.filter(t => allowed(t.to))
   const onTab = tabs.some(t => (t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')))
   const moreActive = drawerOpen || !onTab
-  // Styled inline and rendered at the end of <body>, on the top layer:
-  // in an iOS 26 home-screen app a class-styled bar inside the app column
-  // was laid out but never drawn, while plain inline-styled boxes fixed to
-  // the screen bottom were (measured on an iPhone 17 Pro Max).
+  // Built from the plainest pieces, on the top layer at the end of <body>:
+  // in an iOS 27 home-screen app the styled bar was laid out and hit-tested
+  // on top but never drawn, while plain inline-styled boxes fixed to the
+  // bottom were (measured on an iPhone 17 Pro Max).
+  const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const C = dark
+    ? { bg: '#161618', line: '#2c2c30', on: '#4f8cff', off: '#9a9aa2' }
+    : { bg: '#ffffff', line: '#e5e5ea', on: '#0a66d8', off: '#6b6b73' }
   const tabStyle = (on) => ({
-    flex: '1 1 0', minWidth: 0, minHeight: 58, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 3, padding: '6px 2px',
-    color: on ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 0,
-    font: 'inherit', textDecoration: 'none', position: 'relative',
+    flex: '1 1 0', minWidth: 0, height: 58, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: 2, padding: 0,
+    color: on ? C.on : C.off, background: 'transparent', border: 0,
+    fontFamily: 'inherit', textDecoration: 'none',
   })
   const labelStyle = (on) => ({
-    maxWidth: '100%', fontSize: 11, lineHeight: '14px', fontWeight: on ? 600 : 500,
-    letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    display: 'block', maxWidth: '100%', fontSize: 11, lineHeight: '14px', fontWeight: on ? 700 : 500,
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? C.on : C.off,
   })
   const bar = (
-    <nav aria-label="Primary navigation" className="m-tabbar" style={{
-      // A floating bar, inset from the edges: an iOS 26 home-screen app laid
-      // out a full-width bar at the bottom edge (it hit-tested as on top)
-      // but never drew it, while narrower boxes there were drawn.
-      position: 'fixed', zIndex: 2400,
-      left: 'max(12px, env(safe-area-inset-left))', right: 'max(12px, env(safe-area-inset-right))',
-      bottom: 'max(10px, env(safe-area-inset-bottom))',
-      display: 'flex', alignItems: 'stretch', justifyContent: 'space-around',
-      padding: '0 4px', borderRadius: 26,
-      background: 'var(--sidebar-bg)', border: '1px solid var(--sidebar-border)',
-      boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
+    <div role="navigation" aria-label="Primary navigation" className="m-tabbar" style={{
+      position: 'fixed', zIndex: 9990, left: 10, right: 10, bottom: 10, height: 60,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22, overflow: 'hidden',
     }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (
         <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
           style={({ isActive }) => tabStyle(isActive && !drawerOpen)}>
           {({ isActive }) => (
             <>
-              <Icon size={22} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
+              <Icon size={22} color={isActive && !drawerOpen ? C.on : C.off} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
               <span className="m-tab-label" style={labelStyle(isActive && !drawerOpen)}>{label}</span>
             </>
           )}
@@ -732,10 +729,10 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
         aria-controls="mobile-nav-drawer"
         aria-current={moreActive && !drawerOpen ? 'page' : undefined}
       >
-        <MoreHorizontal size={22} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
+        <MoreHorizontal size={22} color={moreActive ? C.on : C.off} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
         <span className="m-tab-label" style={labelStyle(moreActive)}>More</span>
       </button>
-    </nav>
+    </div>
   )
   return typeof document !== 'undefined' ? createPortal(bar, document.body) : bar
 }
