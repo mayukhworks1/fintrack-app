@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import BrandMark from './BrandMark'
 import NotificationBell from './notifications/NotificationBell'
+import TabBarProbe from './mobile/TabBarProbe'
 
 /* ── New Invoice quick-action button ── */
 function NewQuickAction({ collapsed }) {
@@ -479,6 +480,8 @@ export default function Layout({ children, style }) {
               : children}
           </HeaderSlotContext.Provider>
         </main>
+
+        {isPhone && typeof window !== 'undefined' && (window.navigator.standalone || window.matchMedia?.('(display-mode: standalone)').matches) && <TabBarProbe />}
 
         {/* ── Mobile bottom navigation: the tab bar on a phone ── */}
         {isPhone
