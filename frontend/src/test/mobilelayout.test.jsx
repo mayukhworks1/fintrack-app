@@ -46,7 +46,7 @@ describe('phone tab bar', () => {
   it('has Dashboard, Invoices, Projects, Pages and More, with the current route in the accent', () => {
     render(<MemoryRouter initialEntries={['/invoices']}><PhoneTabBar onMore={() => {}} /></MemoryRouter>)
     const nav = screen.getByRole('navigation', { name: 'Primary navigation' })
-    const labels = [...nav.querySelectorAll('.m-tab-label')].map(n => n.textContent)
+    const labels = [...nav.querySelectorAll('.ft-tab-label')].map(n => n.textContent)
     expect(labels).toEqual(['Dashboard', 'Invoices', 'Projects', 'Pages', 'More'])
     expect(screen.getByRole('link', { name: 'Invoices' })).toHaveClass('is-active')
     expect(screen.getByRole('link', { name: 'Invoices' })).toHaveAttribute('aria-current', 'page')

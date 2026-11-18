@@ -693,30 +693,33 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   const C = dark
     ? { bg: '#161618', line: '#2c2c30', on: '#4f8cff', off: '#9a9aa2' }
     : { bg: '#ffffff', line: '#e5e5ea', on: '#0a66d8', off: '#6b6b73' }
+  // Plain block layout (no flex centring, no shared class styles): in an
+  // iOS 27 home-screen app the flex-centred contents were drawn too high and
+  // clipped by the bar's rounded edge.
   const tabStyle = (on) => ({
-    flex: '1 1 0', minWidth: 0, height: 58, display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center', gap: 2, padding: 0,
-    color: on ? C.on : C.off, background: 'transparent', border: 0,
-    fontFamily: 'inherit', textDecoration: 'none',
+    display: 'block', flex: '1 1 0', minWidth: 0, height: 60, padding: '9px 2px 0',
+    boxSizing: 'border-box', textAlign: 'center', color: on ? C.on : C.off,
+    background: 'transparent', border: 0, margin: 0, fontFamily: 'inherit', textDecoration: 'none',
   })
+  const iconStyle = { display: 'block', margin: '0 auto' }
   const labelStyle = (on) => ({
-    display: 'block', maxWidth: '100%', fontSize: 11, lineHeight: '14px', fontWeight: on ? 700 : 500,
+    display: 'block', marginTop: 3, maxWidth: '100%', fontSize: 11, lineHeight: '14px', fontWeight: on ? 700 : 500,
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? C.on : C.off,
   })
   const bar = (
     <div role="navigation" aria-label="Primary navigation" className="m-tabbar" style={{
-      position: 'fixed', zIndex: 9990, height: 60, bottom: 10,
+      position: 'fixed', zIndex: 9990, height: 62, bottom: 10, boxSizing: 'border-box',
       left: 'max(10px, env(safe-area-inset-left))', right: 'max(10px, env(safe-area-inset-right))',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22, overflow: 'hidden',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-around',
+      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22,
     }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (
-        <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => `ft-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
           style={({ isActive }) => tabStyle(isActive && !drawerOpen)}>
           {({ isActive }) => (
             <>
-              <Icon size={22} color={isActive && !drawerOpen ? C.on : C.off} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
-              <span className="m-tab-label" style={labelStyle(isActive && !drawerOpen)}>{label}</span>
+              <Icon size={22} style={iconStyle} color={isActive && !drawerOpen ? C.on : C.off} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
+              <span className="ft-tab-label" style={labelStyle(isActive && !drawerOpen)}>{label}</span>
             </>
           )}
         </NavLink>
@@ -725,15 +728,15 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
         ref={moreRef}
         type="button"
         onClick={onMore}
-        className={`m-tab${moreActive ? ' is-active' : ''}`}
+        className={`ft-tab${moreActive ? ' is-active' : ''}`}
         style={tabStyle(moreActive)}
         aria-haspopup="dialog"
         aria-expanded={drawerOpen}
         aria-controls="mobile-nav-drawer"
         aria-current={moreActive && !drawerOpen ? 'page' : undefined}
       >
-        <MoreHorizontal size={22} color={moreActive ? C.on : C.off} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
-        <span className="m-tab-label" style={labelStyle(moreActive)}>More</span>
+        <MoreHorizontal size={22} style={iconStyle} color={moreActive ? C.on : C.off} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
+        <span className="ft-tab-label" style={labelStyle(moreActive)}>More</span>
       </button>
     </div>
   )
