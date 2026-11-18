@@ -311,7 +311,8 @@ describe('iPhone: document and heights', () => {
 
   it('works from the home screen', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes" />')
-    expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />')
+    // No status-bar style: iOS 26+ then tints the status bar with theme-color.
+    expect(html).not.toContain('apple-mobile-web-app-status-bar-style')
     expect(html).toMatch(/<link rel="apple-touch-icon" sizes="180x180" href="[^"]+\.png(\?v=\d+)?"/)
   })
 

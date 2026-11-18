@@ -52,7 +52,14 @@
     justify-content: space-between;
     gap: 12px;
     padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
-    border-bottom: 1px solid var(--sidebar-border);
+  }
+  /* Same colour as the page and the status bar above it (theme-color), with
+     no rule underneath: the top of the app reads as one surface. */
+  .app-bar.m-titlebar {
+    background: var(--bg-base) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border-bottom: 0;
   }
   .m-titlebar-text { min-width: 0; flex: 1; }
   .m-titlebar-context {
