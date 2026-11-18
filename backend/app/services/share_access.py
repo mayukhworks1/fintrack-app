@@ -60,15 +60,29 @@ NOTE_MAX = 1000
 
 # ── Passwords ────────────────────────────────────────────────────────────────
 
+# Salted PBKDF2 (the account-password scheme, services/auth_master.py), at a
+# lower cost: link unlocks are anonymous and rate-limited per IP and per link.
+SHARE_HASH_ITERATIONS = 210_000
+
+
 def hash_password(password: str) -> str:
-    """The published pages scheme (routers/pages.py _hash_password)."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash for a shared-link or published-page password."""
+    from .auth_master import hash_password as _pbkdf2
+    return _pbkdf2(password, iterations=SHARE_HASH_ITERATIONS)
+
+
+def _is_legacy_hash(stored_hash: str) -> bool:
+    """Passwords set before salting were a bare SHA-256 hex digest."""
+    return len(stored_hash) == 64 and all(c in "0123456789abcdef" for c in stored_hash)
 
 
 def password_matches(password: str, stored_hash: Optional[str]) -> bool:
-    if not stored_hash or not isinstance(password, str):
+    if not stored_hash or not isinstance(password, str) or not password:
         return False
-    return hmac.compare_digest(hash_password(password), stored_hash)
+    if _is_legacy_hash(stored_hash):
+        return hmac.compare_digest(hashlib.sha256(password.encode()).hexdigest(), stored_hash)
+    from .auth_master import verify_password
+    return verify_password(password, stored_hash)
 
 
 def validate_password(password: Any) -> str:

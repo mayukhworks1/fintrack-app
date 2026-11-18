@@ -43,7 +43,7 @@ from tests import pg_harness
 class TestPasswordStorage:
     def test_hash_is_the_pages_scheme(self):
         from app.routers.pages import _hash_password
-        assert SA.hash_password("correct horse 9!") == _hash_password("correct horse 9!")
+        assert SA.password_matches("correct horse 9!", _hash_password("correct horse 9!"))
         assert SA.password_matches("correct horse 9!", SA.hash_password("correct horse 9!"))
         assert not SA.password_matches("correct horse 9", SA.hash_password("correct horse 9!"))
         assert not SA.password_matches("anything", None)
@@ -58,7 +58,7 @@ class TestPasswordStorage:
 
     def test_password_columns(self):
         cols = SA.password_columns("s3cret-pass")
-        assert cols["password_hash"] == SA.hash_password("s3cret-pass")
+        assert SA.password_matches("s3cret-pass", cols["password_hash"])
         assert SA.decrypt_password(cols["password_enc"]) == "s3cret-pass"
         assert SA.password_columns(None) == {"password_hash": None, "password_enc": None}
 
@@ -315,7 +315,7 @@ class TestOwnerSide:
             text = str(payload)
             assert "Sup3r-secret!" not in text and "password_hash" not in text and "password_enc" not in text
         row = env.sql("SELECT password_hash, password_enc, owner_user_id FROM shared_views")[0]
-        assert row["password_hash"] == SA.hash_password("Sup3r-secret!")
+        assert SA.password_matches("Sup3r-secret!", row["password_hash"])
         assert SA.decrypt_password(row["password_enc"]) == "Sup3r-secret!"
         assert str(row["owner_user_id"]) == env.owner
         assert "share_password.set" in audit_types(env)
@@ -620,3 +620,20 @@ def test_auto_approve_takes_whole_emails_as_well_as_domains():
     import pytest
     with pytest.raises(ValueError, match="not a valid email"):
         SA.normalize_domains("sakshi@")
+
+
+class TestSaltedLinkPasswords:
+    def test_new_hashes_are_salted_pbkdf2_and_verify(self):
+        from app.services import share_access as SA
+        a, b = SA.hash_password("correct horse 1"), SA.hash_password("correct horse 1")
+        assert a.startswith("pbkdf2_sha256$") and a != b
+        assert SA.password_matches("correct horse 1", a)
+        assert not SA.password_matches("wrong", a)
+
+    def test_passwords_set_before_salting_still_work(self):
+        import hashlib
+        from app.services import share_access as SA
+        legacy = hashlib.sha256(b"old secret 12").hexdigest()
+        assert SA.password_matches("old secret 12", legacy)
+        assert not SA.password_matches("old secret 13", legacy)
+        assert not SA.password_matches("", legacy)

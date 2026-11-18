@@ -136,7 +136,8 @@ def _random_suffix(n: int = 6) -> str:
 
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    from ..services.share_access import hash_password
+    return hash_password(password)
 
 
 def _password_columns(password: str | None) -> tuple[str | None, str | None]:
@@ -2279,7 +2280,8 @@ async def public_verify_password(slug: str, body: VerifyPasswordBody):
     if not row["is_password_protected"]:
         return _public_page_dict(row, with_render_token=_source_protected(row))
 
-    if _hash_password(body.password) != (row["password_hash"] or ""):
+    from ..services.share_access import password_matches
+    if not password_matches(body.password, row["password_hash"]):
         raise HTTPException(401, "Incorrect password")
 
     # The renderer serves the document straight into an iframe and has no way

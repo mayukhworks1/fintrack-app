@@ -193,10 +193,10 @@ class TestPasswordStorage:
             text = str(payload)
             assert PW not in text and "password_hash" not in text and "password_enc" not in text
             assert "auto_approve_domains" not in text
-        assert first["password_hash"] == SA.hash_password(PW)
+        assert SA.password_matches(PW, first["password_hash"])
         assert PW not in first["password_enc"] and SA.decrypt_password(first["password_enc"]) == PW
         row = env.sql("SELECT password_hash, password_enc FROM published_pages")[0]
-        assert row["password_hash"] == SA.hash_password("Changed-pass-2")
+        assert SA.password_matches("Changed-pass-2", row["password_hash"])
         assert SA.decrypt_password(row["password_enc"]) == "Changed-pass-2"
 
     def test_visitor_check_still_uses_the_hash(self, env):
