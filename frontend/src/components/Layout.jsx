@@ -333,6 +333,36 @@ export default function Layout({ children, style }) {
     return () => { document.body.style.overflow = '' }
   }, [drawerOpen])
 
+  // The status bar takes theme-color (no status-bar style is set), so while
+  // the side menu is open it takes the menu's colour and the two read as one
+  // surface; closing hands it back to the page colour.
+  useEffect(() => {
+    if (!drawerOpen || typeof document === 'undefined') return undefined
+    const metas = [...document.querySelectorAll('meta[name="theme-color"]')]
+    const before = metas.map(m => m.getAttribute('content'))
+    const rail = getComputedStyle(document.documentElement).getPropertyValue('--rail-surface')
+    const top = (/linear-gradient\(\s*180deg\s*,\s*(#[0-9a-f]{3,8}|rgba?\([^)]*\))/i.exec(rail) || [])[1]
+    if (top) metas.forEach(m => m.setAttribute('content', top))
+    return () => metas.forEach((m, i) => m.setAttribute('content', before[i]))
+  }, [drawerOpen])
+
+  // Swipe the open menu to the left to close it, as in native apps.
+  useEffect(() => {
+    const el = drawerRef.current
+    if (!el || !drawerOpen) return undefined
+    let start = null
+    const down = (e) => { const t = e.touches[0]; start = t ? { x: t.clientX, y: t.clientY } : null }
+    const up = (e) => {
+      if (!start) return
+      const t = e.changedTouches[0]
+      if (t && start.x - t.clientX > 60 && Math.abs(t.clientY - start.y) < 60) setDrawerOpen(false)
+      start = null
+    }
+    el.addEventListener('touchstart', down, { passive: true })
+    el.addEventListener('touchend', up, { passive: true })
+    return () => { el.removeEventListener('touchstart', down); el.removeEventListener('touchend', up) }
+  }, [drawerOpen])
+
   const sidebarW = collapsed ? 76 : 200
 
   // Phones (≤640px) get the large-title header and the tab bar; tablets keep
@@ -393,7 +423,7 @@ export default function Layout({ children, style }) {
       <aside
         ref={drawerRef}
         id="mobile-nav-drawer"
-        className="runey-app-sidebar lg:hidden fixed top-0 left-0 w-64 z-50 flex flex-col transition-transform duration-300"
+        className={`runey-app-sidebar lg:hidden fixed top-0 left-0 w-64 z-50 flex flex-col transition-transform duration-300${drawerOpen ? ' is-open' : ''}`}
         style={{
           // Height comes from .runey-app-sidebar, which cascades
           // 100vh → -webkit-fill-available → 100dvh. Tailwind's h-full was
@@ -401,7 +431,9 @@ export default function Layout({ children, style }) {
           // being decided by whichever rule happened to come last rather
           // than by anyone's intent.
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
-          transitionTimingFunction: 'var(--ease-fluid)',
+          // iOS sheet curve: quick start, soft settle.
+          transitionTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)',
+          transitionDuration: '380ms',
           boxShadow: drawerOpen ? 'var(--shadow-popover)' : 'none',
         }}
         aria-label="Mobile navigation"
@@ -635,13 +667,28 @@ function PhoneTitleBar({ onSlot }) {
   const { pathname } = useLocation()
   const { canGoBack, goBack } = usePhoneBack()
   useEdgeSwipeBack(true, canGoBack, goBack)
+  // The large title shrinks into a compact bar once the page scrolls, as in
+  // iOS apps; scrolling back to the top restores it.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const main = document.getElementById('main-content')
+    if (!main) return undefined
+    let raf = 0
+    const on = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = 0; setScrolled(main.scrollTop > 24) })
+    }
+    on()
+    main.addEventListener('scroll', on, { passive: true })
+    return () => { main.removeEventListener('scroll', on); if (raf) cancelAnimationFrame(raf) }
+  }, [pathname])
   const t = phoneTitleFor(pathname)
   const context = t.context === 'today'
     ? new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
     : t.context
   const Title = t.large ? 'h1' : 'p'
   return (
-    <header className={`app-bar m-titlebar${t.large ? '' : ' is-compact'}${canGoBack ? ' has-back' : ''}`}>
+    <header className={`app-bar m-titlebar${t.large ? '' : ' is-compact'}${canGoBack ? ' has-back' : ''}${scrolled ? ' is-scrolled' : ''}`}>
       {canGoBack && (
         <button type="button" className="m-back-btn" onClick={goBack} aria-label="Back">
           <ChevronLeft size={24} strokeWidth={2.2} aria-hidden="true" />

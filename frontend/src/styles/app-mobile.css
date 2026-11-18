@@ -1161,3 +1161,51 @@ html {
   .m-titlebar-title { font-size: 20px; line-height: 28px; }
   .m-titlebar-actions .btn-icon, .m-titlebar-actions .ft-bell, .m-round-btn { width: 38px; height: 38px; min-width: 38px; }
 }
+
+/* ── App feel on phones: press, scroll and opening effects ──────────── */
+@media (max-width: 640px), (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+  /* Tap and hold: no grey flash, no text-selection or link-preview callout on
+     controls, and a quick press-in that springs back. */
+  .main-app-theme a, .main-app-theme button, .main-app-theme [role="button"],
+  .m-tabbar a, .m-tabbar [role="button"], #mobile-nav-drawer a, #mobile-nav-drawer button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: transform 160ms cubic-bezier(0.32, 0.72, 0, 1), opacity 160ms ease, background-color 160ms ease;
+  }
+  .main-app-theme :is(a, button, [role="button"]):not(:disabled):active,
+  .m-tabbar :is(a, [role="button"]):active,
+  #mobile-nav-drawer :is(a, button):active {
+    transform: scale(0.96);
+    opacity: 0.82;
+    transition-duration: 60ms;
+  }
+
+  /* Scroll: the large title collapses into a compact bar with a hairline. */
+  .m-titlebar { transition: padding 220ms ease, box-shadow 220ms ease; }
+  .m-titlebar-title { transition: font-size 220ms cubic-bezier(0.32, 0.72, 0, 1), line-height 220ms ease; }
+  .m-titlebar-context { transition: opacity 180ms ease, max-height 220ms ease; max-height: 20px; }
+  .m-titlebar.is-scrolled { padding-bottom: 8px; box-shadow: 0 0.5px 0 var(--sidebar-border); }
+  .m-titlebar.is-scrolled .m-titlebar-title { font-size: 20px; line-height: 28px; }
+  .m-titlebar.is-scrolled .m-titlebar-context { opacity: 0; max-height: 0; }
+
+  /* Opening: the side menu meets the status bar with a square top corner,
+     and its items arrive one after another. */
+  #mobile-nav-drawer { border-top-right-radius: 0 !important; }
+  #mobile-nav-drawer.is-open .runey-nav > * { animation: m-drawer-item 360ms cubic-bezier(0.32, 0.72, 0, 1) backwards; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(1) { animation-delay: 40ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(2) { animation-delay: 60ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(3) { animation-delay: 80ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(4) { animation-delay: 100ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(5) { animation-delay: 120ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(6) { animation-delay: 140ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(7) { animation-delay: 160ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(8) { animation-delay: 180ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(9) { animation-delay: 200ms; }
+  #mobile-nav-drawer.is-open .runey-nav > *:nth-child(n+10) { animation-delay: 220ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #mobile-nav-drawer.is-open .runey-nav > * { animation: none; }
+  .m-titlebar, .m-titlebar-title, .m-titlebar-context { transition: none; }
+}
