@@ -1,9 +1,10 @@
 // Extracted from AdminDashboard.jsx — SyncLogTab.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw, Play, DatabaseBackup
+  RefreshCw, Play, DatabaseBackup, ShieldAlert
 } from 'lucide-react'
 import { api } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 import { Badge, Empty, Err, FSel, FilterBar, Pager, Skeleton } from './ui'
 import { cacheGet, cacheSet, fmt, ts } from './utils'
 
@@ -43,6 +44,48 @@ function BackupCard() {
       {st?.configured === false && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>Backups need the database and the storage token (HF_TOKEN).</p>}
       {latest && <p className="text-xs" style={{ color: 'var(--text-2)' }}>Latest: <strong>{latest.split('/').pop()}</strong> · {files.length} kept</p>}
       {st?.error && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{st.error}</p>}
+      {err && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{err}</p>}
+    </div>
+  )
+}
+
+// Incident response: every login token and session stops working at once.
+function EmergencyCard() {
+  const { logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const PHRASE = 'SIGN OUT EVERYONE'
+  const go = async () => {
+    setBusy(true); setErr('')
+    try {
+      await api.admin.signOutEveryone(text)
+      logout?.()
+    } catch (e) { setErr(e?.message || 'Could not sign everyone out'); setBusy(false) }
+  }
+  return (
+    <div className="card p-4 space-y-2" aria-label="Emergency sign-out">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={16} aria-hidden="true" style={{ color: 'var(--fin-negative)' }} />
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Emergency: sign out everyone</p>
+        </div>
+        {!open && <button type="button" className="btn-ghost text-xs" onClick={() => setOpen(true)}>Sign out everyone…</button>}
+      </div>
+      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+        If a password or device may be compromised: every signed-in person, you included, and every shared team password login is signed out at once. Data is not touched. Change the leaked password afterwards.
+      </p>
+      {open && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <input className="input text-xs" style={{ maxWidth: 240 }} value={text} onChange={e => setText(e.target.value)}
+            placeholder={`Type ${PHRASE}`} aria-label={`Type ${PHRASE} to confirm`} autoComplete="off" />
+          <button type="button" className="btn-danger text-xs" disabled={busy || text !== PHRASE} onClick={go}>
+            {busy ? 'Signing out…' : 'Sign out everyone now'}
+          </button>
+          <button type="button" className="btn-ghost text-xs" onClick={() => { setOpen(false); setText('') }}>Cancel</button>
+        </div>
+      )}
       {err && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{err}</p>}
     </div>
   )
@@ -178,6 +221,7 @@ export function SyncLogTab() {
   return (
     <div className="space-y-3">
       <BackupCard />
+      <EmergencyCard />
       <FilterBar
         count={(filterSource ? 1 : 0) + (filterError ? 1 : 0)}
         onReset={() => { setFs(''); setFErr('') }}

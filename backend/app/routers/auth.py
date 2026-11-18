@@ -129,8 +129,13 @@ def _b64url_decode(s: str) -> bytes:
 
 
 def _sign(payload: bytes) -> bytes:
+    # Generation 0 signs exactly as before; Admin → "Sign out everyone" raises
+    # it, which invalidates every token issued so far (services/security_state.py).
+    from ..services.security_state import token_epoch
+    epoch = token_epoch()
+    key = settings.app_secret if not epoch else f"{settings.app_secret}:epoch:{epoch}"
     return hmac.new(
-        settings.app_secret.encode(),
+        key.encode(),
         payload,
         hashlib.sha256,
     ).digest()
@@ -226,6 +231,24 @@ async def _auth_rate_limit(request: Request) -> None:
         )
 
 
+async def _target_rate_limit(target: str, *, limit: int, window_sec: int, bucket: str) -> None:
+    """A second budget keyed on what is being guessed, not on who is asking.
+
+    Behind the Space's proxies one client's requests arrive from several
+    addresses, so the per-IP budget alone let a password guesser spread its
+    attempts. Fails open with Valkey, like the per-IP limit.
+    """
+    from ..db.valkey import rate_check
+    key = hashlib.sha256(target.strip().lower().encode()).hexdigest()[:32]
+    allowed, _ = await rate_check(key, limit=limit, window_sec=window_sec, bucket=bucket)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts for this account. Please wait 15 minutes and try again.",
+            headers={"Retry-After": str(window_sec)},
+        )
+
+
 def _frontend_origin() -> str:
     origin = (settings.frontend_url or "").strip().rstrip("/")
     if not origin or origin == "*":
@@ -276,6 +299,9 @@ async def login(body: LoginRequest, request: Request, _rl: None = Depends(_auth_
     Accept any role password. Returns signed token + role.
     Fires audit log_login as a background task.
     """
+    # The shared role passwords have no account to key on: one budget for
+    # all of them, wide enough for a team signing in at once.
+    await _target_rate_limit("shared-role-passwords", limit=60, window_sec=15 * 60, bucket="authshared")
     provided  = (body.password or "").strip()
     editor_pw = (settings.app_password      or "").strip()
     viewer_pw = (settings.app_view_password or "").strip()
@@ -335,6 +361,7 @@ async def email_login(body: EmailLoginRequest, request: Request, _rl: None = Dep
     Normal email/password login backed by auth_users/auth_sessions.
     Additive path: existing password-only login remains available during rollout.
     """
+    await _target_rate_limit(body.email or "", limit=10, window_sec=15 * 60, bucket="authacct")
     from ..services.auth_master import login_with_email
     return await login_with_email(body.email, body.password, request)
 

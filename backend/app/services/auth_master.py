@@ -160,8 +160,16 @@ def _safe_redirect_path(value: str | None) -> str:
     path = (value or "/").strip()
     if not path.startswith("/") or path.startswith("//"):
         return "/"
-    if "\n" in path or "\r" in path:
-        return "/"
+    from urllib.parse import unquote
+    for candidate in (path, unquote(path)):
+        if not candidate.startswith("/") or candidate.startswith("//"):
+            return "/"
+        # A backslash or control character can be read as "//host" by a
+        # browser or router; a scheme-like first segment is never a page.
+        if "\\" in candidate or any(ord(c) < 32 or ord(c) == 127 for c in candidate):
+            return "/"
+        if ":" in candidate.split("/", 2)[1].split("?", 1)[0].split("#", 1)[0]:
+            return "/"
     return path[:300] or "/"
 
 

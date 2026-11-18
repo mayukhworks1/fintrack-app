@@ -1,3 +1,4 @@
+import { safeInternalPath } from '../utils/sanitize'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Lock, Eye, EyeOff, Loader2, AlertCircle, ArrowRight, ArrowLeft, Mail, Clock, Moon, Sun } from 'lucide-react'
@@ -177,7 +178,7 @@ export default function Login() {
         await acceptToken(token)
         const next = fragment.get('oauth_next') || '/'
         window.history.replaceState({}, '', '/login')
-        if (!cancelled) navigate(next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true })
+        if (!cancelled) navigate(safeInternalPath(next), { replace: true })
       } catch (err) {
         if (!cancelled) {
           setError(err?.message || 'Sign-in failed')

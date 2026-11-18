@@ -2373,6 +2373,13 @@ async def public_page_asset(path: str):
             "Cache-Control": "public, max-age=604800, immutable",
             "Content-Length": str(len(data)),
             "Content-Disposition": disposition,
+            "X-Content-Type-Options": "nosniff",
+            # An uploaded file is data, never a page: an SVG or HTML file
+            # opened directly can run no script and load nothing. PDFs are
+            # left out: browsers refuse to show a PDF in a sandboxed document.
+            **({} if content_type == "application/pdf" else {
+                "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'; sandbox",
+            }),
         },
     )
 

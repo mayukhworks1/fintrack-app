@@ -3441,3 +3441,22 @@ async def backup_run(_role: str = Depends(require_superadmin)):
     """Make a backup now (replaces today's file)."""
     from ..services import db_backup
     return await db_backup.run_backup(force=True)
+
+
+# ── Incident response ────────────────────────────────────────────────────────
+
+class _SignOutEveryoneBody(BaseModel):
+    confirm: str
+
+
+@router.post("/security/sign-out-everyone")
+async def sign_out_everyone(body: _SignOutEveryoneBody, request: Request,
+                            role: str = Depends(require_superadmin)):
+    """Emergency: every login token and session stops working at once,
+    the caller's included. Everyone, the caller too, signs in again."""
+    if body.confirm != "SIGN OUT EVERYONE":
+        raise HTTPException(status_code=400, detail='Type "SIGN OUT EVERYONE" to confirm')
+    from ..services import security_state
+    from ..utils.client_ip import client_ip
+    actor = getattr(request.state, "user_email", None) or f"{role}@{client_ip(request) or 'unknown'}"
+    return await security_state.sign_out_everyone(str(actor))

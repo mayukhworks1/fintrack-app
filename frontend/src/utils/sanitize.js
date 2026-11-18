@@ -36,3 +36,20 @@ export function safeUrl(url) {
   if (/^data:/i.test(u) && !/^data:image\//i.test(u)) return '#'
   return u
 }
+
+/**
+ * A path inside this app that is safe to navigate to, or the fallback.
+ * Rejects anything that a router or browser could turn into another site:
+ * "//host", "/\\host", "/%5Chost", backslashes, control characters, schemes.
+ */
+export function safeInternalPath(value, fallback = '/') {
+  if (typeof value !== 'string' || !value) return fallback
+  let decoded = value
+  try { decoded = decodeURIComponent(value) } catch { return fallback }
+  for (const v of [value, decoded]) {
+    if (!v.startsWith('/') || v.startsWith('//')) return fallback
+    if (/[\\\u0000-\u001f\u007f]/.test(v)) return fallback
+    if (/^\/[^/?#]*:/.test(v)) return fallback
+  }
+  return value
+}

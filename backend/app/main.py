@@ -204,6 +204,13 @@ async def lifespan(app: FastAPI):
         from .utils.tasks import spawn as _spawn
         _spawn(pages_router.sweep_inline_images_once(), name="pages-inline-sweep")
 
+    # ── Sign-in key generation (Admin → Sign out everyone) ───────────────
+    if postgres.get_pool():
+        from .services import security_state as _security_state
+        await _security_state.load_epoch()
+        from .utils.tasks import spawn as _spawn_sec
+        _spawn_sec(_security_state.refresh_loop(), name="security-state")
+
     # ── Daily database backup to the private HF dataset ──────────────────
     from .services import db_backup as _db_backup
     if _db_backup.configured():

@@ -794,6 +794,7 @@ export const api = {
     clearCache:    ()           => request('/api/admin/cache/clear', { method: 'POST' }).then(r => { clientCacheBust(''); return r }),
     backupStatus:  ()           => request('/api/admin/backup/status', { fresh: true }, 0),
     backupRun:     ()           => request('/api/admin/backup/run', { method: 'POST' }),
+    signOutEveryone: (confirm)  => request('/api/admin/security/sign-out-everyone', { method: 'POST', body: JSON.stringify({ confirm }) }),
     triggerSync:   (opts = {})  => request(`/api/admin/sync/trigger${opts.applyDeletions ? '?apply_deletions=true' : ''}`, { method: 'POST' }),
     triggerAgingRefresh:    ()   => request('/api/admin/sync/aging-refresh',    { method: 'POST' }),
     triggerDurationRefresh: ()   => request('/api/admin/sync/duration-refresh', { method: 'POST' }),

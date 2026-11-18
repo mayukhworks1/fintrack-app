@@ -47,6 +47,8 @@ async def proxy_file(path: str, _role: str = Depends(require_auth)):
         headers={
             "Cache-Control": "private, max-age=86400",
             "Content-Length": str(len(data)),
+            "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
@@ -109,6 +111,9 @@ async def relay_remote_file(url: str = Query(..., max_length=4096),
         headers={
             "Cache-Control": "private, max-age=600",
             "X-Content-Type-Options": "nosniff",
+            **({} if media == "application/pdf" else {
+                "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+            }),
             "Content-Disposition": "inline",
         },
     )

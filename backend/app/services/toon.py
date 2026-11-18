@@ -39,9 +39,23 @@ def _sf(v: Any, default: float = 0.0) -> float:
         return default
 
 
+import re as _re
+
+# Contact details never need to reach an AI provider: an email address or a
+# phone number typed into a free-text field (status notes, descriptions) is
+# masked before the context leaves the server.
+_EMAIL_RE = _re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = _re.compile(r"(?<![\w/.-])(?:\+?\d[\d\s-]{8,14}\d)(?![\w/.-])")
+
+
+def scrub_contacts(text: str) -> str:
+    text = _EMAIL_RE.sub("[email]", text)
+    return _PHONE_RE.sub(lambda m: "[phone]" if sum(c.isdigit() for c in m.group(0)) >= 10 else m.group(0), text)
+
+
 def _esc(v: str) -> str:
     """Escape pipe characters inside a value so tokens stay parseable."""
-    return str(v).replace("|", "\\|").strip()
+    return scrub_contacts(str(v)).replace("|", "\\|").strip()
 
 
 def _tok(type_: str, **fields: Any) -> str:
