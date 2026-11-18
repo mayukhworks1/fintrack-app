@@ -3418,3 +3418,26 @@ async def admin_set_password(
         "email": user["email"],
         "sessions_revoked": int(revoked or 0),
     }
+
+
+# ── Database backups ─────────────────────────────────────────────────────────
+
+@router.get("/backup/status")
+async def backup_status(_role: str = Depends(require_superadmin)):
+    """Last backup result and the backups kept in the private dataset."""
+    from ..services import db_backup
+    out = db_backup.status()
+    if db_backup.configured():
+        import asyncio as _asyncio
+        try:
+            out["files"] = await _asyncio.get_running_loop().run_in_executor(None, db_backup._existing_backups)
+        except Exception as exc:  # noqa: BLE001
+            out["files_error"] = str(exc)[:200]
+    return out
+
+
+@router.post("/backup/run")
+async def backup_run(_role: str = Depends(require_superadmin)):
+    """Make a backup now (replaces today's file)."""
+    from ..services import db_backup
+    return await db_backup.run_backup(force=True)

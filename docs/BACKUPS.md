@@ -1,3 +1,29 @@
+# Database backups
+
+## Built-in daily backup (always on)
+
+The server backs itself up every night at **02:15 IST** to the private Hugging
+Face dataset it already uses for file storage (`HF_DATASET_REPO`), with no extra
+setup. Each backup is `backups/db/fintrack-YYYY-MM-DD.tar.gz`: one CSV per table
+plus `manifest.json` (tables, sizes, schema revision). The last **30 days** are
+kept. It refuses to upload if the dataset is ever made public.
+
+See and run it from **Admin → Sync log → Database backups** ("Back up now").
+
+### Restore
+
+1. Download the `.tar.gz` from the dataset (Hugging Face → the dataset → Files →
+   `backups/db/`), and extract it.
+2. Create an empty database and run the migrations up to the revision in
+   `manifest.json`: `alembic upgrade <revision>` (with `DATABASE_URL` pointing at it).
+3. Load each table: `\copy <table> FROM '<table>.csv' WITH (FORMAT csv, HEADER true)`
+   in `psql`. Load `auth_users` and `published_pages` before the tables that
+   refer to them, or run `SET session_replication_role = replica;` first.
+
+---
+
+## Optional second copy: Google Drive (GitHub workflow)
+
 # Nightly database backups to Google Drive
 
 Every night at **2:00 AM IST** a GitHub workflow (`.github/workflows/backup.yml`)

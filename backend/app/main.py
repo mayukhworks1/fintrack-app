@@ -204,6 +204,13 @@ async def lifespan(app: FastAPI):
         from .utils.tasks import spawn as _spawn
         _spawn(pages_router.sweep_inline_images_once(), name="pages-inline-sweep")
 
+    # ── Daily database backup to the private HF dataset ──────────────────
+    from .services import db_backup as _db_backup
+    if _db_backup.configured():
+        from .utils.tasks import spawn as _spawn_backup
+        _spawn_backup(_db_backup.backup_loop(), name="db-backup")
+        logger.info("Daily database backup loop started")
+
     # ── Alerting ─────────────────────────────────────────────────────────
     # Started unconditionally: the monitor decides for itself whether it has
     # anywhere to send to, and exits with one log line if not. It reads the

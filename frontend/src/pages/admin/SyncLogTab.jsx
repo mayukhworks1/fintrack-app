@@ -1,11 +1,52 @@
 // Extracted from AdminDashboard.jsx — SyncLogTab.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw, Play
+  RefreshCw, Play, DatabaseBackup
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Badge, Empty, Err, FSel, FilterBar, Pager, Skeleton } from './ui'
 import { cacheGet, cacheSet, fmt, ts } from './utils'
+
+// Daily database backup (backend services/db_backup.py): last result, the
+// copies kept, and a button to make one now.
+function BackupCard() {
+  const [st, setSt] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const load = useCallback(() => {
+    api.admin.backupStatus().then(setSt).catch(e => setErr(e?.message || 'Could not load backup status'))
+  }, [])
+  useEffect(() => { load() }, [load])
+  const run = async () => {
+    setBusy(true); setErr('')
+    try { setSt(await api.admin.backupRun()) } catch (e) { setErr(e?.message || 'Backup failed') }
+    finally { setBusy(false); load() }
+  }
+  const files = st?.files || []
+  const latest = files[files.length - 1]
+  const ok = st?.ok
+  return (
+    <div className="card p-4 space-y-2" aria-label="Database backups">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <DatabaseBackup size={16} aria-hidden="true" style={{ color: 'var(--accent)' }} />
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-1)' }}>Database backups</p>
+          {st && <Badge color={ok === false ? 'red' : files.length ? 'green' : 'amber'}>{ok === false ? 'Last run failed' : files.length ? 'Protected' : 'No backup yet'}</Badge>}
+        </div>
+        <button type="button" onClick={run} disabled={busy || st?.configured === false} className="btn-primary text-xs">
+          <DatabaseBackup size={12} /> {busy ? 'Backing up…' : 'Back up now'}
+        </button>
+      </div>
+      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+        A full copy of the database is saved every night at 02:15 to the private storage dataset, and the last {st?.retain_days || 30} days are kept.
+      </p>
+      {st?.configured === false && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>Backups need the database and the storage token (HF_TOKEN).</p>}
+      {latest && <p className="text-xs" style={{ color: 'var(--text-2)' }}>Latest: <strong>{latest.split('/').pop()}</strong> · {files.length} kept</p>}
+      {st?.error && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{st.error}</p>}
+      {err && <p className="text-xs" style={{ color: 'var(--fin-negative)' }}>{err}</p>}
+    </div>
+  )
+}
 
 export function SyncLogTab() {
   const [data, setData]           = useState(null)
@@ -136,6 +177,7 @@ export function SyncLogTab() {
 
   return (
     <div className="space-y-3">
+      <BackupCard />
       <FilterBar
         count={(filterSource ? 1 : 0) + (filterError ? 1 : 0)}
         onReset={() => { setFs(''); setFErr('') }}
