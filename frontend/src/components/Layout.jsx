@@ -685,6 +685,17 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   const tabs = PHONE_TABS.filter(t => allowed(t.to))
   const onTab = tabs.some(t => (t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')))
   const moreActive = drawerOpen || !onTab
+  // Steps aside while a pop-up or edit screen is open, so it never covers
+  // that screen's own buttons (Save, Delete…). The More drawer doesn't count.
+  const [covered, setCovered] = useState(false)
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return undefined
+    const check = () => setCovered(Boolean(document.querySelector('[aria-modal="true"]:not(#mobile-nav-drawer)')))
+    check()
+    const mo = new MutationObserver(check)
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-modal'] })
+    return () => mo.disconnect()
+  }, [])
   // Built from the plainest pieces, on the top layer at the end of <body>:
   // in an iOS 27 home-screen app the styled bar was laid out and hit-tested
   // on top but never drawn, while plain inline-styled boxes fixed to the
@@ -707,10 +718,10 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on ? C.on : C.off,
   })
   const bar = (
-    <div role="navigation" aria-label="Primary navigation" className="m-tabbar" style={{
+    <div role="navigation" aria-label="Primary navigation" className="m-tabbar" hidden={covered} style={{
       position: 'fixed', zIndex: 9990, height: 62, bottom: 10, boxSizing: 'border-box',
       left: 'max(10px, env(safe-area-inset-left))', right: 'max(10px, env(safe-area-inset-right))',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-around',
+      display: covered ? 'none' : 'flex', alignItems: 'flex-start', justifyContent: 'space-around',
       backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22,
     }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (

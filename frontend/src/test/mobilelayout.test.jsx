@@ -344,3 +344,19 @@ describe('iPhone: back navigation', () => {
     expect(phoneBackTarget('/pages', '')).toBeNull()
   })
 })
+
+describe('iPhone: tab bar and pop-ups', () => {
+  beforeEach(() => { auth.role = 'editor'; auth.hasPerm = () => true })
+  it('steps aside while a pop-up is open, and comes back after', async () => {
+    setWidth(390)
+    render(<MemoryRouter initialEntries={['/']}><Layout><p>page</p></Layout></MemoryRouter>)
+    const bar = () => document.body.querySelector(':scope > .m-tabbar')
+    expect(bar().style.display).toBe('flex')
+    const dlg = document.createElement('div')
+    dlg.setAttribute('aria-modal', 'true')
+    await act(async () => { document.body.appendChild(dlg); await new Promise(r => setTimeout(r, 0)) })
+    expect(bar().style.display).toBe('none')
+    await act(async () => { dlg.remove(); await new Promise(r => setTimeout(r, 0)) })
+    expect(bar().style.display).toBe('flex')
+  })
+})
