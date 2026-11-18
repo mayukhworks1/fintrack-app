@@ -91,12 +91,15 @@ describe('phone tab bar', () => {
 describe('the app shell by width', () => {
   afterEach(() => { delete window.matchMedia })
 
-  it('on a phone: large title, tab bar in the flow, the drawer behind More', () => {
+  it('on a phone: large title, tab bar pinned to the screen, the drawer behind More', () => {
     setWidth(390)
     const { container } = render(<MemoryRouter initialEntries={['/invoices']}><Layout><p>page</p></Layout></MemoryRouter>)
     expect(container.querySelector('.app-layout-shell')).toHaveClass('is-phone')
     expect(screen.getByRole('heading', { level: 1, name: 'Invoices' })).toBeInTheDocument()
-    expect(container.querySelector('.m-tabbar')).not.toBeNull()
+    // Rendered at the end of <body> (see PhoneTabBar) so iOS home-screen apps draw it.
+    const bar = document.body.querySelector(':scope > .m-tabbar')
+    expect(bar).not.toBeNull()
+    expect(bar.style.position).toBe('fixed')
     expect(container.querySelector('.app-bottom-bar')).toBeNull()
     const drawer = container.querySelector('#mobile-nav-drawer')
     expect(drawer).toHaveAttribute('inert')
@@ -113,7 +116,7 @@ describe('the app shell by width', () => {
     expect(container.querySelector('.app-layout-shell')).not.toHaveClass('is-phone')
     expect(container.querySelector('.app-layout-shell').className).toBe('main-app-theme app-layout-shell flex h-screen overflow-hidden')
     expect(container.querySelector('.m-titlebar')).toBeNull()
-    expect(container.querySelector('.m-tabbar')).toBeNull()
+    expect(document.body.querySelector('.m-tabbar')).toBeNull()
     expect(container.querySelector('.app-bottom-bar')).not.toBeNull()
     // The six destinations the bottom nav always had.
     expect(container.querySelectorAll('.app-bottom-bar a')).toHaveLength(6)

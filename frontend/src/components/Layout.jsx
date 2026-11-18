@@ -1,4 +1,5 @@
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import {
   LayoutDashboard, FolderKanban, BarChart3,
   MessageSquareText, FileText,
@@ -679,14 +680,35 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   const tabs = PHONE_TABS.filter(t => allowed(t.to))
   const onTab = tabs.some(t => (t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')))
   const moreActive = drawerOpen || !onTab
-  return (
-    <nav aria-label="Primary navigation" className="app-bar m-tabbar">
+  // Styled inline and rendered at the end of <body>, on the top layer:
+  // in an iOS 26 home-screen app a class-styled bar inside the app column
+  // was laid out but never drawn, while plain inline-styled boxes fixed to
+  // the screen bottom were (measured on an iPhone 17 Pro Max).
+  const tabStyle = (on) => ({
+    flex: '1 1 0', minWidth: 0, minHeight: 56, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center', gap: 3, padding: '6px 2px',
+    color: on ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 0,
+    font: 'inherit', textDecoration: 'none', position: 'relative',
+  })
+  const labelStyle = (on) => ({
+    maxWidth: '100%', fontSize: 13, lineHeight: '16px', fontWeight: on ? 600 : 500,
+    letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  })
+  const bar = (
+    <nav aria-label="Primary navigation" className="m-tabbar" style={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2400,
+      display: 'flex', alignItems: 'stretch', justifyContent: 'space-around',
+      background: 'var(--sidebar-bg)', borderTop: '1px solid var(--sidebar-border)',
+      paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+    }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (
-        <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}>
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
+          style={({ isActive }) => tabStyle(isActive && !drawerOpen)}>
           {({ isActive }) => (
             <>
               <Icon size={22} strokeWidth={isActive && !drawerOpen ? 2.3 : 1.8} aria-hidden="true" />
-              <span className="m-tab-label">{label}</span>
+              <span className="m-tab-label" style={labelStyle(isActive && !drawerOpen)}>{label}</span>
             </>
           )}
         </NavLink>
@@ -696,14 +718,16 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
         type="button"
         onClick={onMore}
         className={`m-tab${moreActive ? ' is-active' : ''}`}
+        style={tabStyle(moreActive)}
         aria-haspopup="dialog"
         aria-expanded={drawerOpen}
         aria-controls="mobile-nav-drawer"
         aria-current={moreActive && !drawerOpen ? 'page' : undefined}
       >
         <MoreHorizontal size={22} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
-        <span className="m-tab-label">More</span>
+        <span className="m-tab-label" style={labelStyle(moreActive)}>More</span>
       </button>
     </nav>
   )
+  return typeof document !== 'undefined' ? createPortal(bar, document.body) : bar
 }
