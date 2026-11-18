@@ -732,12 +732,16 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
           )}
         </NavLink>
       ))}
-      <button
+      {/* A plain element, not <button>: iOS centres a button's contents
+          vertically, which put "More" lower than the other labels. */}
+      <div
         ref={moreRef}
-        type="button"
+        role="button"
+        tabIndex={0}
         onClick={onMore}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onMore?.() } }}
         className={`ft-tab${moreActive ? ' is-active' : ''}`}
-        style={tabStyle(moreActive)}
+        style={{ ...tabStyle(moreActive), cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
         aria-haspopup="dialog"
         aria-expanded={drawerOpen}
         aria-controls="mobile-nav-drawer"
@@ -745,7 +749,7 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
       >
         <MoreHorizontal size={22} style={iconStyle} color={moreActive ? C.on : C.off} strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden="true" />
         <span className="ft-tab-label" style={labelStyle(moreActive)}>More</span>
-      </button>
+      </div>
     </div>
   )
   return typeof document !== 'undefined' ? createPortal(bar, document.body) : bar

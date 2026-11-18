@@ -5260,3 +5260,7 @@ input[type="date"], input[type="datetime-local"], input[type="time"], input[type
 input[type="date"]::-webkit-date-and-time-value,
 input[type="datetime-local"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+
+/* What shows around the floating tab bar is the page itself, not a band. */
+html:has(.app-layout-shell.has-floating-tabs),
+html:has(.app-layout-shell.has-floating-tabs) body { background: var(--bg-base); }

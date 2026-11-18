@@ -1103,7 +1103,7 @@ html {
   /* Anything iOS leaves below the app (the home-indicator strip) takes the
      tab bar's colour instead of showing as a black band. */
   html:has(.app-layout-shell.is-phone),
-  html:has(.app-layout-shell.is-phone) body { background: var(--sidebar-bg); }
+  html:has(.app-layout-shell.is-phone) body { background: var(--bg-base); }
   body:not(:has(.app-layout-shell)):not(:has(.web-invoices-shell)) {
     padding-top: env(safe-area-inset-top);
   }
