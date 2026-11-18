@@ -1092,6 +1092,11 @@ html {
    public pages and sign-in (which have no app header) clear the status bar
    themselves. */
 @media (display-mode: standalone) and (max-width: 640px) {
+  /* iOS 26/27 open a home-screen app with the viewport one status bar short
+     (measured: innerHeight 894 on a 956pt screen), and things pinned to the
+     bottom are then never drawn. A document at least as tall as the large
+     viewport makes iOS size the app to the full screen. */
+  html, body { min-height: 100lvh; }
   /* Anything iOS leaves below the app (the home-indicator strip) takes the
      tab bar's colour instead of showing as a black band. */
   html:has(.app-layout-shell.is-phone),
