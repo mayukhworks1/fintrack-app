@@ -10,12 +10,12 @@ import {
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import { usePhone, useKeyboardWatch, HeaderSlotContext } from './mobile/MobileUI'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
 import { useAvatarSrc } from '../hooks/useAvatarSrc'
 import BrandMark from './BrandMark'
 import NotificationBell from './notifications/NotificationBell'
-import TabBarProbe from './mobile/TabBarProbe'
 
 /* ── New Invoice quick-action button ── */
 function NewQuickAction({ collapsed }) {
@@ -339,6 +339,10 @@ export default function Layout({ children, style }) {
   // Phones (≤640px) get the large-title header and the tab bar; tablets keep
   // the compact top bar and their bottom nav exactly as they were.
   const isPhone = usePhone()
+  // A phone turned sideways is wider than the phone layout but still gets
+  // the floating tab bar (the tablet bottom nav is not drawn in iOS
+  // home-screen apps).
+  const landscapePhone = useMediaQuery('(pointer: coarse) and (max-height: 500px) and (orientation: landscape)')
   // Each phone screen animates in when it changes. Pages keeps one key so its
   // own sub-screens don't remount the whole manager.
   const routeKey = location.pathname.startsWith('/pages') ? '/pages' : location.pathname
@@ -352,7 +356,7 @@ export default function Layout({ children, style }) {
   const [headerSlot, setHeaderSlot] = useState(null)
 
   return (
-    <div className={`main-app-theme app-layout-shell flex h-screen overflow-hidden${isPhone ? ' is-phone' : ''}`} style={style}>
+    <div className={`main-app-theme app-layout-shell flex h-screen overflow-hidden${isPhone ? ' is-phone' : ''}${isPhone || landscapePhone ? ' has-floating-tabs' : ''}`} style={style}>
 
       {/* ── Skip to content ── */}
       <a
@@ -481,10 +485,8 @@ export default function Layout({ children, style }) {
           </HeaderSlotContext.Provider>
         </main>
 
-        {isPhone && typeof window !== 'undefined' && (window.navigator.standalone || window.matchMedia?.('(display-mode: standalone)').matches) && <TabBarProbe />}
-
         {/* ── Mobile bottom navigation: the tab bar on a phone ── */}
-        {isPhone
+        {isPhone || landscapePhone
           ? <PhoneTabBar moreRef={moreRef} drawerOpen={drawerOpen} onMore={() => setDrawerOpen(o => !o)} />
           : <MobileBottomNav />}
       </div>
@@ -703,7 +705,8 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   })
   const bar = (
     <div role="navigation" aria-label="Primary navigation" className="m-tabbar" style={{
-      position: 'fixed', zIndex: 9990, left: 10, right: 10, bottom: 10, height: 60,
+      position: 'fixed', zIndex: 9990, height: 60, bottom: 10,
+      left: 'max(10px, env(safe-area-inset-left))', right: 'max(10px, env(safe-area-inset-right))',
       display: 'flex', alignItems: 'center', justifyContent: 'space-around',
       backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22, overflow: 'hidden',
     }}>

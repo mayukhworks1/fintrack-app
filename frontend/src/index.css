@@ -5233,3 +5233,17 @@ html.theme-reveal::view-transition-new(root) { z-index: 2; }
    control used to widen the form past the screen and push it off the left. */
 .app-drawer-panel .grid > *, .app-drawer-panel .flex > * { min-width: 0; }
 .app-drawer-panel input, .app-drawer-panel textarea, .app-drawer-panel select { max-width: 100%; }
+
+/* Phones (portrait and landscape): the app stops above the floating tab bar
+   instead of scrolling under it. In iOS 26/27 home-screen apps the scrolling
+   page was drawn over the bar wherever the two overlapped. */
+.app-layout-shell.has-floating-tabs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 80px;
+  height: auto;
+}
+html.kb-open .app-layout-shell.has-floating-tabs { bottom: 0; }
+html.kb-open .m-tabbar { display: none !important; }
