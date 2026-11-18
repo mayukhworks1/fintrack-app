@@ -31,7 +31,7 @@
      guess, nothing hidden under it. */
   /* Room under the last row for the fixed tab bar (56px tabs + its border
      + the home-indicator inset); none while the keyboard hides the bar. */
-  .app-layout-shell.is-phone #main-content { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
+  .app-layout-shell.is-phone #main-content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   html.kb-open .app-layout-shell.is-phone #main-content { padding-bottom: 0; }
   /* The scroller itself does not animate on a phone (.m-route does): a
      filled opacity animation would make it a stacking layer, and every
@@ -109,6 +109,7 @@
   /* The active tab's icon gives a small pop. */
 
   .m-tab.is-active::before {
+    display: none;
     content: '';
     position: absolute;
     top: 0;

@@ -688,22 +688,27 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   // was laid out but never drawn, while plain inline-styled boxes fixed to
   // the screen bottom were (measured on an iPhone 17 Pro Max).
   const tabStyle = (on) => ({
-    flex: '1 1 0', minWidth: 0, minHeight: 56, display: 'flex', flexDirection: 'column',
+    flex: '1 1 0', minWidth: 0, minHeight: 58, display: 'flex', flexDirection: 'column',
     alignItems: 'center', justifyContent: 'center', gap: 3, padding: '6px 2px',
     color: on ? 'var(--accent)' : 'var(--text-3)', background: 'none', border: 0,
     font: 'inherit', textDecoration: 'none', position: 'relative',
   })
   const labelStyle = (on) => ({
-    maxWidth: '100%', fontSize: 13, lineHeight: '16px', fontWeight: on ? 600 : 500,
+    maxWidth: '100%', fontSize: 11, lineHeight: '14px', fontWeight: on ? 600 : 500,
     letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   })
   const bar = (
     <nav aria-label="Primary navigation" className="m-tabbar" style={{
-      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2400,
+      // A floating bar, inset from the edges: an iOS 26 home-screen app laid
+      // out a full-width bar at the bottom edge (it hit-tested as on top)
+      // but never drew it, while narrower boxes there were drawn.
+      position: 'fixed', zIndex: 2400,
+      left: 'max(12px, env(safe-area-inset-left))', right: 'max(12px, env(safe-area-inset-right))',
+      bottom: 'max(10px, env(safe-area-inset-bottom))',
       display: 'flex', alignItems: 'stretch', justifyContent: 'space-around',
-      background: 'var(--sidebar-bg)', borderTop: '1px solid var(--sidebar-border)',
-      paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
+      padding: '0 4px', borderRadius: 26,
+      background: 'var(--sidebar-bg)', border: '1px solid var(--sidebar-border)',
+      boxShadow: '0 8px 28px rgba(0,0,0,0.35)',
     }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (
         <NavLink key={to} to={to} end={end} className={({ isActive }) => `m-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
