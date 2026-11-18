@@ -699,8 +699,8 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   // bottom were (measured on an iPhone 17 Pro Max).
   const dark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   const C = dark
-    ? { bg: '#161618', line: '#2c2c30', on: '#4f8cff', off: '#9a9aa2' }
-    : { bg: '#ffffff', line: '#e5e5ea', on: '#0a66d8', off: '#6b6b73' }
+    ? { bg: 'rgba(30, 30, 34, 0.58)', line: 'rgba(255, 255, 255, 0.14)', hi: 'rgba(255, 255, 255, 0.10)', on: '#5b95ff', off: '#a1a1aa' }
+    : { bg: 'rgba(255, 255, 255, 0.62)', line: 'rgba(255, 255, 255, 0.75)', hi: 'rgba(255, 255, 255, 0.9)', on: '#0a66d8', off: '#5f5f68' }
   // Plain block layout (no flex centring, no shared class styles): in an
   // iOS 27 home-screen app the flex-centred contents were drawn too high and
   // clipped by the bar's rounded edge.
@@ -719,7 +719,10 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
       position: 'fixed', zIndex: 9990, height: 62, bottom: 10, boxSizing: 'border-box',
       left: 'max(10px, env(safe-area-inset-left))', right: 'max(10px, env(safe-area-inset-right))',
       display: covered ? 'none' : 'flex', alignItems: 'flex-start', justifyContent: 'space-around',
-      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 22,
+      // Liquid glass: the page scrolls behind the bar and shows through, blurred.
+      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 26,
+      WebkitBackdropFilter: 'blur(22px) saturate(180%)', backdropFilter: 'blur(22px) saturate(180%)',
+      boxShadow: `0 10px 30px rgba(0, 0, 0, ${dark ? 0.45 : 0.14}), inset 0 1px 0 ${C.hi}`,
     }}>
       {tabs.map(({ to, label, icon: Icon, end }) => (
         <NavLink key={to} to={to} end={end} className={({ isActive }) => `ft-tab${isActive && !drawerOpen ? ' is-active' : ''}`}
