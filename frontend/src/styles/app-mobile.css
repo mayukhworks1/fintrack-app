@@ -24,14 +24,15 @@
        unpainted strip; fixed inset 0 is the box iOS actually draws (the
        document preview, which is fixed, always showed its bottom buttons). */
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: var(--app-vh, 100dvh);
+    inset: 0;
+    height: auto;
   }
   /* The tab bar is in the flow, not fixed over the content: no padding to
      guess, nothing hidden under it. */
-  .app-layout-shell.is-phone #main-content { padding-bottom: 0; }
+  /* Room under the last row for the fixed tab bar (56px tabs + its border
+     + the home-indicator inset); none while the keyboard hides the bar. */
+  .app-layout-shell.is-phone #main-content { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
+  html.kb-open .app-layout-shell.is-phone #main-content { padding-bottom: 0; }
   /* The scroller itself does not animate on a phone (.m-route does): a
      filled opacity animation would make it a stacking layer, and every
      pop-up inside a page would then sit under the title bar and tab bar. */
@@ -170,10 +171,16 @@
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
+  /* Pinned to the bottom of the screen. Measured in an iOS 26 home-screen
+     app on an iPhone 17 Pro Max: elements fixed to bottom: 0 are drawn to
+     the screen edge, while a tab bar at the end of the page's flex column
+     was laid out in place but never drawn. */
   .m-tabbar {
-    position: relative;
-    z-index: 40;
-    transform: translateZ(0);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
     flex-shrink: 0;
     display: flex;
     align-items: stretch;

@@ -9,22 +9,7 @@ bootstrapTheme()
 function trackViewportHeight() {
   if (typeof window === 'undefined') return
   const root = document.documentElement
-  const set = () => {
-    const h = window.innerHeight
-    const standalone = window.navigator.standalone === true
-      || window.matchMedia?.('(display-mode: standalone)').matches
-    const portrait = window.innerWidth < h
-    const full = portrait ? window.screen.height : window.screen.width
-    // iOS 26 home-screen apps with an opaque status bar: the page starts
-    // below the status bar (innerHeight = screen - bar) but iOS still stops
-    // drawing at innerHeight measured from the top of the screen, so the
-    // bottom `gap` of the page is never painted. Measured on an iPhone 17
-    // Pro Max: screen 956, innerHeight 894, nothing drawn below 832.
-    const gap = full - h
-    const clipped = standalone && portrait && gap > 0 && gap < 140
-    root.style.setProperty('--app-vh', `${clipped ? h - gap : h}px`)
-    root.classList.toggle('ios-clip', clipped)
-  }
+  const set = () => root.style.setProperty('--app-vh', `${window.innerHeight}px`)
   set()
   window.addEventListener('resize', set)
   window.addEventListener('orientationchange', () => setTimeout(set, 250))
