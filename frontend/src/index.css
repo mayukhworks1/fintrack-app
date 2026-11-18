@@ -5245,10 +5245,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 2; }
   height: auto;
 }
 /* The page scrolls behind the glass tab bar; its last rows stay reachable. */
-.app-layout-shell.has-floating-tabs #main-content { padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important; }
+.app-layout-shell.has-floating-tabs #main-content { padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important; }
 html.kb-open .app-layout-shell.has-floating-tabs #main-content { padding-bottom: 16px !important; }
 /* The side menu's last items (Dark mode, Sign out) sit above the tab bar. */
-.app-layout-shell.has-floating-tabs #mobile-nav-drawer { padding-bottom: 84px; }
+.app-layout-shell.has-floating-tabs #mobile-nav-drawer { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 html.kb-open .m-tabbar { display: none !important; }
 
 /* Date and time fields keep to their column on a phone: iOS gives them a

@@ -763,11 +763,15 @@ export function PhoneTabBar({ drawerOpen = false, onMore, moreRef }) {
   })
   const bar = (
     <div role="navigation" aria-label="Primary navigation" className="m-tabbar" hidden={covered} style={{
-      position: 'fixed', zIndex: 9990, height: 62, bottom: 10, boxSizing: 'border-box',
-      left: 'max(10px, env(safe-area-inset-left))', right: 'max(10px, env(safe-area-inset-right))',
+      // Inset clear of the phone's own rounded screen corners (about 55pt of
+      // curve on current iPhones): a bar any closer has its corners cut off
+      // on a real device even though screenshots look fine.
+      position: 'fixed', zIndex: 9990, height: 62, boxSizing: 'border-box',
+      bottom: 'max(20px, calc(env(safe-area-inset-bottom) - 6px))',
+      left: 'max(20px, calc(env(safe-area-inset-left) + 8px))', right: 'max(20px, calc(env(safe-area-inset-right) + 8px))',
       display: covered ? 'none' : 'flex', alignItems: 'flex-start', justifyContent: 'space-around',
       // Liquid glass: the page scrolls behind the bar and shows through, blurred.
-      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 26,
+      backgroundColor: C.bg, border: `1px solid ${C.line}`, borderRadius: 31,
       WebkitBackdropFilter: 'blur(22px) saturate(180%)', backdropFilter: 'blur(22px) saturate(180%)',
       boxShadow: `0 10px 30px rgba(0, 0, 0, ${dark ? 0.45 : 0.14}), inset 0 1px 0 ${C.hi}`,
     }}>
