@@ -201,7 +201,10 @@ describe('visitor: request the password', () => {
     fireEvent.change(screen.getByLabelText(/Message to the owner/), { target: { value: 'For the Q3 review' } })
     expect(screen.getByLabelText('Website', { selector: 'input' })).toHaveAttribute('tabindex', '-1')
     fireEvent.click(screen.getByRole('button', { name: 'Send request' }))
-    expect(await screen.findByRole('heading', { name: 'Request sent' })).toHaveFocus()
+    const sent = await screen.findByRole('heading', { name: 'Request sent' })
+    // Focus moves after the confirmation renders (an effect): wait for it
+    // instead of asserting in the same tick, which raced on slower CI runners.
+    await waitFor(() => expect(sent).toHaveFocus())
     expect(screen.getByRole('status')).toHaveTextContent('ana@theworks.in')
     expect(api.sharedViews.requestAccess).toHaveBeenCalledWith('tok', {
       name: 'Ana Lee', email: 'ana@theworks.in', message: 'For the Q3 review', website: '',
